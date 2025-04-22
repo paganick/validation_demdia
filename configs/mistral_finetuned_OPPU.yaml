@@ -1,0 +1,5 @@
+OPPU: true
+finetuned: true
+model: cognitivecomputations/dolphin-2.1-mistral-7b
+n_style_examples: 0
+retrieve_context: false
