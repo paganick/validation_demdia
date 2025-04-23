@@ -2,6 +2,7 @@ simulations/*
 simulations_results/*
 results/*
 configs_backup/*
+configs/*
 data/personas_and_tweets.df.pkl
 
 # Byte-compiled / cache files
