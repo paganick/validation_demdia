@@ -1,9 +1,12 @@
 import os
 import json
 import csv
+import argparse
 
-# Define the base folder to search in
-base_folder = 'simulations_results'
+# Set up argument parser
+parser = argparse.ArgumentParser(description='Convert JSON files to CSV in subfolders.')
+parser.add_argument('input_folder', type=str, help='Path to the root folder containing JSON files.')
+args = parser.parse_args()
 
 # Define the output CSV fields
 fieldnames = [
@@ -18,7 +21,7 @@ fieldnames = [
 ]
 
 # Walk through all subdirectories
-for root, _, files in os.walk(base_folder):
+for root, _, files in os.walk(args.input_folder):
     for file in files:
         if file.endswith('.json'):
             json_path = os.path.join(root, file)
