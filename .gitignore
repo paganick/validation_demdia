@@ -1,0 +1,15 @@
+simulations/*
+simulations_results/*
+results/*
+configs_backup/*
+data/personas_and_tweets.df.pkl
+
+convert_emojiis.py
+
+
+# Byte-compiled / cache files
+__pycache__/
+*.py[cod]
+
+*.json
+*.csv
