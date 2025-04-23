@@ -64,7 +64,7 @@ class Validator:
         # Define training arguments
         training_args = TrainingArguments(
             output_dir="./BERT_models",  # Directory for model outputs
-            evaluation_strategy='epoch',  # Evaluate at the end of each epoch
+            #evaluation_strategy='epoch',  # Evaluate at the end of each epoch
             per_device_train_batch_size=8,
             per_device_eval_batch_size=16,
             num_train_epochs=3,

@@ -92,7 +92,7 @@ def main():
     parser.add_argument(
         "--input_dir",
         type=str,
-        defaul="simulation_results10",
+        default="simulation_results10",
         required=True,
         help="Directory containing subfolders with '_validation_data.csv' files."
     )

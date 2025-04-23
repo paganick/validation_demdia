@@ -1,5 +1,5 @@
 OPPU: false
 finetuned: true
-model: cognitivecomputations/dolphin-2.1-mistral-7b
+model: mistralai/Mistral-7B-v0.1
 n_style_examples: 0
 retrieve_context: false

@@ -11,7 +11,7 @@ for filename in os.listdir(input_folder):
             config = yaml.safe_load(f)
 
         # Modify config
-        config["model"] = "cognitivecomputations/dolphin-2.1-mistral-7b"
+        config["model"] = "mistralai/Mistral-7B-v0.1"
 
         # Build new filename
         new_filename = "mistral" + filename.replace("deepseekR1", "")
