@@ -20,11 +20,11 @@ class Model:
     def load(self):
         if not self.finetuned:
             print(f"Loading base model: {self.model_name}")
-            self.model = AutoModelForCausalLM.from_pretrained(self.model_name)
+            self.model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         elif os.path.exists(self.fine_tuned_dir):
             print(f"Loading fine-tuned model from {self.fine_tuned_dir}")
-            self.model = AutoModelForCausalLM.from_pretrained(self.fine_tuned_dir)
+            self.model = AutoModelForCausalLM.from_pretrained(self.fine_tuned_dir, device_map="auto")
             self.tokenizer = AutoTokenizer.from_pretrained(self.fine_tuned_dir)
         else:
             print(f"Fine-tuning and saving model to {self.fine_tuned_dir}")

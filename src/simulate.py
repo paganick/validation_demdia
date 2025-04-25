@@ -44,7 +44,8 @@ def run_simulation_random_response(config, n_users=1000, n_responses_per_user=1,
         .reset_index(drop=True)
     )
 
-    model = Model(config)
+    model_loaded = False
+
     j = 0
     for username, user_df in df_test.groupby("username"):
         print(f"\n👤 Processing user: {username} ({len(user_df)} samples)")
@@ -70,6 +71,9 @@ def run_simulation_random_response(config, n_users=1000, n_responses_per_user=1,
                 print(f"⏩ Skipping already processed: {prediction_key}")
                 continue
             
+            if not model_loaded:
+                 model = Model(config)
+                 model_loaded = True
 
             response = agent.generate_response(model, 
                                                n_examples=config["n_style_examples"],
