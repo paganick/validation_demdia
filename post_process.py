@@ -49,6 +49,24 @@ def read_confusion_matrix(filepath):
         print(f"Failed reading confusion matrix from {filepath}: {e}")
         return {'0-0': None, '1-0': None, '0-1': None, '1-1': None}
 
+def read_aggregate_stylistic_metrics(filepath):
+    """
+    Reads the aggregate stylistic metrics CSV and returns relevant metrics.
+    """
+    try:
+        df = pd.read_csv(filepath)
+        # Extract relevant metrics from the DataFrame
+        return {
+            "avg_words": df["avg_words"].iloc[0],
+            "avg_links": df["avg_links"].iloc[0],
+            "avg_emojis": df["avg_emojis"].iloc[0],
+            "avg_mentions": df["avg_mentions"].iloc[0],
+            "top_10_emojis": df["top_10_emojis"].iloc[0]  # It's assumed to be a list or string
+        }
+    except Exception as e:
+        print(f"Failed reading aggregate stylistic metrics from {filepath}: {e}")
+        return {"avg_words": None, "avg_links": None, "avg_emojis": None, "avg_mentions": None, "top_10_emojis": None}
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("root_folder", type=str, help="Path to the root folder")
@@ -77,6 +95,15 @@ def main():
                     records[key] = {}
                 records[key].update(confusion)
 
+            elif file.endswith("aggregate_stylistic_metrics.csv"):
+                model, ft, context, style, oppu = parse_filename(file)
+                key = (model, ft, context, style, oppu)
+
+                stylistic_metrics = read_aggregate_stylistic_metrics(full_path)
+                if key not in records:
+                    records[key] = {}
+                records[key].update(stylistic_metrics)
+
     # Convert to DataFrame
     rows = []
     for key, metrics in records.items():
@@ -91,12 +118,17 @@ def main():
             "0-0": metrics.get("0-0"),
             "1-0": metrics.get("1-0"),
             "0-1": metrics.get("0-1"),
-            "1-1": metrics.get("1-1")
+            "1-1": metrics.get("1-1"),
+            "avg_words": metrics.get("avg_words"),
+            "avg_links": metrics.get("avg_links"),
+            "avg_emojis": metrics.get("avg_emojis"),
+            "avg_mentions": metrics.get("avg_mentions"),
+            "top_10_emojis": metrics.get("top_10_emojis")
         }
         rows.append(row)
 
     df = pd.DataFrame(rows)
-    output_path = os.path.join(args.root_folder, "significant_features_summary.csv")
+    output_path = os.path.join(args.root_folder, "summary_metrics.csv")
     df.to_csv(output_path, index=False)
     print(f"Saved summary to {output_path}")
 
