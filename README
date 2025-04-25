@@ -1,0 +1,10 @@
+USAGE:
+python run_simulation.py --config_dir=configs --n_users=100 --output_dir=simulation_results --filter_keywords=deepseek
+
+python convert_emojiis.py simulation_results100
+
+python build_validation_data.py --folder=simulation_results100 --sample_size=2000
+
+python validate_text.py --input_dir=simulation_results100
+
+python postprocess.py simulation_results100

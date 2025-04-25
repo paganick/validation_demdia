@@ -15,7 +15,7 @@ def main():
     parser.add_argument(
         "--folder",
         type=str,
-        default="simulation_results10",
+        #default="simulation_results10",
         help="Path to the folder containing AI-generated responses."
     )
     parser.add_argument(
