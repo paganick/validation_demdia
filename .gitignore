@@ -4,6 +4,7 @@ results/*
 configs_backup/*
 configs/*
 data/personas_and_tweets.df.pkl
+BERT_models/*
 
 # Byte-compiled / cache files
 __pycache__/
