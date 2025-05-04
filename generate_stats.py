@@ -88,7 +88,7 @@ def process_all(root_folder):
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("Usage: python aggregate_responses.py <root_folder>")
+        print("Usage: python generate_stats.py <root_folder>")
         sys.exit(1)
 
     root = sys.argv[1]
@@ -97,7 +97,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     # Process all files in the directory
-    # process_all(root)
+    process_all(root)
 
     # Now process the `personas_and_tweets.df.pkl` DataFrame
     df = pd.read_pickle("data/personas_and_tweets.df.pkl")

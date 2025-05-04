@@ -53,9 +53,11 @@ def process_file(file_path, run_bert=True, run_empath=True):
         cm_df.to_csv(cm_file, index=False)
         print(f"BERT confusion matrix data saved to {cm_file}")
 
-        print("Generating BERT predictions on a subsample of the validation dataset (100 rows) for quick testing...")
-
-        df_sample = df.sample(n=100, random_state=42)
+        # print("Generating BERT predictions on a subsample of the validation dataset (100 rows) for quick testing...")
+        # df_sample = df.sample(n=100, random_state=42)
+        
+        print("Generating BERT predictions")
+        df_sample = df.copy()
         test_dataset = Dataset.from_pandas(df_sample)
 
         def tokenize_function(examples):

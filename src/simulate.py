@@ -68,7 +68,7 @@ def run_simulation_random_response(config, n_users=1000, n_responses_per_user=1,
             )
 
             if prediction_key in existing_predictions:
-                print(f"⏩ Skipping already processed: {prediction_key}")
+                #print(f"⏩ Skipping already processed: {prediction_key}")
                 continue
             
             if not model_loaded:

@@ -7,4 +7,12 @@ python build_validation_data.py --folder=simulation_results100 --sample_size=200
 
 python validate_text.py --input_dir=simulation_results100
 
-python postprocess.py simulation_results100
+python generate_stats.py simulation_results100
+
+python post_process.py simulation_results100
+
+python features_analysis.py simulation_results100 labels
+python features_analysis.py simulation_results100 bert_prediction
+
+python features_plot.py simulation_results100 labels
+python features_plot.py simulation_results100 bert_prediction
