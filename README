@@ -1,18 +1,18 @@
 USAGE:
-python run_simulation.py --config_dir=configs --n_users=100 --output_dir=simulation_results --filter_keywords=deepseek
+python run_simulation.py --config_dir=configs --n_users=250 --output_dir=simulation_results250
 
-python convert_emojiis.py simulation_results100
+python convert_emojiis.py simulation_results250
 
-python build_validation_data.py --folder=simulation_results100 --sample_size=2000
+python build_validation_data.py --folder=simulation_results250 --sample_size=2000
 
-python validate_text.py --input_dir=simulation_results100
+python validate_text.py --input_dir=simulation_results250
 
-python generate_stats.py simulation_results100
+python generate_stats.py simulation_results250
 
-python post_process.py simulation_results100
+python post_process.py simulation_results250
 
-python features_analysis.py simulation_results100 labels
-python features_analysis.py simulation_results100 bert_prediction
+python features_analysis.py simulation_results250 labels
+python features_analysis.py simulation_results250 bert_prediction
 
-python features_plot.py simulation_results100 labels
-python features_plot.py simulation_results100 bert_prediction
+python features_plot.py simulation_results250 labels
+python features_plot.py simulation_results250 bert_prediction

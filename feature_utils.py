@@ -14,7 +14,7 @@ from sklearn.model_selection import train_test_split
 from transformers import pipeline
 
 # Load toxicity model once
-toxicity_model = pipeline("text-classification", model="unitary/toxic-bert", tokenizer="unitary/toxic-bert")
+toxicity_model = pipeline("text-classification", model="unitary/toxic-bert", tokenizer="unitary/toxic-bert", truncation=True)
 
 # === Basic text feature functions ===
 
