@@ -11,10 +11,6 @@ import language_tool_python
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import train_test_split
-from transformers import pipeline
-
-# Load toxicity model once
-toxicity_model = pipeline("text-classification", model="unitary/toxic-bert", tokenizer="unitary/toxic-bert", truncation=True)
 
 # === Basic text feature functions ===
 
@@ -30,6 +26,11 @@ def count_language_errors(text):
         return 0
 
 def get_toxicity_score(text):
+
+    from transformers import pipeline
+    # Load toxicity model once
+    toxicity_model = pipeline("text-classification", model="unitary/toxic-bert", tokenizer="unitary/toxic-bert", truncation=True)
+
     result = toxicity_model(text)
     return result[0]['score']
 
@@ -113,9 +114,31 @@ def evaluate_features_single_dataset(df, feature_cache_path=None, label_source="
     y_pred_prob = clf.predict_proba(X_test)[:, 1]
     auc = roc_auc_score(y_test, y_pred_prob)
 
-    # Return AUC and feature importances
+    # Feature importance
     importances = pd.Series(clf.feature_importances_, index=X.columns)
-    return auc, importances
+    
+    # Initialize a list to store the correlation sign results
+    correlation_signs = []
+    
+    # Analyze the sign of correlation for all features
+    for feature in X.columns:
+        # Calculate mean of the feature by label (0 vs. 1)
+        feature_by_label = pd.concat([X[feature], y], axis=1).groupby(label_source)[feature].mean()
+
+        # Determine the sign of the correlation based on means for each label
+        sign_of_correlation = "positive" if feature_by_label[1] > feature_by_label[0] else "negative"
+        
+        # Store the feature's correlation sign along with its importance
+        correlation_signs.append({
+            "feature": feature,
+            "importance": importances[feature],
+            "correlation_sign": sign_of_correlation
+        })
+
+    # Convert the list of results into a DataFrame for easy viewing
+    correlation_df = pd.DataFrame(correlation_signs)
+
+    return auc, importances, correlation_df
 
 
 # === Metadata parser ===

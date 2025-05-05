@@ -136,12 +136,21 @@ class Validator:
             stat, p_value = ranksums(df1[feature], df2[feature])
             avg_list1 = df1[feature].mean()
             avg_list2 = df2[feature].mean()
+            delta = avg_list2 - avg_list1
+            direction = (
+                "more in class 1" if delta > 0 else
+                "more in class 0" if delta < 0 else
+                "no difference"
+            )
+
             results.append({
                 "feature": feature,
                 "statistic": stat,
                 "p_value": p_value,
                 "avg_list1": avg_list1,
-                "avg_list2": avg_list2
+                "avg_list2": avg_list2,
+                "difference": delta,
+                "direction": direction
             })
 
         # Apply Bonferroni correction

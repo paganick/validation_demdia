@@ -3,6 +3,7 @@ import argparse
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+from feature_utils import parse_filename
 
 def main(folder_path, label_source):
     assert label_source in ['labels', 'bert_prediction'], "label_source must be 'labels' or 'bert_prediction'"
@@ -18,7 +19,6 @@ def main(folder_path, label_source):
         for filename in files:
             if filename.endswith(suffix):
                 full_path = os.path.join(root, filename)
-                print(f"Reading {full_path}...")
                 df = pd.read_csv(full_path)
 
                 auc = df['auc'].iloc[0]
@@ -113,6 +113,62 @@ def main(folder_path, label_source):
     plt.tight_layout()
     plt.savefig(os.path.join(folder_path, f'feature_importance_{plot_suffix}.png'), dpi=600, bbox_inches='tight')
     plt.show()
+
+    # Step 7: Plot heatmap of correlation signs (+1/-1)
+    sign_suffix = "_from_labels_feature_correlation_stats.csv" if label_source == "labels" else "_from_bert_feature_correlation_stats.csv"
+    results_signs = []
+
+
+    for root, _, files in os.walk(folder_path):
+        for filename in files:
+            if filename.endswith(sign_suffix):
+                full_path = os.path.join(root, filename)
+                df = pd.read_csv(full_path)
+
+                # Parse the filename for metadata
+                model, ft, context, style, oppu = parse_filename(filename)
+
+                # Map sign string to +1/-1
+                sign_map = {'positive': 1, 'negative': -1}
+                df['sign'] = df['correlation_sign'].map(sign_map)
+
+                feature_dict = df.set_index('feature')['sign'].to_dict()
+                feature_dict.update({
+                    'model': model,
+                    'ft': ft,
+                    'context': context,
+                    'style': style,
+                    'oppu': oppu
+                })
+
+                results_signs.append(feature_dict)
+
+
+    sign_df = pd.DataFrame(results_signs)
+    sign_df_sorted = sign_df.sort_values(by=sort_columns, ascending=[True, False, False, False, False])
+    sign_df_ordered = sign_df_sorted.loc[auc_order]
+    sign_df_indexed = sign_df_ordered.set_index(sort_columns)
+
+    # Plot the +/-1 heatmap
+    fig, ax = plt.subplots(figsize=(14, max(6, 0.3 * len(sign_df_indexed))))
+    heatmap_signs = sign_df_indexed.drop(columns=sort_columns, errors='ignore')
+    heatmap_signs = heatmap_signs[heatmap_data.columns]  # match same column order
+
+    sns.heatmap(heatmap_signs,
+                annot=True, cmap='coolwarm', fmt=".0f", ax=ax,
+                cbar_kws={'label': 'Correlation Sign'}, center=0,
+                linewidths=0.5, linecolor='gray', vmin=-1, vmax=1)
+
+    plt.title(f'Correlation Signs of Features across Datasets — {title_label}', fontsize=16)
+    plt.xlabel('Features', fontsize=14)
+    plt.ylabel('Dataset (Sorted by AUC)', fontsize=14)
+    plt.xticks(rotation=45, ha='right')
+    plt.yticks(rotation=0)
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(folder_path, f'feature_signs_{plot_suffix}.png'), dpi=600, bbox_inches='tight')
+    plt.show()
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Plot AUC and feature importance heatmap from simulation results.")

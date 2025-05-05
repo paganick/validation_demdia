@@ -6,6 +6,7 @@ from feature_utils import evaluate_features_single_dataset, parse_filename
 def main(folder_path, label_source):
     results_auc = []
     results_importances = []
+    results_correlation = []
 
     assert label_source in ['labels', 'bert_prediction'], "label_source must be 'labels' or 'bert_prediction'"
 
@@ -25,9 +26,10 @@ def main(folder_path, label_source):
                 feature_cache_path = full_path.replace(".csv", "_features.csv")
                 base_output_path = full_path.replace(".csv", f"{suffix}")
                 stats_output_path = base_output_path + "_feature_importance_stats.csv"
+                correlation_output_path = base_output_path + "_feature_correlation_stats.csv"  # New path for correlation stats
 
-                # Compute features and stats
-                auc, feature_importance = evaluate_features_single_dataset(df, feature_cache_path, label_source=label_source)
+                # Compute features, stats, and correlation
+                auc, feature_importance, correlation_df = evaluate_features_single_dataset(df, feature_cache_path, label_source=label_source)
 
                 # Parse filename info
                 model, ft, context, style, oppu = parse_filename(filename)
@@ -59,9 +61,20 @@ def main(folder_path, label_source):
                 pd.DataFrame([feature_dict | {'auc': auc}]).to_csv(stats_output_path, index=False)
                 print(f'Saved stats to {stats_output_path}')
 
+                # Save correlation stats to CSV
+                correlation_df.to_csv(correlation_output_path, index=False)
+                print(f'Saved correlation stats to {correlation_output_path}')
+
+                # Store correlation results for later aggregation (optional)
+                results_correlation.append(correlation_df)
+
     # Optionally save aggregate results
     pd.DataFrame(results_auc).to_csv(os.path.join(folder_path, f'auc_results{suffix}.csv'), index=False)
     pd.DataFrame(results_importances).to_csv(os.path.join(folder_path, f'importances{suffix}.csv'), index=False)
+
+    # Aggregate and save correlation stats (optional)
+    correlation_combined_df = pd.concat(results_correlation, ignore_index=True)
+    correlation_combined_df.to_csv(os.path.join(folder_path, f'correlation_results{suffix}.csv'), index=False)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate feature importance from validation datasets.")

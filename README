@@ -3,7 +3,7 @@ python run_simulation.py --config_dir=configs --n_users=250 --output_dir=simulat
 
 python convert_emojiis.py simulation_results250
 
-python build_validation_data.py --folder=simulation_results250 --sample_size=2000
+python build_validation_data.py --folder=simulation_results250 --sample_size=5000
 
 python validate_text.py --input_dir=simulation_results250
 
