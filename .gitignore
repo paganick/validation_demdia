@@ -5,6 +5,9 @@ configs_backup/*
 configs/*
 data/personas_and_tweets.df.pkl
 BERT_models/*
+copy_filtered_files.sh
+simulation_results250_shrinked/
+
 
 # Byte-compiled / cache files
 __pycache__/
