@@ -4,25 +4,12 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
-#from feature_utils import parse_filename
-
-def parse_filename(filename):
-    """
-    Extracts model, finetuning, context, style, and OPPU info from a filename.
-    Converts them into booleans or integers for clean tabular use.
-    """
-    base = os.path.basename(filename)
-    parts = base.split("__")
-    model = parts[0]
-    ft = 1 if parts[1] == "ft" else 0
-    context = 1 if parts[2] == "ctx1" else 0
-    style = int(parts[3].replace("style", ""))
-    oppu = 1 if parts[4].startswith("OPPU") else 0
-    return model, ft, context, style, oppu
-
+from plotting_utils import *
 
 def plot_significant_features(input_folder):
     data = []
+    results_folder = os.path.join(input_folder, 'empath')
+    os.makedirs(results_folder, exist_ok=True)
 
     for root, _, files in os.walk(input_folder):
         for file in files:
@@ -54,7 +41,7 @@ def plot_significant_features(input_folder):
 
     # Create a more readable label
     summary_df["label"] = summary_df.apply(
-        lambda row: f"{row['model']} | ft {row['ft']} | ctx {row['context']} | style {row['style']} | oppu {row['oppu']}",
+        lambda row: make_label(row['model'], row['ft'], row['context'], row['style'], row['oppu']),
         axis=1
     )
 
@@ -74,7 +61,6 @@ def plot_significant_features(input_folder):
     ax = plt.gca()
     for tick_label, (_, row) in zip(ax.get_xticklabels(), summary_df.iterrows()):
         tick_label.set_color(model_to_color[row["model"]])
-        tick_label.set_fontweight("bold")
     
     plt.title("Significant Features per Configuration (adjusted p < 0.05)")
     plt.xlabel("Configuration")
@@ -82,7 +68,7 @@ def plot_significant_features(input_folder):
     plt.xticks(rotation=90)
     plt.tight_layout()
 
-    output_path = os.path.join(input_folder, "significant_features_summary.png")
+    output_path = os.path.join(results_folder, "significant_features_summary.png")
     plt.savefig(output_path)
     plt.close()
     print(f"Plot saved to {output_path}")
@@ -99,13 +85,16 @@ def plot_heatmap_significant_features(input_folder, value_column="adjusted_p_val
     label_colors = []
     all_features = set()
 
+    results_folder = os.path.join(input_folder, 'empath')
+    os.makedirs(results_folder, exist_ok=True)
+
     for root, _, files in os.walk(input_folder):
         for file in files:
             if file.endswith("empath_significant_features.csv"):
                 filepath = os.path.join(root, file)
                 try:
                     model, ft, context, style, oppu = parse_filename(file)
-                    label = f"{model} | ft {ft} | ctx {context} | style {style} | oppu {oppu}"
+                    label =  make_label(model, ft, context, style, oppu)
                     df = pd.read_csv(filepath)
                     sig_df = df[df["adjusted_p_value"] < 0.05][["feature", value_column]]
 
@@ -173,7 +162,7 @@ def plot_heatmap_significant_features(input_folder, value_column="adjusted_p_val
         tick.set_color(color)
 
     output_filename = f"significant_features_heatmap_{value_column}.png"
-    output_path = os.path.join(input_folder, output_filename)
+    output_path = os.path.join(results_folder, output_filename)
     plt.savefig(output_path)
     plt.close()
     print(f"Heatmap saved to {output_path}")

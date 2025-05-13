@@ -3,7 +3,8 @@ import argparse
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from feature_utils import parse_filename, make_label
+from plotting_utils import parse_filename, make_label
+from adjustText import adjust_text
 
 plt.rcParams['text.usetex'] = False
 plt.rcParams['mathtext.fontset'] = 'dejavusans'
@@ -87,6 +88,59 @@ def main(folder_path):
     plt.tight_layout()
     plt.savefig(os.path.join(results_folder, "class0_accuracy_barplot.png"))
     plt.close()
+
+     # Scatter plot: accuracy vs. class-0 accuracy
+    scatter_df = results_df.dropna(subset=["class_0_accuracy"])
+
+    # Determine plot bounds
+    min_val = min(scatter_df["accuracy"].min(), scatter_df["class_0_accuracy"].min())
+    max_val = max(scatter_df["accuracy"].max(), scatter_df["class_0_accuracy"].max())
+
+    plt.figure(figsize=(12, 10))
+    for model in scatter_df["model"].unique():
+        model_data = scatter_df[scatter_df["model"] == model]
+        plt.scatter(
+            model_data["accuracy"], 
+            model_data["class_0_accuracy"], 
+            label=model, 
+            color=model_palette[model],
+            s=60,
+            alpha=0.8,
+            edgecolor='k'
+        )
+        # # ... inside your plotting code
+        # texts = []
+        # for _, row in scatter_df.iterrows():
+        #     texts.append(
+        #         plt.text(
+        #             row["accuracy"],
+        #             row["class_0_accuracy"],
+        #             row["label"],
+        #             fontsize=8,
+        #             alpha=0.75
+        #         )
+        #     )
+
+        # # Automatically adjust labels to minimize overlap
+        # adjust_text(texts, arrowprops=dict(arrowstyle='-', color='gray', lw=0.5))
+
+
+    # Add y = x line within bounds
+    plt.plot([min_val, max_val], [min_val, max_val], ls="--", color="gray")
+
+    plt.xlabel("Overall Accuracy")
+    plt.ylabel("Class-0 Accuracy")
+    plt.title("Accuracy vs. Class-0 Accuracy per Configuration")
+    plt.xlim(min_val - 0.01, max_val + 0.01)
+    plt.ylim(min_val - 0.01, max_val + 0.01)
+    plt.legend(title="Model", loc="lower right")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(os.path.join(results_folder, "scatter_accuracy_vs_class0.png"))
+    plt.close()
+
+
+
 
     # -------- Heatmap generation --------
     toggles = ['ft', 'context', 'style', 'oppu']

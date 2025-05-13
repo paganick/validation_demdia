@@ -4,7 +4,7 @@ import pandas as pd
 import seaborn as sns
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
-from feature_utils import parse_filename  # assumes you have this to parse metadata
+from plotting_utils import parse_filename, make_label
 
 def compute_feature_differences(df, label_col='label'):
     """Compute difference in mean between label=1 and label=0 for each feature."""
@@ -17,6 +17,9 @@ def compute_feature_differences(df, label_col='label'):
 
 def main(folder_path, label_col="label"):
     differences_list = []
+
+    results_folder = os.path.join(folder_path, 'features_differences')
+    os.makedirs(results_folder, exist_ok=True)
 
     # Collect model names to define color palette
     model_names = set()
@@ -81,7 +84,7 @@ def main(folder_path, label_col="label"):
 
         for idx, row in diff_df_features.iterrows():
             model, ft, context, style, oppu = idx
-            config_label = f"{model}_ft{ft}_ctx{context}_style{style}_oppu{oppu}"
+            config_label = make_label(model, ft, context, style, oppu)
             val = row[feature]
             feature_values.append((config_label, val, model))
 
@@ -100,7 +103,7 @@ def main(folder_path, label_col="label"):
         plt.ylabel(f"Difference in {feature}", fontsize=14)
         plt.xticks(rotation=90)
         plt.tight_layout()
-        plt.savefig(os.path.join(folder_path, f"feature_diff_{feature}.png"), dpi=300)
+        plt.savefig(os.path.join(results_folder, f"feature_diff_{feature}.png"), dpi=300)
         plt.close()
 
     # Reset index to get metadata as columns again
@@ -108,7 +111,7 @@ def main(folder_path, label_col="label"):
 
     # Combine model config into a single label for the row
     heatmap_df['config'] = heatmap_df.apply(
-        lambda row: f"{row['model']}_ft{row['ft']}_ctx{row['context']}_style{row['style']}_oppu{row['oppu']}",
+        lambda row: make_label(row['model'], row['ft'], row['context'], row['style'], row['oppu']),
         axis=1
     )
 
@@ -137,7 +140,7 @@ def main(folder_path, label_col="label"):
     plt.xlabel("Feature")
     plt.ylabel("Model Configuration")
     plt.tight_layout()
-    plt.savefig(os.path.join(folder_path, "feature_differences_heatmap.png"), dpi=300)
+    plt.savefig(os.path.join(results_folder, "feature_differences_heatmap.png"), dpi=300)
     plt.close()
 
     plt.figure(figsize=(14, max(6, 0.3 * len(heatmap_data_normalized))))  # dynamic height
@@ -153,7 +156,7 @@ def main(folder_path, label_col="label"):
     plt.xlabel("Feature")
     plt.ylabel("Model Configuration")
     plt.tight_layout()
-    plt.savefig(os.path.join(folder_path, "feature_differences_heatmap1.png"), dpi=300)
+    plt.savefig(os.path.join(results_folder, "feature_differences_heatmap1.png"), dpi=300)
     plt.close()
 
 
@@ -187,7 +190,7 @@ def main(folder_path, label_col="label"):
 
         plt.suptitle(f"Impact of Config Flags on |Mean Difference| for {feature}", fontsize=16)
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-        plt.savefig(os.path.join(folder_path, f"feature_impact_grouped_{feature}.png"), dpi=300)
+        plt.savefig(os.path.join(results_folder, f"feature_impact_grouped_{feature}.png"), dpi=300)
         plt.close()
 
     toggles = ['ft', 'context', 'style', 'oppu']
@@ -219,7 +222,7 @@ def main(folder_path, label_col="label"):
                     diff = vec2 - vec1  # Raw difference (ON - OFF)
 
                     diffs_matrix.append(diff.values)
-                    label = f"{idx1_dict['model']}_ft{idx1_dict['ft']}_ctx{idx1_dict['context']}_style{idx1_dict['style']}_oppu{idx1_dict['oppu']} → {toggle}={on_val}"
+                    label = make_label(idx1_dict['model'], idx1_dict['ft'], idx1_dict['context'], idx1_dict['style'], idx1_dict['oppu']) +f"→ {toggle}={on_val}"
                     row_labels.append(label)
 
         if diffs_matrix:
@@ -247,7 +250,7 @@ def main(folder_path, label_col="label"):
             plt.ylabel("Paired Configs (OFF → ON)")
             plt.xlabel("Feature")
             plt.tight_layout()
-            plt.savefig(os.path.join(folder_path, f"heatmap_toggle_{toggle}.png"), dpi=300)
+            plt.savefig(os.path.join(results_folder, f"heatmap_toggle_{toggle}.png"), dpi=300)
             plt.close()
 
             # Use raw signed differences and compute symmetric color scale
@@ -268,7 +271,7 @@ def main(folder_path, label_col="label"):
             plt.ylabel("Paired Configs (OFF → ON)")
             plt.xlabel("Feature")
             plt.tight_layout()
-            plt.savefig(os.path.join(folder_path, f"heatmap_toggle_{toggle}_2.png"), dpi=300)
+            plt.savefig(os.path.join(results_folder, f"heatmap_toggle_{toggle}_2.png"), dpi=300)
             plt.close()
 
         else:

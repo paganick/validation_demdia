@@ -1,7 +1,8 @@
 import os
 import argparse
 import pandas as pd
-from feature_utils import evaluate_features_single_dataset, parse_filename
+from feature_utils import evaluate_features_single_dataset
+from plotting_utils import parse_filename
 
 def main(folder_path, label_source):
     results_auc = []

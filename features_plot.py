@@ -3,7 +3,7 @@ import argparse
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
-from feature_utils import parse_filename
+from plotting_utils import parse_filename, make_label
 
 def main(folder_path, label_source):
     assert label_source in ['labels', 'bert_prediction'], "label_source must be 'labels' or 'bert_prediction'"
@@ -13,6 +13,8 @@ def main(folder_path, label_source):
 
     results_auc = []
     results_importances = []
+    results_folder = os.path.join(folder_path, 'features')
+    os.makedirs(results_folder, exist_ok=True)
 
     # Step 1: Load all matching _feature_labels_stats.csv files
     for root, _, files in os.walk(folder_path):
@@ -71,7 +73,7 @@ def main(folder_path, label_source):
     # Step 5: Plot AUC bar plot
     fig, ax = plt.subplots(figsize=(14, 6))
     labels = [
-        f"{row['model']}_ft{row['ft']}_ctx{row['context']}_style{row['style']}_oppu{row['oppu']}"
+        make_label(row['model'], row['ft'], row['context'], row['style'], row['oppu'])
         for _, row in auc_df_sorted_by_auc.iterrows()
     ]
     bars = ax.bar(labels, auc_df_sorted_by_auc['auc'], color=[model_color_dict[m] for m in auc_df_sorted_by_auc['model']])
@@ -86,7 +88,7 @@ def main(folder_path, label_source):
     ax.legend(handles=handles, title='Model', bbox_to_anchor=(1.05, 1), loc='upper left')
 
     plt.tight_layout()
-    plt.savefig(os.path.join(folder_path, f'auc_{plot_suffix}.png'), dpi=600, bbox_inches='tight')
+    plt.savefig(os.path.join(results_folder, f'auc_{plot_suffix}.png'), dpi=600, bbox_inches='tight')
     plt.show()
 
     # Step 6: Plot heatmap of feature importances
@@ -107,11 +109,12 @@ def main(folder_path, label_source):
     plt.title(f'Feature Importances across Datasets (AUC Ordered) — {title_label}', fontsize=16)
     plt.xlabel('Features', fontsize=14)
     plt.ylabel('Dataset (Sorted by AUC)', fontsize=14)
+    ax.set_yticklabels(labels, rotation=0)
     plt.xticks(rotation=45, ha='right')
     plt.yticks(rotation=0)
 
     plt.tight_layout()
-    plt.savefig(os.path.join(folder_path, f'feature_importance_{plot_suffix}.png'), dpi=600, bbox_inches='tight')
+    plt.savefig(os.path.join(results_folder, f'feature_importance_{plot_suffix}.png'), dpi=600, bbox_inches='tight')
     plt.show()
 
     # Step 7: Plot heatmap of correlation signs (+1/-1)
@@ -162,11 +165,12 @@ def main(folder_path, label_source):
     plt.title(f'Correlation Signs of Features across Datasets — {title_label}', fontsize=16)
     plt.xlabel('Features', fontsize=14)
     plt.ylabel('Dataset (Sorted by AUC)', fontsize=14)
+    ax.set_yticklabels(labels, rotation=0)
     plt.xticks(rotation=45, ha='right')
     plt.yticks(rotation=0)
 
     plt.tight_layout()
-    plt.savefig(os.path.join(folder_path, f'feature_signs_{plot_suffix}.png'), dpi=600, bbox_inches='tight')
+    plt.savefig(os.path.join(results_folder, f'feature_signs_{plot_suffix}.png'), dpi=600, bbox_inches='tight')
     plt.show()
 
 
