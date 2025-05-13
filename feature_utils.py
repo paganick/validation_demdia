@@ -164,3 +164,16 @@ def parse_filename(filename):
     style = int(parts[3].replace("style", ""))
     oppu = 1 if parts[4].startswith("OPPU") else 0
     return model, ft, context, style, oppu
+
+def make_label(model, ft, context, style, oppu):
+    def bold(val, prefix):
+        return f"{prefix}{val}" if val == 0 else rf"$\bf{{{prefix}{val}}}$"
+
+    return "_".join([
+        model,
+        bold(style, "style"),
+        bold(context, "ctx"),
+        bold(ft, "ft"),
+        bold(oppu, "oppu")
+    ])
+
