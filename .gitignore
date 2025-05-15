@@ -9,6 +9,7 @@ BERT_models/*
 copy_filtered_files.sh
 simulation_results250_shrinked/
 simulation_results250_instruct/
+simulation_results250/
 
 # Byte-compiled / cache files
 __pycache__/
