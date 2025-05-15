@@ -110,10 +110,20 @@ def extract_features(df, cache_path=None):
 
 # === Model training and evaluation ===
 
-def evaluate_features_single_dataset(df, feature_cache_path=None, label_source="labels"):
+def evaluate_features_single_dataset(
+    df, 
+    feature_cache_path=None, 
+    label_source="labels", 
+    exclude_features=['spelling_grammar_errors', 'has_emoji', 'has_mention', 'has_link']
+):
     assert label_source in df.columns, f"Label source '{label_source}' not found in DataFrame."
+    exclude_features = exclude_features or []
+
     X = extract_features(df, cache_path=feature_cache_path)
     y = df[label_source]
+
+    # Drop excluded features if they exist in the DataFrame
+    X = X.drop(columns=[f for f in exclude_features if f in X.columns], errors="ignore")
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, stratify=y, random_state=42)
 
@@ -124,26 +134,18 @@ def evaluate_features_single_dataset(df, feature_cache_path=None, label_source="
 
     # Feature importance
     importances = pd.Series(clf.feature_importances_, index=X.columns)
-    
-    # Initialize a list to store the correlation sign results
-    correlation_signs = []
-    
-    # Analyze the sign of correlation for all features
-    for feature in X.columns:
-        # Calculate mean of the feature by label (0 vs. 1)
-        feature_by_label = pd.concat([X[feature], y], axis=1).groupby(label_source)[feature].mean()
 
-        # Determine the sign of the correlation based on means for each label
+    # Analyze the sign of correlation for all remaining features
+    correlation_signs = []
+    for feature in X.columns:
+        feature_by_label = pd.concat([X[feature], y], axis=1).groupby(label_source)[feature].mean()
         sign_of_correlation = "positive" if feature_by_label[1] > feature_by_label[0] else "negative"
-        
-        # Store the feature's correlation sign along with its importance
         correlation_signs.append({
             "feature": feature,
             "importance": importances[feature],
             "correlation_sign": sign_of_correlation
         })
 
-    # Convert the list of results into a DataFrame for easy viewing
     correlation_df = pd.DataFrame(correlation_signs)
 
     return auc, importances, correlation_df

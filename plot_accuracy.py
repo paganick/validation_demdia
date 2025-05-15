@@ -33,9 +33,9 @@ def main(folder_path):
 
                     results.append({
                         "model": model,
-                        "ft": ft,
-                        "context": context,
                         "style": style,
+                        "context": context,
+                        "ft": ft,
                         "oppu": oppu,
                         "accuracy": correct / total,
                         "class_0_accuracy": correct_0 / total_0 if total_0 > 0 else None,
@@ -56,6 +56,26 @@ def main(folder_path):
     results_df_sorted["label"] = pd.Categorical(
         results_df_sorted["label"], categories=results_df_sorted["label"], ordered=True
     )
+
+    # Class-0 accuracy plot (sorted)
+    results_df_sorted_c0 = results_df.sort_values(by="class_0_accuracy", ascending=True, na_position="last")
+    results_df_sorted_c0["label"] = pd.Categorical(
+        results_df_sorted_c0["label"], categories=results_df_sorted_c0["label"], ordered=True
+    )
+
+    # Sort by: model (deepseek < llama < mistral), then style (0 < 10), context (0 < 1), ft (0 < 1), oppu (0 < 1)
+    model_order = {"deepseek": 0, "llama": 1, "mistral": 2}
+    results_df["model_order"] = results_df["model"].map(model_order)
+
+    # sort_cols = ["model_order", "style", "context", "ft", "oppu"]
+    sort_cols = ["model_order", "oppu", "ft", "context", "style"]
+    results_df = results_df.sort_values(by=sort_cols, ascending=True)
+
+    # Ensure the labels follow the new sorted order
+    results_df["label"] = pd.Categorical(
+        results_df["label"], categories=results_df["label"], ordered=True
+    )
+
     plt.figure(figsize=(14, 10))
     sns.barplot(
         x="label", y="accuracy", hue="model", data=results_df_sorted,
@@ -70,11 +90,6 @@ def main(folder_path):
     plt.savefig(os.path.join(results_folder, "overall_accuracy_barplot.png"))
     plt.close()
 
-    # Class-0 accuracy plot (sorted)
-    results_df_sorted_c0 = results_df.sort_values(by="class_0_accuracy", ascending=True, na_position="last")
-    results_df_sorted_c0["label"] = pd.Categorical(
-        results_df_sorted_c0["label"], categories=results_df_sorted_c0["label"], ordered=True
-    )
     plt.figure(figsize=(14, 10)) 
     sns.barplot(
         x="label", y="class_0_accuracy", hue="model", data=results_df_sorted_c0,
@@ -143,7 +158,7 @@ def main(folder_path):
 
 
     # -------- Heatmap generation --------
-    toggles = ['ft', 'context', 'style', 'oppu']
+    toggles = ['style', 'context', 'ft', 'oppu']
     metrics = ['accuracy', 'class_0_accuracy']
 
     for metric in metrics:
@@ -210,7 +225,7 @@ def main(folder_path):
 
         import itertools
 
-        toggle_cols = ["ft", "context", "style", "oppu"]
+        toggle_cols = ["style", "context", "ft", "oppu"]
         metric_diffs = {
             "accuracy": [],
             "class_0_accuracy": []
@@ -262,7 +277,7 @@ def main(folder_path):
 
             # Create and plot heatmap
             diff_df = pd.DataFrame(rows).set_index("base_label").astype(float)
-            plt.figure(figsize=(8, max(4, len(diff_df) * 0.5)))
+            plt.figure(figsize=(10, max(6, len(diff_df) * 0.6)))
             sns.heatmap(diff_df, annot=True, cmap="RdBu_r", center=0, fmt=".3f", cbar_kws={"label": f"Δ {metric}"})
             plt.title(f"Effect of toggling style/ft/context/oppu ON \nΔ {metric} = ON − OFF")
             plt.tight_layout()
@@ -321,7 +336,7 @@ def main(folder_path):
 
             # Create and plot heatmap
             diff_df = pd.DataFrame(rows).set_index("base_label").astype(float)
-            plt.figure(figsize=(8, max(4, len(diff_df) * 0.5)))
+            plt.figure(figsize=(10, max(6, len(diff_df) * 0.6)))
             sns.heatmap(diff_df, annot=True, cmap="RdBu_r", center=0, fmt=".3f", cbar_kws={"label": f"Δ {metric}"})
             plt.title(f"Effect of toggling ft/context/oppu ON (style=10)\nΔ {metric} = ON − OFF")
             plt.tight_layout()
@@ -379,7 +394,7 @@ def main(folder_path):
 
             # Create and plot heatmap
             diff_df = pd.DataFrame(rows).set_index("base_label").astype(float)
-            plt.figure(figsize=(8, max(4, len(diff_df) * 0.5)))
+            plt.figure(figsize=(10, max(6, len(diff_df) * 0.6)))
             sns.heatmap(diff_df, annot=True, cmap="RdBu_r", center=0, fmt=".3f", cbar_kws={"label": f"Δ {metric}"})
             plt.title(f"Effect of toggling ft/context/oppu ON (style=10, context=1)\nΔ {metric} = ON − OFF")
             plt.tight_layout()
@@ -436,7 +451,7 @@ def main(folder_path):
 
             # Create and plot heatmap
             diff_df = pd.DataFrame(rows).set_index("base_label").astype(float)
-            plt.figure(figsize=(8, max(4, len(diff_df) * 0.5)))
+            plt.figure(figsize=(10, max(6, len(diff_df) * 0.6)))
             sns.heatmap(diff_df, annot=True, cmap="RdBu_r", center=0, fmt=".3f", cbar_kws={"label": f"Δ {metric}"})
             plt.title(f"Effect of toggling ft/context/oppu ON (style=10, context=1, ft=1)\nΔ {metric} = ON − OFF")
             plt.tight_layout()
@@ -447,7 +462,6 @@ def main(folder_path):
 
     ########################
 
-    toggles = ['ft', 'context', 'style', 'oppu']
     metrics = ['accuracy', 'class_0_accuracy']
 
     for metric in metrics:
@@ -501,7 +515,7 @@ def main(folder_path):
         diff_df = pd.DataFrame(diff_rows).set_index("base")
         diff_df = diff_df.astype(float)  # Ensure numerical dtype for heatmap
         sns.heatmap(diff_df, annot=True, cmap="RdBu_r", center=0, fmt=".3f")
-        plt.figure(figsize=(8, max(6, len(diff_df) * 0.5)))
+        plt.figure(figsize=(10, max(6, len(diff_df) * 0.6)))
         sns.heatmap(diff_df, annot=True, cmap="RdBu_r", center=0, fmt=".3f")
         plt.title(f"Effect of Enabling Each Toggle on {metric}")
         plt.tight_layout()
@@ -511,7 +525,7 @@ def main(folder_path):
 
         import itertools
 
-        toggle_cols = ["ft", "context", "style", "oppu"]
+        toggle_cols = ["style", "context", "ft", "oppu"]
         metric_diffs = {
             "accuracy": [],
             "class_0_accuracy": []
@@ -563,7 +577,7 @@ def main(folder_path):
 
             # Create and plot heatmap
             diff_df = pd.DataFrame(rows).set_index("base_label").astype(float)
-            plt.figure(figsize=(8, max(4, len(diff_df) * 0.5)))
+            plt.figure(figsize=(10, max(6, len(diff_df) * 0.6)))
             sns.heatmap(diff_df, annot=True, cmap="RdBu_r", center=0, fmt=".3f", cbar_kws={"label": f"Δ {metric}"})
             plt.title(f"Effect of toggling style/ft/context/oppu OFF \nΔ {metric} = OFF − ON")
             plt.tight_layout()
@@ -622,7 +636,7 @@ def main(folder_path):
 
             # Create and plot heatmap
             diff_df = pd.DataFrame(rows).set_index("base_label").astype(float)
-            plt.figure(figsize=(8, max(4, len(diff_df) * 0.5)))
+            plt.figure(figsize=(10, max(6, len(diff_df) * 0.6)))
             sns.heatmap(diff_df, annot=True, cmap="RdBu_r", center=0, fmt=".3f", cbar_kws={"label": f"Δ {metric}"})
             plt.title(f"Effect of toggling ft/context/oppu OFF (style=10)\nΔ {metric} = OFF − ON")
             plt.tight_layout()
@@ -680,7 +694,7 @@ def main(folder_path):
 
             # Create and plot heatmap
             diff_df = pd.DataFrame(rows).set_index("base_label").astype(float)
-            plt.figure(figsize=(8, max(4, len(diff_df) * 0.5)))
+            plt.figure(figsize=(10, max(6, len(diff_df) * 0.6)))
             sns.heatmap(diff_df, annot=True, cmap="RdBu_r", center=0, fmt=".3f", cbar_kws={"label": f"Δ {metric}"})
             plt.title(f"Effect of toggling ft/context/oppu OFF (style=10, context=1)\nΔ {metric} = OFF − ON")
             plt.tight_layout()
@@ -737,7 +751,7 @@ def main(folder_path):
 
             # Create and plot heatmap
             diff_df = pd.DataFrame(rows).set_index("base_label").astype(float)
-            plt.figure(figsize=(8, max(4, len(diff_df) * 0.5)))
+            plt.figure(figsize=(10, max(6, len(diff_df) * 0.6)))
             sns.heatmap(diff_df, annot=True, cmap="RdBu_r", center=0, fmt=".3f", cbar_kws={"label": f"Δ {metric}"})
             plt.title(f"Effect of toggling ft/context/oppu OFF (style=10, context=1, ft=1)\nΔ {metric} = OFF − ON")
             plt.tight_layout()

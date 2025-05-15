@@ -23,6 +23,8 @@ def plot_accuracy_vs_significant_features(input_folder):
                     tn, fp = cm[0, 0], cm[0, 1]
                     fn, tp = cm[1, 0], cm[1, 1]
 
+                    correct = tn + tp
+                    total = tn + fp + fn + tp
                     total_0 = tn + fp
                     correct_0 = tn
 
@@ -35,6 +37,7 @@ def plot_accuracy_vs_significant_features(input_folder):
                         "context": context,
                         "style": style,
                         "oppu": oppu,
+                        "accuracy":  correct / total if total > 0 else None,
                         "class_0_accuracy": correct_0 / total_0 if total_0 > 0 else None,
                         "label": label
                     })
@@ -84,6 +87,21 @@ def plot_accuracy_vs_significant_features(input_folder):
     adjust_text(texts, arrowprops=dict(arrowstyle='-', color='gray', lw=0.5))
 
     plt.xlabel("Class-0 Accuracy")
+    plt.ylabel("Number of Significant Features (p < 0.05)")
+    plt.title("Class-0 Accuracy vs Significant Features")
+    plt.tight_layout()
+    plt.savefig(os.path.join(results_folder, "class0_accuracy_vs_significant_features.png"))
+    plt.close()
+
+        # Add labels with adjustText
+    texts = []
+    for _, row in merged_df.iterrows():
+        texts.append(
+            plt.text(row["accuracy"], row["significant_features"], row["label"], fontsize=8, alpha=0.75)
+        )
+    adjust_text(texts, arrowprops=dict(arrowstyle='-', color='gray', lw=0.5))
+
+    plt.xlabel("Accuracy")
     plt.ylabel("Number of Significant Features (p < 0.05)")
     plt.title("Class-0 Accuracy vs Significant Features")
     plt.tight_layout()
