@@ -3,11 +3,12 @@ simulations_results/*
 results/*
 configs_backup/*
 configs/*
+configs_instruct/*
 data/personas_and_tweets.df.pkl
 BERT_models/*
 copy_filtered_files.sh
 simulation_results250_shrinked/
-
+simulation_results250_instruct/
 
 # Byte-compiled / cache files
 __pycache__/
@@ -15,3 +16,4 @@ __pycache__/
 
 *.json
 *.csv
+*.png
