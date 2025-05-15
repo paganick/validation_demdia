@@ -68,19 +68,21 @@ def run_simulation_random_response(config, n_users=1000, n_responses_per_user=1,
             )
 
             if prediction_key in existing_predictions:
-                #print(f"⏩ Skipping already processed: {prediction_key}")
                 continue
             
             if not model_loaded:
-                 model = Model(config)
-                 model_loaded = True
+                model = Model(config)
+                model_loaded = True
 
-            response = agent.generate_response(model, 
-                                               n_examples=config["n_style_examples"],
-                                               retrieve_context_bool=config["retrieve_context"],
-                                               personalized_bool=config['OPPU'],
-                                               conversation_history=[reply_to], 
-                                               num_candidates = 3)
+            # Generate responses (returns a list of valid responses)
+            responses = agent.generate_response(
+                llm=model,
+                n_examples=config["n_style_examples"],
+                retrieve_context_bool=config["retrieve_context"],
+                personalized_bool=config["OPPU"],
+                conversation_history=[reply_to],
+                num_candidates=20
+            )
 
             results.append({
                 "user": username,
@@ -92,8 +94,10 @@ def run_simulation_random_response(config, n_users=1000, n_responses_per_user=1,
                 "n_style_examples": config["n_style_examples"],
                 "reply_to": reply_to,
                 "original_message": original_message,
-                "response": response
+                "response": responses[0],
+                "all_valid_responses": responses
             })
+
             j += 1
             if j % 10 == 0:
                 print(f"💾 Saving progress after {j} predictions...")
@@ -104,7 +108,6 @@ def run_simulation_random_response(config, n_users=1000, n_responses_per_user=1,
     print(f"\n✅ All predictions completed! Saving final results to `{output_path}` 🎉")
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(results, f, ensure_ascii=False, indent=2)
-
 
     return results
 

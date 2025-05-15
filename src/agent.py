@@ -182,11 +182,22 @@ class Agent:
         self.personalized_model.eval()
         return self.personalized_model
 
-    def generate_response(self, llm: Model, n_examples, retrieve_context_bool, personalized_bool, conversation_history: list = [], num_candidates = 3):
-        """Uses an LLM model to generate a response based on question and history."""
+    def generate_response(
+        self,
+        llm: Model,
+        n_examples,
+        retrieve_context_bool,
+        personalized_bool,
+        conversation_history: list = [],
+        n_candidates: int = 20,
+        max_total_attempts: int = 5
+    ):
+        """Generate up to `n_candidates` valid responses, retrying if needed."""
+        
         persona_examples = self.sample_examples(n_examples)
-        k_retrieval = 3 # Could be a parameter
+        k_retrieval = 3
         retrieved_context = ""
+
         if conversation_history:
             last_message = conversation_history[-1]
             if retrieve_context_bool:
@@ -196,92 +207,63 @@ class Agent:
                     retrieved_context = retrieve_context(last_message, bm25_client, history, k=k_retrieval)
 
         def build_prompt(username, persona_examples, conversation_history, retrieved_context=""):
-
             prompt = f"[Instruction] Continue the conversation naturally adding a concise (one sentence) tweet reply written by @{username}.\n"
-#            prompt += f"to the message:\n{last_message}\n" 
             if persona_examples:
                 examples = "\n".join(f"- {ex}" for ex in persona_examples)
-                prompt += f"[Writing Style] These are some tweets that represent how @{username} writes:\n"
-                prompt += f"{examples}\n\n"
+                prompt += f"[Writing Style] These are some tweets that represent how @{username} writes:\n{examples}\n\n"
             if retrieved_context:
                 prompt += "[User Retrieved Context] \n" + retrieved_context + "\n\n"
-            if (conversation_history):
-                prompt += "[Conversation] "
-                prompt += "\n".join(conversation_history) + f"\n{self.username}:"
+            if conversation_history:
+                prompt += "[Conversation] " + "\n".join(conversation_history) + f"\n{self.username}:"
             return prompt
-        
 
         prompt = build_prompt(self.username, persona_examples, conversation_history, retrieved_context)
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
+        model = llm.model.to(device) if not personalized_bool else self.load_personalized_model(llm)
+        tokenizer = llm.tokenizer
 
-        if (not personalized_bool): 
-            model = llm.model.to(device)
-        else:           
-            model = self.load_personalized_model(llm)
-
-        # Move inputs to the same device as the model
-        inputs = llm.tokenizer(prompt, return_tensors="pt").to(device)
-
-        outputs = model.generate(
-            inputs.input_ids,
-            attention_mask=inputs.attention_mask,
-            max_new_tokens=100,
-            do_sample=True,
-            num_return_sequences=num_candidates,
-            temperature=0.8,
-            top_p=0.9,
-            top_k=50,
-            min_new_tokens=10,
-            repetition_penalty=1.0,
-            pad_token_id=llm.tokenizer.pad_token_id,
-        )
-        candidate_responses = []
-        
-        for output in outputs:
-            response = llm.tokenizer.decode(output, skip_special_tokens=True)
-            # Remove the prompt from the response and clean up.
-            response = response[len(prompt):].strip().split("\n")[0] 
-            candidate_responses.append(response)
-
-        # ==============================================================================
-        # Helper Function: Validate the Generated Response
-        # ==============================================================================
         def is_valid_response(response, original_prompt):
-            """
-            Checks if the generated response is valid.
-            If the response is too short or if it contains parts of the few-shot prompt (e.g., header text)
-            and is unusually long, it is deemed invalid.
-            
-            Parameters:
-            response (str): The generated response.
-            original_prompt (str): The prompt used for generation.
-            
-            Returns:
-            bool: True if the response is acceptable, False otherwise.
-            """
-            # Check if response is empty or shorter than a minimal threshold.
             if not response or len(response) < 5:
                 return False
-
-            # If the response includes the few-shot prompt header text, then it's not valid.
-            if "These are some tweets that represent how" in response:
-                # Adjust threshold based on expected tweet length.
-                if len(response) > 100:
-                    return False
-
+            if "These are some tweets that represent how" in response and len(response) > 100:
+                return False
             return True
-        
-        def score_response(resp):
-            target_length = 50
-            length_diff = abs(len(resp.split()) - target_length)
-            valid = is_valid_response(resp, prompt)
-            if not valid:
-                # Penalize non-valid responses heavily.
-                return float("inf")
-            return length_diff
 
-        best_candidate = min(candidate_responses, key=score_response)
-        
-        return best_candidate
-    
+        def score_response(resp):
+            target_length = 40
+            length_diff = abs(len(resp.split()) - target_length)
+            return length_diff if is_valid_response(resp, prompt) else float("inf")
+
+        valid_responses = []
+        attempts = 0
+
+        while len(valid_responses) < n_candidates and attempts < max_total_attempts:
+            remaining_needed = n_candidates - len(valid_responses)
+            inputs = tokenizer(prompt, return_tensors="pt").to(device)
+
+            outputs = model.generate(
+                inputs.input_ids,
+                attention_mask=inputs.attention_mask,
+                max_new_tokens=100,
+                do_sample=True,
+                num_return_sequences=remaining_needed,
+                temperature=0.8,
+                top_p=0.9,
+                top_k=50,
+                min_new_tokens=10,
+                repetition_penalty=1.0,
+                pad_token_id=tokenizer.pad_token_id,
+            )
+
+            for output in outputs:
+                response = tokenizer.decode(output, skip_special_tokens=True)
+                response = response[len(prompt):].strip().split("\n")[0]
+                if is_valid_response(response, prompt):
+                    valid_responses.append(response)
+
+            attempts += 1
+
+        # Sort and return top n_candidates valid responses
+        valid_responses_sorted = sorted(valid_responses, key=score_response)
+        return valid_responses_sorted[:n_candidates]
