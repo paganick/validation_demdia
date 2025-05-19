@@ -81,8 +81,13 @@ def run_simulation_random_response(config, n_users=1000, n_responses_per_user=1,
                 retrieve_context_bool=config["retrieve_context"],
                 personalized_bool=config["OPPU"],
                 conversation_history=[reply_to],
-                num_candidates=20
+                n_candidates=20
             )
+
+            # Skip if no valid responses
+            if not responses:
+                print(f"⚠️ No valid responses generated for user `{username}` (msg: `{original_message}`)")
+                continue
 
             results.append({
                 "user": username,

@@ -1,5 +1,6 @@
 import pandas as pd
 import random
+import numpy as np
 import os
 import json
 from datasets import Dataset
@@ -207,12 +208,12 @@ class Agent:
                     retrieved_context = retrieve_context(last_message, bm25_client, history, k=k_retrieval)
 
         def build_prompt(username, persona_examples, conversation_history, retrieved_context=""):
-            prompt = f"[Instruction] Continue the conversation naturally adding a concise (one sentence) tweet reply written by @{username}.\n"
+            prompt = f"[Instruction] You are @{username}. Continue the conversation naturally adding a concise (one sentence) tweet reply.\n"
             if persona_examples:
                 examples = "\n".join(f"- {ex}" for ex in persona_examples)
                 prompt += f"[Writing Style] These are some tweets that represent how @{username} writes:\n{examples}\n\n"
             if retrieved_context:
-                prompt += "[User Retrieved Context] \n" + retrieved_context + "\n\n"
+                prompt += f"[User Retrieved Context] This is some useful context retrieved from @{username}'s history \n" + retrieved_context + "\n\n"
             if conversation_history:
                 prompt += "[Conversation] " + "\n".join(conversation_history) + f"\n{self.username}:"
             return prompt
@@ -224,14 +225,14 @@ class Agent:
         tokenizer = llm.tokenizer
 
         def is_valid_response(response, original_prompt):
-            if not response or len(response) < 5:
+            if not response:
                 return False
             if "These are some tweets that represent how" in response and len(response) > 100:
                 return False
             return True
 
         def score_response(resp):
-            target_length = 40
+            target_length = np.random.poisson(lam=14)
             length_diff = abs(len(resp.split()) - target_length)
             return length_diff if is_valid_response(resp, prompt) else float("inf")
 
