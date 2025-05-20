@@ -10,17 +10,21 @@ def run_simulation_random_response(config, n_users=1000, n_responses_per_user=1,
 
     results = []
     existing_predictions = set()
+
     # Return cached results if already exists
     if output_path and os.path.exists(output_path):
         print(f"[CACHE] Loading cached results from {output_path}")
-        with open(output_path, encoding="utf-8") as f:
-            existing_results = json.load(f)
-            results.extend(existing_results) 
-            existing_predictions = {
-                (row["user"], row["original_message"], row["reply_to"], row["model"], row["fine_tuned"],
-                row["retrieve_context"], row["OPPU"], row["n_style_examples"])
-                for row in existing_results
-            }
+        try:
+            with open(output_path, encoding="utf-8") as f:
+                existing_results = json.load(f)
+                results.extend(existing_results)
+                existing_predictions = {
+                    (row["user"], row["original_message"], row["reply_to"], row["model"], row["fine_tuned"],
+                    row["retrieve_context"], row["OPPU"], row["n_style_examples"])
+                    for row in existing_results
+                }
+        except json.JSONDecodeError:
+            print(f"[WARNING] Cache file {output_path} is empty or invalid JSON. Starting fresh.")
         
     df = pd.read_pickle(DATA_FILE)
     # Filter the DataFrame to only include rows where training == 0
