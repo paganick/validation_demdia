@@ -60,8 +60,10 @@ class Agent:
     def train_personalized_model(self, llm: Model): 
         if llm.fine_tuned_dir:
             base_model_dir = llm.fine_tuned_dir
+            tokenizer = AutoTokenizer.from_pretrained(llm.fine_tuned_dir)
         else:
             base_model_dir = llm.model_name
+            tokenizer = AutoTokenizer.from_pretrained(llm.model_name)
 
         print(f"--- Training adapter for user: {self.username} on model: {base_model_dir} ---")
         self.df_user["text"] = self.df_user.apply(format_conversation, axis=1)
@@ -89,7 +91,6 @@ class Agent:
         preprocess = partial(preprocess_function, llm.tokenizer)
         ds_user = ds_user.map(preprocess, batched=True) 
 
-        tokenizer = AutoTokenizer.from_pretrained(llm.model_name)
 
         # -------------------------------
         # Load and Prepare the Base Model for Personalization
@@ -117,12 +118,12 @@ class Agent:
         model_for_training.enable_input_require_grads()
         
         # Specify directories for saving personalized adapters.
-        save_base_dir = "./personal_peft"
+        save_base_dir = "personal_peft"
 
-        user_output_dir = f"{save_base_dir}/{self.username}/{base_model_dir}"
-        os.makedirs(user_output_dir, exist_ok=True)
+        self.user_output_dir = f"{save_base_dir}/{self.username}/{llm.model_name}"
+        os.makedirs(self.user_output_dir, exist_ok=True)
         training_args = TrainingArguments(
-            output_dir=user_output_dir,
+            output_dir=self.user_output_dir,
             per_device_train_batch_size=4,
             gradient_accumulation_steps=2,
             num_train_epochs=2,  # Change to desired number of epochs.
@@ -144,9 +145,9 @@ class Agent:
         
         trainer.train()
         
-        model_for_training.save_pretrained(user_output_dir)
-        tokenizer.save_pretrained(user_output_dir)
-        print(f"Adapter for user @{self.username} on model {base_model_dir} saved at {user_output_dir}\n")
+        model_for_training.save_pretrained(self.user_output_dir)
+        tokenizer.save_pretrained(self.user_output_dir)
+        print(f"Adapter for user @{self.username} on model {base_model_dir} saved at {self.user_output_dir}\n")
 
 
     def load_personalized_model(self, llm: Model):
@@ -157,9 +158,10 @@ class Agent:
             base_model_dir = llm.fine_tuned_dir
         else:
             base_model_dir = llm.model_name
-        user_adapter_dir = os.path.join("personal_peft", self.username, base_model_dir)
+        save_base_dir = "personal_peft"
+        self.user_adapter_dir =  f"{save_base_dir}/{self.username}/{llm.model_name}"
 
-        if not(os.path.isdir(user_adapter_dir)):
+        if not(os.path.isdir(self.user_adapter_dir)):
             self.train_personalized_model(llm)
         
         base_model = AutoModelForCausalLM.from_pretrained(
@@ -173,7 +175,7 @@ class Agent:
         try:
             adapter_model = PeftModel.from_pretrained(
                 base_model, 
-                user_adapter_dir, 
+                self.user_adapter_dir, 
                 ignore_mismatched_sizes=True
             )
             self.personalized_model = adapter_model.merge_and_unload()
@@ -222,7 +224,7 @@ class Agent:
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
         model = llm.model.to(device) if not personalized_bool else self.load_personalized_model(llm)
-        tokenizer = llm.tokenizer
+        tokenizer = llm.tokenizer if not personalized_bool else AutoTokenizer.from_pretrained(self.user_adapter_dir)
 
         def is_valid_response(response, original_prompt):
             if not response:
@@ -264,6 +266,7 @@ class Agent:
                     valid_responses.append(response)
 
             attempts += 1
+            
 
         # Sort and return top n_candidates valid responses
         valid_responses_sorted = sorted(valid_responses, key=score_response)

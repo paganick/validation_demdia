@@ -23,12 +23,13 @@ class Model:
             self.model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         elif os.path.exists(self.fine_tuned_dir):
+            print(f"Fine-tuning and saving model to {self.fine_tuned_dir}")
             print(f"Loading fine-tuned model from {self.fine_tuned_dir}")
             self.model = AutoModelForCausalLM.from_pretrained(self.fine_tuned_dir, device_map="auto")
             self.tokenizer = AutoTokenizer.from_pretrained(self.fine_tuned_dir)
         else:
             print(f"Fine-tuning and saving model to {self.fine_tuned_dir}")
-            self.model, self.tokenizer = self.finetune_model()
+            self.finetune_model()
         self.tokenizer.pad_token = self.tokenizer.eos_token
 
 
@@ -71,6 +72,8 @@ class Model:
             torch_dtype=torch.float16,
             device_map="auto"
         )
+
+        #model.resize_token_embeddings(len(tokenizer))
 
         peft_config = LoraConfig(
             task_type=TaskType.CAUSAL_LM,
