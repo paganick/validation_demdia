@@ -34,6 +34,10 @@ def process_file(file_path, run_bert=True, run_empath=True):
     print(f"\nProcessing file: {file_path}")
     df = pd.read_csv(file_path)
     df['text'] = df['text'].astype(str)
+    base, ext = os.path.splitext(file_path)
+    labelled_file = base + "_labelled.csv"
+    cm_file = base + "_confusion_matrix.csv"
+    features_file = base + "_empath_significant_features.csv"
 
     # =======================
     # Run BERT Validation
@@ -48,7 +52,6 @@ def process_file(file_path, run_bert=True, run_empath=True):
         print(f"BERT classification report saved to {report_file}")
 
         # Save confusion matrix values as CSV
-        cm_file = file_path.replace('.csv', '_confusion_matrix.csv')
         cm_df = pd.DataFrame(cm)
         cm_df.to_csv(cm_file, index=False)
         print(f"BERT confusion matrix data saved to {cm_file}")
@@ -68,9 +71,8 @@ def process_file(file_path, run_bert=True, run_empath=True):
         preds = np.argmax(predictions_output.predictions, axis=-1)
         df_sample["bert_prediction"] = preds
 
-        labelled_file = file_path.replace(".csv", "_labelled.csv")
         df_sample.to_csv(labelled_file, index=False)
-        print(f"Labeled validation data (100 samples) saved to {labelled_file}")
+        print(f"Labeled validation data saved to {labelled_file}")
 
     # =======================
     # Run Empath Validation
@@ -83,7 +85,6 @@ def process_file(file_path, run_bert=True, run_empath=True):
         print("Running Empath validation...")
         significant_features, distance = Validator.empath_validate(df)
 
-        features_file = file_path.replace('.csv', '_empath_significant_features.csv')
         significant_features.to_csv(features_file, index=False)
         print(f"Empath significant features saved to {features_file}")
         print(f"Euclidean distance between groups: {distance:.4f}")
