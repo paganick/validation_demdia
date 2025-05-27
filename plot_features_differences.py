@@ -69,7 +69,7 @@ def main(folder_path, label_col="label"):
     
     # EXCLUDE FEATURES
     features_to_exclude = ['spelling_grammar_errors', 'has_link', 'has_question_mark', 'has_exclamation_mark', 'has_emoji', 'has_mention']  # replace with the features you want to skip
-    diff_df_features = diff_df_features.drop(columns=features_to_exclude)
+    diff_df_features = diff_df_features.drop(columns=features_to_exclude, errors='ignore')
 
     # Assign colors by model
     unique_models = sorted(model_names)
