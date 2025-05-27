@@ -285,478 +285,478 @@ def main(folder_path):
             plt.close()  
 
 
-        base_style = 10
+        # base_style = 10
 
-        # Only consider configs with style=10
-        style10_df = results_df[results_df["style"] == base_style]
+        # # Only consider configs with style=10
+        # style10_df = results_df[results_df["style"] == base_style]
 
-        for metric in metric_diffs.keys():
-            rows = []
+        # for metric in metric_diffs.keys():
+        #     rows = []
 
-            # Group by model (assuming comparisons are only meaningful within same model)
-            for model_name, model_group in style10_df.groupby("model"):
-                # For all pairs of rows in that group
-                for i, j in itertools.combinations(model_group.index, 2):
-                    row_i = model_group.loc[i]
-                    row_j = model_group.loc[j]
+        #     # Group by model (assuming comparisons are only meaningful within same model)
+        #     for model_name, model_group in style10_df.groupby("model"):
+        #         # For all pairs of rows in that group
+        #         for i, j in itertools.combinations(model_group.index, 2):
+        #             row_i = model_group.loc[i]
+        #             row_j = model_group.loc[j]
 
-                    # Determine how many toggles differ
-                    diff_mask = [row_i[toggle] != row_j[toggle] for toggle in toggle_cols]
-                    diff_count = sum(diff_mask)
+        #             # Determine how many toggles differ
+        #             diff_mask = [row_i[toggle] != row_j[toggle] for toggle in toggle_cols]
+        #             diff_count = sum(diff_mask)
 
-                    if diff_count == 1:
-                        toggle_idx = diff_mask.index(True)
-                        toggle_name = toggle_cols[toggle_idx]
+        #             if diff_count == 1:
+        #                 toggle_idx = diff_mask.index(True)
+        #                 toggle_name = toggle_cols[toggle_idx]
 
-                        # Identify OFF and ON configs
-                        if row_i[toggle_name] == 0 and row_j[toggle_name] == 1:
-                            off_row, on_row = row_i, row_j
-                        elif row_i[toggle_name] == 1 and row_j[toggle_name] == 0:
-                            off_row, on_row = row_j, row_i
-                        else:
-                            continue  # skip non-binary or unclear cases
+        #                 # Identify OFF and ON configs
+        #                 if row_i[toggle_name] == 0 and row_j[toggle_name] == 1:
+        #                     off_row, on_row = row_i, row_j
+        #                 elif row_i[toggle_name] == 1 and row_j[toggle_name] == 0:
+        #                     off_row, on_row = row_j, row_i
+        #                 else:
+        #                     continue  # skip non-binary or unclear cases
 
-                        delta = on_row[metric] - off_row[metric]
+        #                 delta = on_row[metric] - off_row[metric]
 
-                        label = (make_label(model_name, off_row['ft'], off_row['context'], off_row['style'], off_row['oppu']))
+        #                 label = (make_label(model_name, off_row['ft'], off_row['context'], off_row['style'], off_row['oppu']))
 
-                        # Search if label is already in rows
-                        found = False
-                        for r in rows:
-                            if r["base_label"] == label:
-                                r[toggle_name] = delta
-                                found = True
-                                break
+        #                 # Search if label is already in rows
+        #                 found = False
+        #                 for r in rows:
+        #                     if r["base_label"] == label:
+        #                         r[toggle_name] = delta
+        #                         found = True
+        #                         break
 
-                        if not found:
-                            new_row = {toggle: None for toggle in toggle_cols}
-                            new_row[toggle_name] = delta
-                            new_row["base_label"] = label
-                            rows.append(new_row)
+        #                 if not found:
+        #                     new_row = {toggle: None for toggle in toggle_cols}
+        #                     new_row[toggle_name] = delta
+        #                     new_row["base_label"] = label
+        #                     rows.append(new_row)
 
-            # Create and plot heatmap
-            diff_df = pd.DataFrame(rows).set_index("base_label").astype(float)
-            plt.figure(figsize=(10, max(6, len(diff_df) * 0.6)))
-            sns.heatmap(diff_df, annot=True, cmap="RdBu_r", center=0, fmt=".3f", cbar_kws={"label": f"Δ {metric}"})
-            plt.title(f"Effect of toggling ft/context/oppu ON (style=10)\nΔ {metric} = ON − OFF")
-            plt.tight_layout()
-            plt.savefig(os.path.join(results_folder, f"heatmap_toggles_{metric}_style10.png"))
-            plt.close()
+        #     # Create and plot heatmap
+        #     diff_df = pd.DataFrame(rows).set_index("base_label").astype(float)
+        #     plt.figure(figsize=(10, max(6, len(diff_df) * 0.6)))
+        #     sns.heatmap(diff_df, annot=True, cmap="RdBu_r", center=0, fmt=".3f", cbar_kws={"label": f"Δ {metric}"})
+        #     plt.title(f"Effect of toggling ft/context/oppu ON (style=10)\nΔ {metric} = ON − OFF")
+        #     plt.tight_layout()
+        #     plt.savefig(os.path.join(results_folder, f"heatmap_toggles_{metric}_style10.png"))
+        #     plt.close()
 
 
-        # Only consider configs with context=1
-        base_context = 1
-        context_df = style10_df[style10_df["context"] == base_context]
+        # # Only consider configs with context=1
+        # base_context = 1
+        # context_df = style10_df[style10_df["context"] == base_context]
 
-        for metric in metric_diffs.keys():
-            rows = []
+        # for metric in metric_diffs.keys():
+        #     rows = []
 
-            # Group by model (assuming comparisons are only meaningful within same model)
-            for model_name, model_group in context_df.groupby("model"):
-                # For all pairs of rows in that group
-                for i, j in itertools.combinations(model_group.index, 2):
-                    row_i = model_group.loc[i]
-                    row_j = model_group.loc[j]
+        #     # Group by model (assuming comparisons are only meaningful within same model)
+        #     for model_name, model_group in context_df.groupby("model"):
+        #         # For all pairs of rows in that group
+        #         for i, j in itertools.combinations(model_group.index, 2):
+        #             row_i = model_group.loc[i]
+        #             row_j = model_group.loc[j]
 
-                    # Determine how many toggles differ
-                    diff_mask = [row_i[toggle] != row_j[toggle] for toggle in toggle_cols]
-                    diff_count = sum(diff_mask)
+        #             # Determine how many toggles differ
+        #             diff_mask = [row_i[toggle] != row_j[toggle] for toggle in toggle_cols]
+        #             diff_count = sum(diff_mask)
 
-                    if diff_count == 1:
-                        toggle_idx = diff_mask.index(True)
-                        toggle_name = toggle_cols[toggle_idx]
+        #             if diff_count == 1:
+        #                 toggle_idx = diff_mask.index(True)
+        #                 toggle_name = toggle_cols[toggle_idx]
 
-                        # Identify OFF and ON configs
-                        if row_i[toggle_name] == 0 and row_j[toggle_name] == 1:
-                            off_row, on_row = row_i, row_j
-                        elif row_i[toggle_name] == 1 and row_j[toggle_name] == 0:
-                            off_row, on_row = row_j, row_i
-                        else:
-                            continue  # skip non-binary or unclear cases
+        #                 # Identify OFF and ON configs
+        #                 if row_i[toggle_name] == 0 and row_j[toggle_name] == 1:
+        #                     off_row, on_row = row_i, row_j
+        #                 elif row_i[toggle_name] == 1 and row_j[toggle_name] == 0:
+        #                     off_row, on_row = row_j, row_i
+        #                 else:
+        #                     continue  # skip non-binary or unclear cases
 
-                        delta = on_row[metric] - off_row[metric]
+        #                 delta = on_row[metric] - off_row[metric]
 
-                        label = (make_label(model_name, off_row['ft'], off_row['context'], off_row['style'], off_row['oppu']))
+        #                 label = (make_label(model_name, off_row['ft'], off_row['context'], off_row['style'], off_row['oppu']))
 
-                        # Search if label is already in rows
-                        found = False
-                        for r in rows:
-                            if r["base_label"] == label:
-                                r[toggle_name] = delta
-                                found = True
-                                break
+        #                 # Search if label is already in rows
+        #                 found = False
+        #                 for r in rows:
+        #                     if r["base_label"] == label:
+        #                         r[toggle_name] = delta
+        #                         found = True
+        #                         break
 
-                        if not found:
-                            new_row = {toggle: None for toggle in toggle_cols}
-                            new_row[toggle_name] = delta
-                            new_row["base_label"] = label
-                            rows.append(new_row)
+        #                 if not found:
+        #                     new_row = {toggle: None for toggle in toggle_cols}
+        #                     new_row[toggle_name] = delta
+        #                     new_row["base_label"] = label
+        #                     rows.append(new_row)
 
-            # Create and plot heatmap
-            diff_df = pd.DataFrame(rows).set_index("base_label").astype(float)
-            plt.figure(figsize=(10, max(6, len(diff_df) * 0.6)))
-            sns.heatmap(diff_df, annot=True, cmap="RdBu_r", center=0, fmt=".3f", cbar_kws={"label": f"Δ {metric}"})
-            plt.title(f"Effect of toggling ft/context/oppu ON (style=10, context=1)\nΔ {metric} = ON − OFF")
-            plt.tight_layout()
-            plt.savefig(os.path.join(results_folder, f"heatmap_toggles_{metric}_style10_context1.png"))
-            plt.close()
+        #     # Create and plot heatmap
+        #     diff_df = pd.DataFrame(rows).set_index("base_label").astype(float)
+        #     plt.figure(figsize=(10, max(6, len(diff_df) * 0.6)))
+        #     sns.heatmap(diff_df, annot=True, cmap="RdBu_r", center=0, fmt=".3f", cbar_kws={"label": f"Δ {metric}"})
+        #     plt.title(f"Effect of toggling ft/context/oppu ON (style=10, context=1)\nΔ {metric} = ON − OFF")
+        #     plt.tight_layout()
+        #     plt.savefig(os.path.join(results_folder, f"heatmap_toggles_{metric}_style10_context1.png"))
+        #     plt.close()
 
-         # Only consider configs with context=1
-        base_ft = 1
-        ft_df = context_df[context_df["ft"] == base_ft]
+        #  # Only consider configs with context=1
+        # base_ft = 1
+        # ft_df = context_df[context_df["ft"] == base_ft]
 
-        for metric in metric_diffs.keys():
-            rows = []
+        # for metric in metric_diffs.keys():
+        #     rows = []
 
-            # Group by model (assuming comparisons are only meaningful within same model)
-            for model_name, model_group in ft_df.groupby("model"):
-                # For all pairs of rows in that group
-                for i, j in itertools.combinations(model_group.index, 2):
-                    row_i = model_group.loc[i]
-                    row_j = model_group.loc[j]
+        #     # Group by model (assuming comparisons are only meaningful within same model)
+        #     for model_name, model_group in ft_df.groupby("model"):
+        #         # For all pairs of rows in that group
+        #         for i, j in itertools.combinations(model_group.index, 2):
+        #             row_i = model_group.loc[i]
+        #             row_j = model_group.loc[j]
 
-                    # Determine how many toggles differ
-                    diff_mask = [row_i[toggle] != row_j[toggle] for toggle in toggle_cols]
-                    diff_count = sum(diff_mask)
+        #             # Determine how many toggles differ
+        #             diff_mask = [row_i[toggle] != row_j[toggle] for toggle in toggle_cols]
+        #             diff_count = sum(diff_mask)
 
-                    if diff_count == 1:
-                        toggle_idx = diff_mask.index(True)
-                        toggle_name = toggle_cols[toggle_idx]
+        #             if diff_count == 1:
+        #                 toggle_idx = diff_mask.index(True)
+        #                 toggle_name = toggle_cols[toggle_idx]
 
-                        # Identify OFF and ON configs
-                        if row_i[toggle_name] == 0 and row_j[toggle_name] == 1:
-                            off_row, on_row = row_i, row_j
-                        elif row_i[toggle_name] == 1 and row_j[toggle_name] == 0:
-                            off_row, on_row = row_j, row_i
-                        else:
-                            continue  # skip non-binary or unclear cases
+        #                 # Identify OFF and ON configs
+        #                 if row_i[toggle_name] == 0 and row_j[toggle_name] == 1:
+        #                     off_row, on_row = row_i, row_j
+        #                 elif row_i[toggle_name] == 1 and row_j[toggle_name] == 0:
+        #                     off_row, on_row = row_j, row_i
+        #                 else:
+        #                     continue  # skip non-binary or unclear cases
 
-                        delta = on_row[metric] - off_row[metric]
+        #                 delta = on_row[metric] - off_row[metric]
 
-                        label = (make_label(model_name, off_row['ft'], off_row['context'], off_row['style'], off_row['oppu']))
+        #                 label = (make_label(model_name, off_row['ft'], off_row['context'], off_row['style'], off_row['oppu']))
 
-                        # Search if label is already in rows
-                        found = False
-                        for r in rows:
-                            if r["base_label"] == label:
-                                r[toggle_name] = delta
-                                found = True
-                                break
+        #                 # Search if label is already in rows
+        #                 found = False
+        #                 for r in rows:
+        #                     if r["base_label"] == label:
+        #                         r[toggle_name] = delta
+        #                         found = True
+        #                         break
 
-                        if not found:
-                            new_row = {toggle: None for toggle in toggle_cols}
-                            new_row[toggle_name] = delta
-                            new_row["base_label"] = label
-                            rows.append(new_row)
+        #                 if not found:
+        #                     new_row = {toggle: None for toggle in toggle_cols}
+        #                     new_row[toggle_name] = delta
+        #                     new_row["base_label"] = label
+        #                     rows.append(new_row)
 
-            # Create and plot heatmap
-            diff_df = pd.DataFrame(rows).set_index("base_label").astype(float)
-            plt.figure(figsize=(10, max(6, len(diff_df) * 0.6)))
-            sns.heatmap(diff_df, annot=True, cmap="RdBu_r", center=0, fmt=".3f", cbar_kws={"label": f"Δ {metric}"})
-            plt.title(f"Effect of toggling ft/context/oppu ON (style=10, context=1, ft=1)\nΔ {metric} = ON − OFF")
-            plt.tight_layout()
-            plt.savefig(os.path.join(results_folder, f"heatmap_toggles_{metric}_style10_context1_ft1.png"))
-            plt.close()
+        #     # Create and plot heatmap
+        #     diff_df = pd.DataFrame(rows).set_index("base_label").astype(float)
+        #     plt.figure(figsize=(10, max(6, len(diff_df) * 0.6)))
+        #     sns.heatmap(diff_df, annot=True, cmap="RdBu_r", center=0, fmt=".3f", cbar_kws={"label": f"Δ {metric}"})
+        #     plt.title(f"Effect of toggling ft/context/oppu ON (style=10, context=1, ft=1)\nΔ {metric} = ON − OFF")
+        #     plt.tight_layout()
+        #     plt.savefig(os.path.join(results_folder, f"heatmap_toggles_{metric}_style10_context1_ft1.png"))
+        #     plt.close()
 
 
 
     ########################
 
-    metrics = ['accuracy', 'class_0_accuracy']
+    # metrics = ['accuracy', 'class_0_accuracy']
 
-    for metric in metrics:
-        diff_rows = []
+    # for metric in metrics:
+    #     diff_rows = []
 
-        for model in results_df["model"].unique():
-            # Base configurations with all toggles off
-            base_config = results_df[
-                (results_df["model"] == model) &
-                (results_df["ft"] == 1) &
-                (results_df["context"] == 1) &
-                (results_df["style"] == 10) &
-                (results_df["oppu"] == 1)
-            ]
-            if base_config.empty:
-                continue
-            base_metric = base_config.iloc[0][metric]
-            row_id = f"{model}_1111"
-            row = {"base": row_id}
+    #     for model in results_df["model"].unique():
+    #         # Base configurations with all toggles off
+    #         base_config = results_df[
+    #             (results_df["model"] == model) &
+    #             (results_df["ft"] == 1) &
+    #             (results_df["context"] == 1) &
+    #             (results_df["style"] == 10) &
+    #             (results_df["oppu"] == 1)
+    #         ]
+    #         if base_config.empty:
+    #             continue
+    #         base_metric = base_config.iloc[0][metric]
+    #         row_id = f"{model}_1111"
+    #         row = {"base": row_id}
 
-            for toggle in toggles:
-                # Create a modified config where one toggle is set to 1
-                query = {
-                    "model": model,
-                    "ft": 1,
-                    "context": 1,
-                    "style": 10,
-                    "oppu": 1
-                }
+    #         for toggle in toggles:
+    #             # Create a modified config where one toggle is set to 1
+    #             query = {
+    #                 "model": model,
+    #                 "ft": 1,
+    #                 "context": 1,
+    #                 "style": 10,
+    #                 "oppu": 1
+    #             }
                 
-                query[toggle] = 0
+    #             query[toggle] = 0
 
-                modified = results_df[
-                    (results_df["model"] == query["model"]) &
-                    (results_df["ft"] == query["ft"]) &
-                    (results_df["context"] == query["context"]) &
-                    (results_df["style"] == query["style"]) &
-                    (results_df["oppu"] == query["oppu"])
-                ]
-                if not modified.empty:
-                    mod_metric = modified.iloc[0][metric]
-                    if pd.notnull(base_metric) and pd.notnull(mod_metric):
-                        row[toggle] = mod_metric - base_metric
-                    else:
-                        row[toggle] = None
-                else:
-                    row[toggle] = None
+    #             modified = results_df[
+    #                 (results_df["model"] == query["model"]) &
+    #                 (results_df["ft"] == query["ft"]) &
+    #                 (results_df["context"] == query["context"]) &
+    #                 (results_df["style"] == query["style"]) &
+    #                 (results_df["oppu"] == query["oppu"])
+    #             ]
+    #             if not modified.empty:
+    #                 mod_metric = modified.iloc[0][metric]
+    #                 if pd.notnull(base_metric) and pd.notnull(mod_metric):
+    #                     row[toggle] = mod_metric - base_metric
+    #                 else:
+    #                     row[toggle] = None
+    #             else:
+    #                 row[toggle] = None
 
-            diff_rows.append(row)
+    #         diff_rows.append(row)
 
-        diff_df = pd.DataFrame(diff_rows).set_index("base")
-        diff_df = diff_df.astype(float)  # Ensure numerical dtype for heatmap
-        sns.heatmap(diff_df, annot=True, cmap="RdBu_r", center=0, fmt=".3f")
-        plt.figure(figsize=(10, max(6, len(diff_df) * 0.6)))
-        sns.heatmap(diff_df, annot=True, cmap="RdBu_r", center=0, fmt=".3f")
-        plt.title(f"Effect of Enabling Each Toggle on {metric}")
-        plt.tight_layout()
-        plt.savefig(os.path.join(results_folder, f"heatmap_toggle_effect_{metric}_opposite.png"))
-        plt.close()
-
-
-        import itertools
-
-        toggle_cols = ["style", "context", "ft", "oppu"]
-        metric_diffs = {
-            "accuracy": [],
-            "class_0_accuracy": []
-        }
-
-        for metric in metric_diffs.keys():
-            rows = []
-
-            # Group by model (assuming comparisons are only meaningful within same model)
-            for model_name, model_group in results_df.groupby("model"):
-                # For all pairs of rows in that group
-                for i, j in itertools.combinations(model_group.index, 2):
-                    row_i = model_group.loc[i]
-                    row_j = model_group.loc[j]
-
-                    # Determine how many toggles differ
-                    diff_mask = [row_i[toggle] != row_j[toggle] for toggle in toggle_cols]
-                    diff_count = sum(diff_mask)
-
-                    if diff_count == 1:
-                        toggle_idx = diff_mask.index(True)
-                        toggle_name = toggle_cols[toggle_idx]
-
-                        # Identify OFF and ON configs
-                        if row_i[toggle_name] == 0 and row_j[toggle_name] != 0 :
-                            off_row, on_row = row_i, row_j
-                        elif row_i[toggle_name] != 0 and row_j[toggle_name] == 0:
-                            off_row, on_row = row_j, row_i
-                        else:
-                            continue  # skip non-binary or unclear cases
-
-                        delta = off_row[metric] - on_row[metric]
-
-                        label = (make_label(model_name, on_row['ft'], on_row['context'], on_row['style'], on_row['oppu']))
-
-                        # Search if label is already in rows
-                        found = False
-                        for r in rows:
-                            if r["base_label"] == label:
-                                r[toggle_name] = delta
-                                found = True
-                                break
-
-                        if not found:
-                            new_row = {toggle: None for toggle in toggle_cols}
-                            new_row[toggle_name] = delta
-                            new_row["base_label"] = label
-                            rows.append(new_row)
-
-            # Create and plot heatmap
-            diff_df = pd.DataFrame(rows).set_index("base_label").astype(float)
-            plt.figure(figsize=(10, max(6, len(diff_df) * 0.6)))
-            sns.heatmap(diff_df, annot=True, cmap="RdBu_r", center=0, fmt=".3f", cbar_kws={"label": f"Δ {metric}"})
-            plt.title(f"Effect of toggling style/ft/context/oppu OFF \nΔ {metric} = OFF − ON")
-            plt.tight_layout()
-            plt.savefig(os.path.join(results_folder, f"heatmap_toggles_{metric}_opposite.png"))
-            plt.close()  
+    #     diff_df = pd.DataFrame(diff_rows).set_index("base")
+    #     diff_df = diff_df.astype(float)  # Ensure numerical dtype for heatmap
+    #     sns.heatmap(diff_df, annot=True, cmap="RdBu_r", center=0, fmt=".3f")
+    #     plt.figure(figsize=(10, max(6, len(diff_df) * 0.6)))
+    #     sns.heatmap(diff_df, annot=True, cmap="RdBu_r", center=0, fmt=".3f")
+    #     plt.title(f"Effect of Enabling Each Toggle on {metric}")
+    #     plt.tight_layout()
+    #     plt.savefig(os.path.join(results_folder, f"heatmap_toggle_effect_{metric}_opposite.png"))
+    #     plt.close()
 
 
-        base_style = 0
+    #     import itertools
 
-        # Only consider configs with style=10
-        style10_df = results_df[results_df["style"] == base_style]
+    #     toggle_cols = ["style", "context", "ft", "oppu"]
+    #     metric_diffs = {
+    #         "accuracy": [],
+    #         "class_0_accuracy": []
+    #     }
 
-        for metric in metric_diffs.keys():
-            rows = []
+    #     for metric in metric_diffs.keys():
+    #         rows = []
 
-            # Group by model (assuming comparisons are only meaningful within same model)
-            for model_name, model_group in style10_df.groupby("model"):
-                # For all pairs of rows in that group
-                for i, j in itertools.combinations(model_group.index, 2):
-                    row_i = model_group.loc[i]
-                    row_j = model_group.loc[j]
+    #         # Group by model (assuming comparisons are only meaningful within same model)
+    #         for model_name, model_group in results_df.groupby("model"):
+    #             # For all pairs of rows in that group
+    #             for i, j in itertools.combinations(model_group.index, 2):
+    #                 row_i = model_group.loc[i]
+    #                 row_j = model_group.loc[j]
 
-                    # Determine how many toggles differ
-                    diff_mask = [row_i[toggle] != row_j[toggle] for toggle in toggle_cols]
-                    diff_count = sum(diff_mask)
+    #                 # Determine how many toggles differ
+    #                 diff_mask = [row_i[toggle] != row_j[toggle] for toggle in toggle_cols]
+    #                 diff_count = sum(diff_mask)
 
-                    if diff_count == 1:
-                        toggle_idx = diff_mask.index(True)
-                        toggle_name = toggle_cols[toggle_idx]
+    #                 if diff_count == 1:
+    #                     toggle_idx = diff_mask.index(True)
+    #                     toggle_name = toggle_cols[toggle_idx]
 
-                        # Identify OFF and ON configs
-                        if row_i[toggle_name] == 0 and row_j[toggle_name] == 1:
-                            off_row, on_row = row_i, row_j
-                        elif row_i[toggle_name] == 1 and row_j[toggle_name] == 0:
-                            off_row, on_row = row_j, row_i
-                        else:
-                            continue  # skip non-binary or unclear cases
+    #                     # Identify OFF and ON configs
+    #                     if row_i[toggle_name] == 0 and row_j[toggle_name] != 0 :
+    #                         off_row, on_row = row_i, row_j
+    #                     elif row_i[toggle_name] != 0 and row_j[toggle_name] == 0:
+    #                         off_row, on_row = row_j, row_i
+    #                     else:
+    #                         continue  # skip non-binary or unclear cases
 
-                        delta = off_row[metric] - on_row[metric]
+    #                     delta = off_row[metric] - on_row[metric]
 
-                        label = (make_label(model_name, on_row['ft'], on_row['context'], on_row['style'], on_row['oppu']))
+    #                     label = (make_label(model_name, on_row['ft'], on_row['context'], on_row['style'], on_row['oppu']))
 
-                        # Search if label is already in rows
-                        found = False
-                        for r in rows:
-                            if r["base_label"] == label:
-                                r[toggle_name] = delta
-                                found = True
-                                break
+    #                     # Search if label is already in rows
+    #                     found = False
+    #                     for r in rows:
+    #                         if r["base_label"] == label:
+    #                             r[toggle_name] = delta
+    #                             found = True
+    #                             break
 
-                        if not found:
-                            new_row = {toggle: None for toggle in toggle_cols}
-                            new_row[toggle_name] = delta
-                            new_row["base_label"] = label
-                            rows.append(new_row)
+    #                     if not found:
+    #                         new_row = {toggle: None for toggle in toggle_cols}
+    #                         new_row[toggle_name] = delta
+    #                         new_row["base_label"] = label
+    #                         rows.append(new_row)
 
-            # Create and plot heatmap
-            diff_df = pd.DataFrame(rows).set_index("base_label").astype(float)
-            plt.figure(figsize=(10, max(6, len(diff_df) * 0.6)))
-            sns.heatmap(diff_df, annot=True, cmap="RdBu_r", center=0, fmt=".3f", cbar_kws={"label": f"Δ {metric}"})
-            plt.title(f"Effect of toggling ft/context/oppu OFF (style=10)\nΔ {metric} = OFF − ON")
-            plt.tight_layout()
-            plt.savefig(os.path.join(results_folder, f"heatmap_toggles_{metric}_style10_opposite.png"))
-            plt.close()
+    #         # Create and plot heatmap
+    #         diff_df = pd.DataFrame(rows).set_index("base_label").astype(float)
+    #         plt.figure(figsize=(10, max(6, len(diff_df) * 0.6)))
+    #         sns.heatmap(diff_df, annot=True, cmap="RdBu_r", center=0, fmt=".3f", cbar_kws={"label": f"Δ {metric}"})
+    #         plt.title(f"Effect of toggling style/ft/context/oppu OFF \nΔ {metric} = OFF − ON")
+    #         plt.tight_layout()
+    #         plt.savefig(os.path.join(results_folder, f"heatmap_toggles_{metric}_opposite.png"))
+    #         plt.close()  
 
 
-        # Only consider configs with context=1
-        base_context = 0
-        context_df = style10_df[style10_df["context"] == base_context]
+    #     base_style = 0
 
-        for metric in metric_diffs.keys():
-            rows = []
+    #     # Only consider configs with style=10
+    #     style10_df = results_df[results_df["style"] == base_style]
 
-            # Group by model (assuming comparisons are only meaningful within same model)
-            for model_name, model_group in context_df.groupby("model"):
-                # For all pairs of rows in that group
-                for i, j in itertools.combinations(model_group.index, 2):
-                    row_i = model_group.loc[i]
-                    row_j = model_group.loc[j]
+    #     for metric in metric_diffs.keys():
+    #         rows = []
 
-                    # Determine how many toggles differ
-                    diff_mask = [row_i[toggle] != row_j[toggle] for toggle in toggle_cols]
-                    diff_count = sum(diff_mask)
+    #         # Group by model (assuming comparisons are only meaningful within same model)
+    #         for model_name, model_group in style10_df.groupby("model"):
+    #             # For all pairs of rows in that group
+    #             for i, j in itertools.combinations(model_group.index, 2):
+    #                 row_i = model_group.loc[i]
+    #                 row_j = model_group.loc[j]
 
-                    if diff_count == 1:
-                        toggle_idx = diff_mask.index(True)
-                        toggle_name = toggle_cols[toggle_idx]
+    #                 # Determine how many toggles differ
+    #                 diff_mask = [row_i[toggle] != row_j[toggle] for toggle in toggle_cols]
+    #                 diff_count = sum(diff_mask)
 
-                        # Identify OFF and ON configs
-                        if row_i[toggle_name] == 0 and row_j[toggle_name] == 1:
-                            off_row, on_row = row_i, row_j
-                        elif row_i[toggle_name] == 1 and row_j[toggle_name] == 0:
-                            off_row, on_row = row_j, row_i
-                        else:
-                            continue  # skip non-binary or unclear cases
+    #                 if diff_count == 1:
+    #                     toggle_idx = diff_mask.index(True)
+    #                     toggle_name = toggle_cols[toggle_idx]
 
-                        delta = off_row[metric] - on_row[metric]
+    #                     # Identify OFF and ON configs
+    #                     if row_i[toggle_name] == 0 and row_j[toggle_name] == 1:
+    #                         off_row, on_row = row_i, row_j
+    #                     elif row_i[toggle_name] == 1 and row_j[toggle_name] == 0:
+    #                         off_row, on_row = row_j, row_i
+    #                     else:
+    #                         continue  # skip non-binary or unclear cases
 
-                        label = (make_label(model_name, on_row['ft'], on_row['context'], on_row['style'], on_row['oppu']))
+    #                     delta = off_row[metric] - on_row[metric]
 
-                        # Search if label is already in rows
-                        found = False
-                        for r in rows:
-                            if r["base_label"] == label:
-                                r[toggle_name] = delta
-                                found = True
-                                break
+    #                     label = (make_label(model_name, on_row['ft'], on_row['context'], on_row['style'], on_row['oppu']))
 
-                        if not found:
-                            new_row = {toggle: None for toggle in toggle_cols}
-                            new_row[toggle_name] = delta
-                            new_row["base_label"] = label
-                            rows.append(new_row)
+    #                     # Search if label is already in rows
+    #                     found = False
+    #                     for r in rows:
+    #                         if r["base_label"] == label:
+    #                             r[toggle_name] = delta
+    #                             found = True
+    #                             break
 
-            # Create and plot heatmap
-            diff_df = pd.DataFrame(rows).set_index("base_label").astype(float)
-            plt.figure(figsize=(10, max(6, len(diff_df) * 0.6)))
-            sns.heatmap(diff_df, annot=True, cmap="RdBu_r", center=0, fmt=".3f", cbar_kws={"label": f"Δ {metric}"})
-            plt.title(f"Effect of toggling ft/context/oppu OFF (style=10, context=1)\nΔ {metric} = OFF − ON")
-            plt.tight_layout()
-            plt.savefig(os.path.join(results_folder, f"heatmap_toggles_{metric}_style10_context1_opposite.png"))
-            plt.close()
+    #                     if not found:
+    #                         new_row = {toggle: None for toggle in toggle_cols}
+    #                         new_row[toggle_name] = delta
+    #                         new_row["base_label"] = label
+    #                         rows.append(new_row)
 
-         # Only consider configs with context=1
-        base_ft = 0
-        ft_df = context_df[context_df["ft"] == base_ft]
+    #         # Create and plot heatmap
+    #         diff_df = pd.DataFrame(rows).set_index("base_label").astype(float)
+    #         plt.figure(figsize=(10, max(6, len(diff_df) * 0.6)))
+    #         sns.heatmap(diff_df, annot=True, cmap="RdBu_r", center=0, fmt=".3f", cbar_kws={"label": f"Δ {metric}"})
+    #         plt.title(f"Effect of toggling ft/context/oppu OFF (style=10)\nΔ {metric} = OFF − ON")
+    #         plt.tight_layout()
+    #         plt.savefig(os.path.join(results_folder, f"heatmap_toggles_{metric}_style10_opposite.png"))
+    #         plt.close()
 
-        for metric in metric_diffs.keys():
-            rows = []
 
-            # Group by model (assuming comparisons are only meaningful within same model)
-            for model_name, model_group in ft_df.groupby("model"):
-                # For all pairs of rows in that group
-                for i, j in itertools.combinations(model_group.index, 2):
-                    row_i = model_group.loc[i]
-                    row_j = model_group.loc[j]
+    #     # Only consider configs with context=1
+    #     base_context = 0
+    #     context_df = style10_df[style10_df["context"] == base_context]
 
-                    # Determine how many toggles differ
-                    diff_mask = [row_i[toggle] != row_j[toggle] for toggle in toggle_cols]
-                    diff_count = sum(diff_mask)
+    #     for metric in metric_diffs.keys():
+    #         rows = []
 
-                    if diff_count == 1:
-                        toggle_idx = diff_mask.index(True)
-                        toggle_name = toggle_cols[toggle_idx]
+    #         # Group by model (assuming comparisons are only meaningful within same model)
+    #         for model_name, model_group in context_df.groupby("model"):
+    #             # For all pairs of rows in that group
+    #             for i, j in itertools.combinations(model_group.index, 2):
+    #                 row_i = model_group.loc[i]
+    #                 row_j = model_group.loc[j]
 
-                        # Identify OFF and ON configs
-                        if row_i[toggle_name] == 0 and row_j[toggle_name] == 1:
-                            off_row, on_row = row_i, row_j
-                        elif row_i[toggle_name] == 1 and row_j[toggle_name] == 0:
-                            off_row, on_row = row_j, row_i
-                        else:
-                            continue  # skip non-binary or unclear cases
+    #                 # Determine how many toggles differ
+    #                 diff_mask = [row_i[toggle] != row_j[toggle] for toggle in toggle_cols]
+    #                 diff_count = sum(diff_mask)
 
-                        delta = off_row[metric] - on_row[metric]
+    #                 if diff_count == 1:
+    #                     toggle_idx = diff_mask.index(True)
+    #                     toggle_name = toggle_cols[toggle_idx]
 
-                        label = (make_label(model_name, on_row['ft'], on_row['context'], on_row['style'], on_row['oppu']))
+    #                     # Identify OFF and ON configs
+    #                     if row_i[toggle_name] == 0 and row_j[toggle_name] == 1:
+    #                         off_row, on_row = row_i, row_j
+    #                     elif row_i[toggle_name] == 1 and row_j[toggle_name] == 0:
+    #                         off_row, on_row = row_j, row_i
+    #                     else:
+    #                         continue  # skip non-binary or unclear cases
 
-                        # Search if label is already in rows
-                        found = False
-                        for r in rows:
-                            if r["base_label"] == label:
-                                r[toggle_name] = delta
-                                found = True
-                                break
+    #                     delta = off_row[metric] - on_row[metric]
 
-                        if not found:
-                            new_row = {toggle: None for toggle in toggle_cols}
-                            new_row[toggle_name] = delta
-                            new_row["base_label"] = label
-                            rows.append(new_row)
+    #                     label = (make_label(model_name, on_row['ft'], on_row['context'], on_row['style'], on_row['oppu']))
 
-            # Create and plot heatmap
-            diff_df = pd.DataFrame(rows).set_index("base_label").astype(float)
-            plt.figure(figsize=(10, max(6, len(diff_df) * 0.6)))
-            sns.heatmap(diff_df, annot=True, cmap="RdBu_r", center=0, fmt=".3f", cbar_kws={"label": f"Δ {metric}"})
-            plt.title(f"Effect of toggling ft/context/oppu OFF (style=10, context=1, ft=1)\nΔ {metric} = OFF − ON")
-            plt.tight_layout()
-            plt.savefig(os.path.join(results_folder, f"heatmap_toggles_{metric}_style10_context1_ft1_opposite.png"))
-            plt.close()
+    #                     # Search if label is already in rows
+    #                     found = False
+    #                     for r in rows:
+    #                         if r["base_label"] == label:
+    #                             r[toggle_name] = delta
+    #                             found = True
+    #                             break
+
+    #                     if not found:
+    #                         new_row = {toggle: None for toggle in toggle_cols}
+    #                         new_row[toggle_name] = delta
+    #                         new_row["base_label"] = label
+    #                         rows.append(new_row)
+
+    #         # Create and plot heatmap
+    #         diff_df = pd.DataFrame(rows).set_index("base_label").astype(float)
+    #         plt.figure(figsize=(10, max(6, len(diff_df) * 0.6)))
+    #         sns.heatmap(diff_df, annot=True, cmap="RdBu_r", center=0, fmt=".3f", cbar_kws={"label": f"Δ {metric}"})
+    #         plt.title(f"Effect of toggling ft/context/oppu OFF (style=10, context=1)\nΔ {metric} = OFF − ON")
+    #         plt.tight_layout()
+    #         plt.savefig(os.path.join(results_folder, f"heatmap_toggles_{metric}_style10_context1_opposite.png"))
+    #         plt.close()
+
+    #      # Only consider configs with context=1
+    #     base_ft = 0
+    #     ft_df = context_df[context_df["ft"] == base_ft]
+
+    #     for metric in metric_diffs.keys():
+    #         rows = []
+
+    #         # Group by model (assuming comparisons are only meaningful within same model)
+    #         for model_name, model_group in ft_df.groupby("model"):
+    #             # For all pairs of rows in that group
+    #             for i, j in itertools.combinations(model_group.index, 2):
+    #                 row_i = model_group.loc[i]
+    #                 row_j = model_group.loc[j]
+
+    #                 # Determine how many toggles differ
+    #                 diff_mask = [row_i[toggle] != row_j[toggle] for toggle in toggle_cols]
+    #                 diff_count = sum(diff_mask)
+
+    #                 if diff_count == 1:
+    #                     toggle_idx = diff_mask.index(True)
+    #                     toggle_name = toggle_cols[toggle_idx]
+
+    #                     # Identify OFF and ON configs
+    #                     if row_i[toggle_name] == 0 and row_j[toggle_name] == 1:
+    #                         off_row, on_row = row_i, row_j
+    #                     elif row_i[toggle_name] == 1 and row_j[toggle_name] == 0:
+    #                         off_row, on_row = row_j, row_i
+    #                     else:
+    #                         continue  # skip non-binary or unclear cases
+
+    #                     delta = off_row[metric] - on_row[metric]
+
+    #                     label = (make_label(model_name, on_row['ft'], on_row['context'], on_row['style'], on_row['oppu']))
+
+    #                     # Search if label is already in rows
+    #                     found = False
+    #                     for r in rows:
+    #                         if r["base_label"] == label:
+    #                             r[toggle_name] = delta
+    #                             found = True
+    #                             break
+
+    #                     if not found:
+    #                         new_row = {toggle: None for toggle in toggle_cols}
+    #                         new_row[toggle_name] = delta
+    #                         new_row["base_label"] = label
+    #                         rows.append(new_row)
+
+    #         # Create and plot heatmap
+    #         diff_df = pd.DataFrame(rows).set_index("base_label").astype(float)
+    #         plt.figure(figsize=(10, max(6, len(diff_df) * 0.6)))
+    #         sns.heatmap(diff_df, annot=True, cmap="RdBu_r", center=0, fmt=".3f", cbar_kws={"label": f"Δ {metric}"})
+    #         plt.title(f"Effect of toggling ft/context/oppu OFF (style=10, context=1, ft=1)\nΔ {metric} = OFF − ON")
+    #         plt.tight_layout()
+    #         plt.savefig(os.path.join(results_folder, f"heatmap_toggles_{metric}_style10_context1_ft1_opposite.png"))
+    #         plt.close()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate model predictions and plot metrics.")
