@@ -1,18 +1,33 @@
 USAGE:
-python run_simulation.py --config_dir=configs --n_users=250 --output_dir=simulation_results250
+python run_simulation.py --config_dir=configs --n_users=250 --output_dir=results
 
-python convert_emojiis.py simulation_results250
+python LLM_judge.py results
 
-python build_validation_data.py --folder=simulation_results250 --sample_size=5000
+python convert_emojiis.py results
 
-python validate_text.py --input_dir=simulation_results250
+python build_validation_data.py --folder=results --sample_size=5000
 
-python generate_stats.py simulation_results250
+python validate_text.py --input_dir=results
 
-python post_process.py simulation_results250
+# do not need validation:
+# python generate_stats.py results
+python post_process.py results
 
-python features_analysis.py simulation_results250 labels
-python features_analysis.py simulation_results250 bert_prediction
+python features_analysis.py compute_features results
 
-python features_plot.py simulation_results250 labels
-python features_plot.py simulation_results250 bert_prediction
+
+python features_analysis.py evaluate results labels
+# python features_analysis.py evaluate results bert_prediction
+
+python plot_features_differences.py results
+
+python features_plot.py results labels
+# python features_plot.py results bert_prediction
+
+python plot_accuracy.py results
+
+python plot_empath.py results
+
+python plot_trade_off_metrics.py results
+
+
