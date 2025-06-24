@@ -118,7 +118,7 @@ class Agent:
         model_for_training.enable_input_require_grads()
         
         # Specify directories for saving personalized adapters.
-        save_base_dir = "personal_peft"
+        save_base_dir = "/scratch/nicpag/personal_peft"
 
         self.user_output_dir = f"{save_base_dir}/{self.username}/{llm.model_name}"
         os.makedirs(self.user_output_dir, exist_ok=True)
@@ -158,7 +158,7 @@ class Agent:
             base_model_dir = llm.fine_tuned_dir
         else:
             base_model_dir = llm.model_name
-        save_base_dir = "personal_peft"
+        save_base_dir = "/scratch/nicpag/personal_peft"
         self.user_adapter_dir =  f"{save_base_dir}/{self.username}/{llm.model_name}"
 
         if not(os.path.isdir(self.user_adapter_dir)):
@@ -223,13 +223,18 @@ class Agent:
         prompt = build_prompt(self.username, persona_examples, conversation_history, retrieved_context)
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        model = llm.model.to(device) if not personalized_bool else self.load_personalized_model(llm)
+        model = llm.model if not personalized_bool else self.load_personalized_model(llm)
         tokenizer = llm.tokenizer if not personalized_bool else AutoTokenizer.from_pretrained(self.user_adapter_dir)
 
         def is_valid_response(response, original_prompt):
             if not response:
                 return False
-            if "These are some tweets that represent how" in response and len(response) > 100:
+            if "continue the conversation naturally adding a concise" in response.lower():
+                return False
+            if "these are some tweets that represent how" in response.lower():
+                return False
+                return False
+            if "this is some useful context retrieved from" in response.lower():
                 return False
             return True
 
