@@ -11,6 +11,12 @@ import language_tool_python
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import train_test_split
+from transformers import pipeline
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
+
+# Load toxicity model once
+toxicity_model = pipeline("text-classification", model="unitary/toxic-bert", tokenizer="unitary/toxic-bert", truncation=True, device=0)
+sentiment_analyzer = SentimentIntensityAnalyzer()
 
 # === Basic text feature functions ===
 
@@ -25,17 +31,22 @@ def count_language_errors(text):
     except Exception:
         return 0
 
+def get_toxicity_score_batch(texts, batch_size=20):
+    results = toxicity_model(texts, batch_size=batch_size)
+    return [r['score'] for r in results]
+
 def get_toxicity_score(text):
-
-    from transformers import pipeline
-    # Load toxicity model once
-    toxicity_model = pipeline("text-classification", model="unitary/toxic-bert", tokenizer="unitary/toxic-bert", truncation=True)
-
+    
     result = toxicity_model(text)
     return result[0]['score']
 
+# def get_sentiment(text):
+#     return TextBlob(text).sentiment.polarity
+def get_sentiment_batch(texts):
+    return [sentiment_analyzer.polarity_scores(t)['compound'] for t in texts]
+
 def get_sentiment(text):
-    return TextBlob(text).sentiment.polarity
+    return sentiment_analyzer.polarity_scores(text)['compound']
 
 def count_words(text): return len(text.split())
 def count_links(text): return len(re.findall(r'https?://\S+', text))
@@ -69,11 +80,13 @@ def extract_features(df, cache_path=None):
         'has_link': None,  # derived
         'has_mention': None,
         'has_emoji': None,
-        'sentiment': get_sentiment,
-        'toxicity_score': get_toxicity_score,
-        'spelling_grammar_errors': count_language_errors,
+        'sentiment': 'batch_sentiment',         # <- flag for batch
+        'toxicity_score': 'batch_toxicity',     # <- flag for batch
+        # 'spelling_grammar_errors': count_language_errors,
         'has_quotes': has_quotes,
     }
+
+    texts = df['text'].fillna('').astype(str).tolist()
 
     if cache_path and os.path.exists(cache_path):
         df_features = pd.read_csv(cache_path)
@@ -83,11 +96,24 @@ def extract_features(df, cache_path=None):
         missing = list(expected_feature_funcs.keys())
 
     for feature in missing:
-        if feature in ['has_link', 'has_mention', 'has_emoji']: continue
+        if feature in ['has_link', 'has_mention', 'has_emoji']:
+            continue
+
         func = expected_feature_funcs[feature]
-        if func is not None:
+        
+        # Batch sentiment
+        if func == 'batch_sentiment':
+            df_features['sentiment'] = get_sentiment_batch(texts)
+        
+        # Batch toxicity
+        elif func == 'batch_toxicity':
+            df_features['toxicity_score'] = get_toxicity_score_batch(texts)
+        
+        # Regular apply
+        elif func is not None:
             df_features[feature] = df['text'].apply(func)
 
+    # Derived boolean features
     if 'has_link' not in df_features.columns and 'links_count' in df_features.columns:
         df_features['has_link'] = (df_features['links_count'] > 0).astype(int)
     if 'has_mention' not in df_features.columns and 'mentions_count' in df_features.columns:
@@ -95,7 +121,6 @@ def extract_features(df, cache_path=None):
     if 'has_emoji' not in df_features.columns and 'emojis_count' in df_features.columns:
         df_features['has_emoji'] = (df_features['emojis_count'] > 0).astype(int)
 
-        
     if cache_path and missing:
         df_features.to_csv(cache_path, index=False)
 
@@ -118,6 +143,9 @@ def evaluate_features_single_dataset(
 ):
     assert label_source in df.columns, f"Label source '{label_source}' not found in DataFrame."
     exclude_features = exclude_features or []
+    
+
+    print("Class distribution:", df[label_source].value_counts())
 
     X = extract_features(df, cache_path=feature_cache_path)
     y = df[label_source]

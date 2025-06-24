@@ -1,41 +1,56 @@
 import os
 import argparse
 import pandas as pd
-from feature_utils import evaluate_features_single_dataset
+from feature_utils import extract_features, evaluate_features_single_dataset
 from plotting_utils import parse_filename
 
-def main(folder_path, label_source):
-    results_auc = []
-    results_importances = []
-    results_correlation = []
-
-    assert label_source in ['labels', 'bert_prediction'], "label_source must be 'labels' or 'bert_prediction'"
-
+def compute_features_for_all(folder_path):
     for root, _, files in os.walk(folder_path):
         for filename in files:
-            if filename.endswith('validation_data_labelled.csv'):
+            if filename.endswith('validation_data.csv'):
                 full_path = os.path.join(root, filename)
-                print(f'Processing {full_path}.')
+                print(f'Computing features for {full_path}.')
 
                 df = pd.read_csv(full_path)
                 df['text'] = df['text'].fillna('').astype(str)
 
-                # Build output suffix
-                suffix = "_from_bert" if label_source == "bert_prediction" else "_from_labels"
-
-                # Define paths
                 feature_cache_path = full_path.replace(".csv", "_features.csv")
+                # Always overwrite in case features changed
+                _ = extract_features(df, cache_path=feature_cache_path)
+                print(f'Saved features to {feature_cache_path}')
+
+
+def evaluate_all_datasets(folder_path, label_source):
+    assert label_source in ['labels', 'bert_prediction'], "label_source must be 'labels' or 'bert_prediction'"
+
+    results_auc = []
+    results_importances = []
+    results_correlation = []
+
+    suffix = "_from_bert" if label_source == "bert_prediction" else "_from_labels"
+
+    for root, _, files in os.walk(folder_path):
+        for filename in files:
+            if filename.endswith('validation_data_labelled.csv'):  ### TO DO 
+                full_path = os.path.join(root, filename)
+                print(f'Evaluating {full_path}.')
+
+                df = pd.read_csv(full_path)
+                df['text'] = df['text'].fillna('').astype(str)
+
+                feature_cache_path = full_path.replace("_labelled.csv", "_features.csv")
                 base_output_path = full_path.replace(".csv", f"{suffix}")
                 stats_output_path = base_output_path + "_feature_importance_stats.csv"
-                correlation_output_path = base_output_path + "_feature_correlation_stats.csv"  # New path for correlation stats
+                correlation_output_path = base_output_path + "_feature_correlation_stats.csv"
 
-                # Compute features, stats, and correlation
-                auc, feature_importance, correlation_df = evaluate_features_single_dataset(df, feature_cache_path, label_source=label_source)
+                # Evaluate from cached features
+                auc, feature_importance, correlation_df = evaluate_features_single_dataset(
+                    df, feature_cache_path, label_source=label_source
+                )
 
-                # Parse filename info
                 model, ft, context, style, oppu = parse_filename(filename)
 
-                # Store AUC summary
+                # Save AUC summary
                 results_auc.append({
                     'model': model,
                     'ft': ft,
@@ -46,7 +61,7 @@ def main(folder_path, label_source):
                     'label_source': label_source
                 })
 
-                # Store and save feature importances
+                # Save feature importance
                 feature_dict = feature_importance.to_dict()
                 feature_dict.update({
                     'model': model,
@@ -57,29 +72,34 @@ def main(folder_path, label_source):
                     'label_source': label_source
                 })
                 results_importances.append(feature_dict)
-
-                # Save current feature stats to CSV
                 pd.DataFrame([feature_dict | {'auc': auc}]).to_csv(stats_output_path, index=False)
                 print(f'Saved stats to {stats_output_path}')
 
-                # Save correlation stats to CSV
+                # Save correlation stats
                 correlation_df.to_csv(correlation_output_path, index=False)
                 print(f'Saved correlation stats to {correlation_output_path}')
-
-                # Store correlation results for later aggregation (optional)
                 results_correlation.append(correlation_df)
 
-    # Optionally save aggregate results
+    # Save combined outputs
     pd.DataFrame(results_auc).to_csv(os.path.join(folder_path, f'auc_results{suffix}.csv'), index=False)
     pd.DataFrame(results_importances).to_csv(os.path.join(folder_path, f'importances{suffix}.csv'), index=False)
+    pd.concat(results_correlation, ignore_index=True).to_csv(os.path.join(folder_path, f'correlation_results{suffix}.csv'), index=False)
 
-    # Aggregate and save correlation stats (optional)
-    correlation_combined_df = pd.concat(results_correlation, ignore_index=True)
-    correlation_combined_df.to_csv(os.path.join(folder_path, f'correlation_results{suffix}.csv'), index=False)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Evaluate feature importance from validation datasets.")
-    parser.add_argument("folder_path", type=str, help="Path to the folder containing the simulation results")
-    parser.add_argument("label_source", type=str, choices=["labels", "bert_prediction"], help="Label source to evaluate against")
+    parser = argparse.ArgumentParser(description="Pipeline to compute features and evaluate feature importance.")
+    subparsers = parser.add_subparsers(dest="command")
+
+    compute_parser = subparsers.add_parser("compute_features")
+    compute_parser.add_argument("folder_path", type=str, help="Path to the folder with CSV files.")
+
+    eval_parser = subparsers.add_parser("evaluate")
+    eval_parser.add_argument("folder_path", type=str, help="Path to the folder with CSV files.")
+    eval_parser.add_argument("label_source", type=str, choices=["labels", "bert_prediction"], help="Which label source to use.")
+
     args = parser.parse_args()
-    main(args.folder_path, args.label_source)
+
+    if args.command == "compute_features":
+        compute_features_for_all(args.folder_path)
+    elif args.command == "evaluate":
+        evaluate_all_datasets(args.folder_path, args.label_source)
