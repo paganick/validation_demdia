@@ -23,7 +23,7 @@ fieldnames = [
 # Walk through all subdirectories
 for root, _, files in os.walk(args.input_folder):
     for file in files:
-        if file.endswith('.json'):
+        if file.endswith('random_response.json') or file.endswith('optimal_response.json'):
             json_path = os.path.join(root, file)
             csv_path = json_path.replace('.json', '.csv')
 
