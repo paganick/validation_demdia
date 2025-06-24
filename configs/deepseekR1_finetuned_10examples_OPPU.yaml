@@ -1,5 +1,0 @@
-OPPU: true
-finetuned: true
-model: deepseek-ai/DeepSeek-R1-Distill-Llama-8B
-n_style_examples: 10
-retrieve_context: false
