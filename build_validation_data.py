@@ -56,7 +56,7 @@ def main():
     # ===============================
     for root, _, files in os.walk(args.folder):
         for file in files:
-            if file.endswith('random_response.csv'):
+            if file.endswith('random_response.csv') or file.endswith('optimal_response.csv'):
                 csv_path = os.path.join(root, file)
                 try:
                     df_ai = pd.read_csv(csv_path)
@@ -65,7 +65,7 @@ def main():
                 if "response" not in df_ai.columns:
                     print(f"Error: The AI data file {csv_path} does not contain a 'response' column.")
                     return
-                
+            
                 df_ai["text"] = df_ai["response"].astype(str)
                 df_ai["labels"] = 0  # AI-generated
 
@@ -81,8 +81,10 @@ def main():
                 # Shuffle dataset
                 df_validation = df_validation.sample(frac=1, random_state=42).reset_index(drop=True)
 
-                output_filename = csv_path.replace('.csv', '_validation_data.csv')
-        
+                if file.endswith('random_response.csv'):
+                    output_filename = csv_path.replace('.csv', '_random_validation_data.csv')
+                elif file.endswith('optimal_response.csv'):
+                    output_filename = csv_path.replace('.csv', '_optimal_validation_data.csv')
                 # Save to CSV
                 df_validation.to_csv(output_filename, index=False)
                 print(f"Validation data saved to {output_filename}.")
