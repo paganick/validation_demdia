@@ -18,8 +18,7 @@ except ImportError:
 from utils import Validator
 
 # Initialize the BERT tokenizer to be used throughout the script
-tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-
+tokenizer = BertTokenizer.from_pretrained("bert-base-uncased", local_files_only=False)
 
 def find_validation_files(base_folder):
     validation_files = []
@@ -32,47 +31,52 @@ def find_validation_files(base_folder):
 
 def process_file(file_path, run_bert=True, run_empath=True):
     print(f"\nProcessing file: {file_path}")
-    df = pd.read_csv(file_path)
-    df['text'] = df['text'].astype(str)
     base, ext = os.path.splitext(file_path)
     labelled_file = base + "_labelled.csv"
     cm_file = base + "_confusion_matrix.csv"
+    report_file = base + "_bert_report.json"
     features_file = base + "_empath_significant_features.csv"
 
     # =======================
     # Run BERT Validation
     # =======================
     if run_bert:
-        print("Running BERT validation...")
-        trainer, report, cm = Validator.bert_validate(df)
+        if os.path.exists(labelled_file) and os.path.exists(cm_file): # and os.path.exists(report_file):
+            print("BERT validation already done. Skipping.")
+        else:
+            print("Running BERT validation...")
+            df = pd.read_csv(file_path)
+            df['text'] = df['text'].astype(str)
 
-        report_file = file_path.replace('.json', '_bert_report.json')
-        with open(report_file, "w") as f:
-            json.dump(report, f, indent=4)
-        print(f"BERT classification report saved to {report_file}")
+            df['length'] = df['text'].apply(lambda x: len(str(x).split()))
+            print(df.groupby('labels')['length'].describe())
 
-        # Save confusion matrix values as CSV
-        cm_df = pd.DataFrame(cm)
-        cm_df.to_csv(cm_file, index=False)
-        print(f"BERT confusion matrix data saved to {cm_file}")
+            trainer, report, cm = Validator.bert_validate(df)
 
-        # print("Generating BERT predictions on a subsample of the validation dataset (100 rows) for quick testing...")
-        # df_sample = df.sample(n=100, random_state=42)
-        
-        print("Generating BERT predictions")
-        df_sample = df.copy()
-        test_dataset = Dataset.from_pandas(df_sample)
+            with open(report_file, "w") as f:
+                json.dump(report, f, indent=4)
+            print(f"BERT classification report saved to {report_file}")
 
-        def tokenize_function(examples):
-            return tokenizer(examples["text"], truncation=True, padding="max_length", max_length=512)
+            cm_df = pd.DataFrame(cm)
+            cm_df.to_csv(cm_file, index=False)
+            print(f"BERT confusion matrix data saved to {cm_file}")
 
-        test_dataset = test_dataset.map(tokenize_function, batched=True)
-        predictions_output = trainer.predict(test_dataset)
-        preds = np.argmax(predictions_output.predictions, axis=-1)
-        df_sample["bert_prediction"] = preds
+            print("Generating BERT predictions")
+            df_sample = df.copy()
+            test_dataset = Dataset.from_pandas(df_sample)
 
-        df_sample.to_csv(labelled_file, index=False)
-        print(f"Labeled validation data saved to {labelled_file}")
+            def tokenize_function(examples):
+                return tokenizer(examples["text"], truncation=True, padding="max_length", max_length=512)
+
+            test_dataset = test_dataset.map(tokenize_function, batched=True)
+            predictions_output = trainer.predict(test_dataset)
+            preds = np.argmax(predictions_output.predictions, axis=-1)
+            df_sample["bert_prediction"] = preds
+            
+            df_sample["bert_prediction"].value_counts()
+
+            df_sample.to_csv(labelled_file, index=False)
+            print(f"Labeled validation data saved to {labelled_file}")
 
     # =======================
     # Run Empath Validation
@@ -82,12 +86,18 @@ def process_file(file_path, run_bert=True, run_empath=True):
             print("Empath module not installed. Skipping.")
             return
 
-        print("Running Empath validation...")
-        significant_features, distance = Validator.empath_validate(df)
+        if os.path.exists(features_file):
+            print("Empath validation already done. Skipping.")
+        else:
+            print("Running Empath validation...")
+            df = pd.read_csv(file_path)
+            df['text'] = df['text'].astype(str)
 
-        significant_features.to_csv(features_file, index=False)
-        print(f"Empath significant features saved to {features_file}")
-        print(f"Euclidean distance between groups: {distance:.4f}")
+            significant_features, distance = Validator.empath_validate(df)
+
+            significant_features.to_csv(features_file, index=False)
+            print(f"Empath significant features saved to {features_file}")
+            print(f"Euclidean distance between groups: {distance:.4f}")
 
 
 def main():
@@ -95,7 +105,6 @@ def main():
     parser.add_argument(
         "--input_dir",
         type=str,
-        #default="simulation_results10",
         required=True,
         help="Directory containing subfolders with '_validation_data.csv' files."
     )
