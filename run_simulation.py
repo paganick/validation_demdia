@@ -3,13 +3,17 @@ import os
 import json
 from src.simulate import *
 from src.config_utils import load_config
+import src.globals as globals_module
 
 
 def main():
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--experiment_type', type=str, help="experiment type between political_affiliation and random_response", default="random_response")
     parser.add_argument('--config', type=str, help="Path to a single config file")
     parser.add_argument('--config_dir', type=str, help="Folder containing multiple config files")
+    parser.add_argument('--data_file', type=str, help="Path to a data file")
+    parser.add_argument('--dataset_type', type=str, help="dataset type", default="TWITTER")
     parser.add_argument('--output_dir', type=str, default="simulations/")
     parser.add_argument('--n_users', type=int, default=250)
     parser.add_argument('--n_responses_per_user', type=int, default=20)
@@ -18,6 +22,8 @@ def main():
 
     args = parser.parse_args()
 
+    globals_module.DATASET_TYPE = args.dataset_type
+    
     os.makedirs(args.output_dir, exist_ok=True)
 
     if args.experiment_type not in ["random_response", "political_affiliation"]:
@@ -40,6 +46,11 @@ def main():
             ]
     else:
         raise ValueError("You must provide either --config or --config_dir")
+
+    if args.data_file:
+        data_file = args.data_file
+    else:
+        data_file = "data/personas_and_tweets.df.pkl"
 
     for cfg_path in config_paths:
         config = load_config(cfg_path)
@@ -68,7 +79,7 @@ def main():
         print(f"[RUNNING] Config: {cfg_path}")
         
         if args.experiment_type == 'random_response':    
-            results = run_simulation_random_response( config, n_users=args.n_users, 
+            results = run_simulation_random_response(config, data_file, n_users=args.n_users, 
                                              n_responses_per_user= args.n_responses_per_user, 
                                              output_path=output_path)
         elif args.experiment_type == 'political_affiliation':

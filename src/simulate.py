@@ -5,8 +5,7 @@ import os
 from .model import Model
 from .agent import Agent
 
-def run_simulation_random_response(config, n_users=1000, n_responses_per_user=1, output_path=None):
-    DATA_FILE = "data/personas_and_tweets.df.pkl"
+def run_simulation_random_response(config, data_file, n_users=1000, n_responses_per_user=1, output_path=None):
 
     results = []
     existing_predictions = set()
@@ -25,8 +24,14 @@ def run_simulation_random_response(config, n_users=1000, n_responses_per_user=1,
                 }
         except json.JSONDecodeError:
             print(f"[WARNING] Cache file {output_path} is empty or invalid JSON. Starting fresh.")
+
+    # Ensure output directory exists before saving
+    if output_path:
+        output_dir = os.path.dirname(output_path)
+        if output_dir and not os.path.exists(output_dir):
+            os.makedirs(output_dir, exist_ok=True)
         
-    df = pd.read_pickle(DATA_FILE)
+    df = pd.read_pickle(data_file)
     # Filter the DataFrame to only include rows where training == 0
     df_filtered = df[df["training"] == 0]
 
@@ -37,7 +42,7 @@ def run_simulation_random_response(config, n_users=1000, n_responses_per_user=1,
     eligible_users = user_counts[user_counts >= n_responses_per_user].index
 
     # Sample n_users from the eligible users
-    sampled_users = pd.Series(eligible_users).sample(n=n_users, random_state=42)
+    sampled_users = pd.Series(eligible_users).sample(n=min(n_users, len(eligible_users)), random_state=42)
 
     # For each sampled user, take m rows
     df_test = (
@@ -53,7 +58,7 @@ def run_simulation_random_response(config, n_users=1000, n_responses_per_user=1,
     j = 0
     for username, user_df in df_test.groupby("username"):
         print(f"\n👤 Processing user: {username} ({len(user_df)} samples)")
-        agent = Agent(username, DATA_FILE)
+        agent = Agent(username, data_file)
         
         for i, row in enumerate(user_df.itertuples(index=False), start=1):
             reply_to = row.reply_to

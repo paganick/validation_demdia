@@ -10,6 +10,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments,
 from peft import PeftModel, get_peft_model, LoraConfig, TaskType
 from .model_utils import *
 from .model import Model
+from .globals import DATASET_TYPE
 
 class Agent:
     def __init__(self, username: str, data_file: str):
@@ -30,6 +31,8 @@ class Agent:
         
         self.df_user = df[(df['username'] == self.username) & (df['training'] == 1)]
         
+        self.persona = self.df_user['persona'].iloc[0] if not self.df_user.empty else None
+
         if self.df_user.empty:
             print(f"No training examples found for @{self.username}.")
             return []
@@ -209,18 +212,18 @@ class Agent:
                     bm25_client = build_bm25(history)
                     retrieved_context = retrieve_context(last_message, bm25_client, history, k=k_retrieval)
 
-        def build_prompt(username, persona_examples, conversation_history, retrieved_context=""):
-            prompt = f"[Instruction] You are @{username}. Continue the conversation naturally adding a concise (one sentence) tweet reply.\n"
+        def build_prompt(persona_examples, conversation_history, retrieved_context=""):
+            prompt = f"[Instruction] {self.persona}. Continue the conversation naturally adding a concise (one sentence) tweet reply.\n"
             if persona_examples:
                 examples = "\n".join(f"- {ex}" for ex in persona_examples)
-                prompt += f"[Writing Style] These are some tweets that represent how @{username} writes:\n{examples}\n\n"
+                prompt += f"[Writing Style] These are some tweets that represent how @{self.username} writes:\n{examples}\n\n"
             if retrieved_context:
-                prompt += f"[User Retrieved Context] This is some useful context retrieved from @{username}'s history \n" + retrieved_context + "\n\n"
+                prompt += f"[User Retrieved Context] This is some useful context retrieved from @{self.username}'s history \n" + retrieved_context + "\n\n"
             if conversation_history:
                 prompt += "[Conversation] " + "\n".join(conversation_history) + f"\n{self.username}:"
             return prompt
 
-        prompt = build_prompt(self.username, persona_examples, conversation_history, retrieved_context)
+        prompt = build_prompt(persona_examples, conversation_history, retrieved_context)
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
         model = llm.model if not personalized_bool else self.load_personalized_model(llm)
@@ -239,7 +242,12 @@ class Agent:
             return True
 
         def score_response(resp):
-            target_length = np.random.poisson(lam=14)
+
+            if DATASET_TYPE=='BSKY':
+                sample = weibull_min.rvs(shape, loc=0, scale=scale, size=1)[0]
+                target_length = max(1, round(sample))                              # FOR BLUESKY DATA
+            elif DATASET_TYPE == 'TWITTER':
+                target_length = np.random.poisson(lam=14)                          # FOR TWITTER DATA
             length_diff = abs(len(resp.split()) - target_length)
             return length_diff if is_valid_response(resp, prompt) else float("inf")
 
