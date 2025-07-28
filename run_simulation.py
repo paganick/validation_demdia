@@ -22,7 +22,7 @@ def main():
 
     args = parser.parse_args()
 
-    globals_module.DATASET_TYPE = args.dataset_type
+    dataset_type = args.dataset_type
     
     os.makedirs(args.output_dir, exist_ok=True)
 
@@ -79,7 +79,7 @@ def main():
         print(f"[RUNNING] Config: {cfg_path}")
         
         if args.experiment_type == 'random_response':    
-            results = run_simulation_random_response(config, data_file, n_users=args.n_users, 
+            results = run_simulation_random_response(config, data_file, dataset_type, n_users=args.n_users, 
                                              n_responses_per_user= args.n_responses_per_user, 
                                              output_path=output_path)
         elif args.experiment_type == 'political_affiliation':

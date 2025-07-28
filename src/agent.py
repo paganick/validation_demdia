@@ -3,6 +3,7 @@ import random
 import numpy as np
 import os
 import json
+from scipy.stats import weibull_min
 from datasets import Dataset
 from functools import partial
 import torch
@@ -10,13 +11,13 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments,
 from peft import PeftModel, get_peft_model, LoraConfig, TaskType
 from .model_utils import *
 from .model import Model
-from .globals import DATASET_TYPE
 
 class Agent:
-    def __init__(self, username: str, data_file: str):
+    def __init__(self, username: str, data_file: str, dataset_type: str):
         """Initialize an agent with a username and load all past text examples."""
         self.username = username
         self.data_file = data_file
+        self.dataset_type = dataset_type
         self.examples = self.load_persona_examples()
         self.create_user_history()
         self.personalized_model = None
@@ -242,11 +243,11 @@ class Agent:
             return True
 
         def score_response(resp):
-
-            if DATASET_TYPE=='BSKY':
-                sample = weibull_min.rvs(shape, loc=0, scale=scale, size=1)[0]
+            
+            if self.dataset_type=='BSKY':
+                sample = weibull_min.rvs(2.476, loc=0, scale=37.787, size=1)[0]
                 target_length = max(1, round(sample))                              # FOR BLUESKY DATA
-            elif DATASET_TYPE == 'TWITTER':
+            elif self.dataset_type == 'TWITTER':
                 target_length = np.random.poisson(lam=14)                          # FOR TWITTER DATA
             length_diff = abs(len(resp.split()) - target_length)
             return length_diff if is_valid_response(resp, prompt) else float("inf")
