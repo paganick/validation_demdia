@@ -66,12 +66,20 @@ def prepare_df_per_file(data):
 from sklearn.model_selection import GroupKFold
 
 def process_json_file(json_path):
+    modified_json_path = json_path.replace("_random_response.json", "_optimal_response.json")
+    if os.path.exists(modified_json_path):
+        print(f"⏭️ Skipping {json_path}, already processed.")
+        return
+    
     with open(json_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
 
     df, meta_df = prepare_df_per_file(data)
     features_out_path = json_path.replace("_random_response.json", "_responses_features.csv")
-
+    if os.path.exists(modified_json_path):
+        print(f"⏭️ Skipping {json_path}, already processed.")
+        return
+        
     if os.path.exists(features_out_path):
         print(f"📥 Loading cached features from {features_out_path}")
         df_with_meta = pd.read_csv(features_out_path, encoding="utf-8")
@@ -125,7 +133,7 @@ def process_json_file(json_path):
                     "reply_to": row["reply_to"],
                     "original_message": entry["original_message"],
                     "previous_response": entry.get("previous_response", ""),
-                    "selected_response": ml_best_response,
+                    "ml_best_response": ml_best_response,
                     "cosine_best_response": cosine_best_response
                 })
                 entry["response"] = ""
@@ -150,7 +158,8 @@ def process_json_file(json_path):
                 "reply_to": row["reply_to"],
                 "original_message": entry["original_message"],
                 "previous_response": entry.get("response", ""),
-                "selected_response": selected_response
+                "ML_best_response":  entry.get("ML_best_response", ""),
+                "cosine_best_response": entry.get("cosine_best_response", ""),
             })
 
             # Compute cosine similarities
@@ -177,7 +186,6 @@ def process_json_file(json_path):
             # Save into entry
             entry["ML_best_response"] = ml_best_response
             entry["cosine_best_response"] = cosine_best_response
-            entry["response"] = ml_best_response  # For compatibility with downstream tools
             entry["all_valid_responses"] = enriched_responses
 
             
@@ -185,7 +193,7 @@ def process_json_file(json_path):
     with open(out_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=[
             "user", "reply_to", "original_message", "previous_response", 
-            "selected_response", "cosine_best_response"
+            "ML_best_response", "cosine_best_response"
         ])
         writer.writeheader()
         writer.writerows(selected_rows)
