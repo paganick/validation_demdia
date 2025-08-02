@@ -6,6 +6,17 @@ import pandas as pd
 import csv
 from tqdm import tqdm
 from sklearn.ensemble import RandomForestClassifier
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+
+# Load the embedding model once
+embedding_model = SentenceTransformer("/scratch/nicpag/all-MiniLM-L6-v2-local")
+
+def compute_cosine_similarity(a: str, b: str) -> float:
+    """Compute cosine similarity between two strings."""
+    embeddings = embedding_model.encode([a, b])
+    return float(cosine_similarity([embeddings[0]], [embeddings[1]])[0][0])
+
 
 # ==== Custom feature functions ====
 from feature_utils import (
@@ -113,8 +124,9 @@ def process_json_file(json_path):
                     "user": row["user"],
                     "reply_to": row["reply_to"],
                     "original_message": entry["original_message"],
-                    "previous_response": entry.get("response", ""),
-                    "selected_response": ""
+                    "previous_response": entry.get("previous_response", ""),
+                    "selected_response": ml_best_response,
+                    "cosine_best_response": cosine_best_response
                 })
                 entry["response"] = ""
                 entry["all_valid_responses"] = []
@@ -141,15 +153,40 @@ def process_json_file(json_path):
                 "selected_response": selected_response
             })
 
-            sorted_pairs = sorted(zip(responses, probs_full), key=lambda x: x[1], reverse=True)
-            entry["response"] = sorted_pairs[0][0]
-            entry["all_valid_responses"] = [
-                {"response": resp, "probability": float(prob)} for resp, prob in sorted_pairs
-            ]
+            # Compute cosine similarities
+            original_msg = entry["original_message"]
+            cosine_similarities = [compute_cosine_similarity(original_msg, resp) for resp in responses]
+
+            # Combine all data into structured dicts
+            enriched_responses = []
+            for resp, prob, cos_sim in zip(responses, probs_full, cosine_similarities):
+                enriched_responses.append({
+                    "response": resp,
+                    "probability": float(prob),
+                    "cosine_similarity": float(cos_sim)
+                })
+
+            # Sort by ML score (probability)
+            sorted_by_prob = sorted(enriched_responses, key=lambda x: x["probability"], reverse=True)
+            ml_best_response = sorted_by_prob[0]["response"]
+
+            # Sort by cosine similarity
+            sorted_by_cosine = sorted(enriched_responses, key=lambda x: x["cosine_similarity"], reverse=True)
+            cosine_best_response = sorted_by_cosine[0]["response"]
+
+            # Save into entry
+            entry["ML_best_response"] = ml_best_response
+            entry["cosine_best_response"] = cosine_best_response
+            entry["response"] = ml_best_response  # For compatibility with downstream tools
+            entry["all_valid_responses"] = enriched_responses
+
             
     out_path = json_path.replace("_random_response.json", "_response_comparisons.csv")
     with open(out_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["user", "reply_to", "original_message", "previous_response", "selected_response"])
+        writer = csv.DictWriter(f, fieldnames=[
+            "user", "reply_to", "original_message", "previous_response", 
+            "selected_response", "cosine_best_response"
+        ])
         writer.writeheader()
         writer.writerows(selected_rows)
     print(f"✅ Saved {out_path}")
