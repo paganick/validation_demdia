@@ -5,9 +5,6 @@ import re
 import numpy as np
 import pandas as pd
 import emoji
-from textblob import TextBlob
-from langdetect import detect
-import language_tool_python
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import train_test_split
@@ -40,8 +37,6 @@ def get_toxicity_score(text):
     result = toxicity_model(text)
     return result[0]['score']
 
-# def get_sentiment(text):
-#     return TextBlob(text).sentiment.polarity
 def get_sentiment_batch(texts):
     return [sentiment_analyzer.polarity_scores(t)['compound'] for t in texts]
 
