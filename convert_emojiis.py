@@ -17,13 +17,14 @@ fieldnames = [
     'retrieve_context',
     'pesonalized',
     'reply_to',
-    'response'
+    'ML_best_response',
+    'cosine_best_response'
 ]
 
 # Walk through all subdirectories
 for root, _, files in os.walk(args.input_folder):
     for file in files:
-        if file.endswith('random_response.json') or file.endswith('optimal_response.json'):
+        if file.endswith('optimal_response.json'):
             json_path = os.path.join(root, file)
             csv_path = json_path.replace('.json', '.csv')
 
@@ -46,7 +47,8 @@ for root, _, files in os.walk(args.input_folder):
                     'retrieve_context': entry.get('retrieve_context', False),
                     'pesonalized': entry.get('OPPU', False),
                     'reply_to': entry.get('reply_to', ''),
-                    'response': entry.get('response', ''),
+                    'ML_best_response': entry.get('ML_best_response', ''),
+                    'cosine_best_response': entry.get('cosine_best_response', ''),
                 })
 
             # Write to CSV
