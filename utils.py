@@ -37,9 +37,14 @@ class Validator:
         """
         Validate dataset using a pre-trained BERT model for text classification.
         """
+        # Check class distribution
+        print("Class distribution:")
+        print(df['labels'].value_counts())
+        
         # Split dataset into training and validation sets
         train_texts, val_texts, train_labels, val_labels = train_test_split(
-            df['text'].tolist(), df['labels'].tolist(), test_size=0.2, random_state=42
+            df['text'].tolist(), df['labels'].tolist(), 
+            test_size=0.2, random_state=42, stratify=df['labels'].tolist()  # Ensure balanced split
         )
 
         # Load pre-trained tokenizer
@@ -59,47 +64,107 @@ class Validator:
 
         # Load pre-trained BERT model
         model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=2)
-        model.gradient_checkpointing_enable()  # Enable gradient checkpointing for memory efficiency
-
-        # Define training arguments
-        training_args = TrainingArguments(
-            output_dir="./BERT_models",  # Directory for model outputs
-            #evaluation_strategy='epoch',  # Evaluate at the end of each epoch
-            per_device_train_batch_size=8,
-            per_device_eval_batch_size=16,
-            num_train_epochs=3,
-            weight_decay=0.01,
-            logging_dir='./logs',  # Directory for logs
-            logging_steps=10,
+        
+        # Handle class imbalance with weighted loss
+        from sklearn.utils.class_weight import compute_class_weight
+        import torch
+        
+        class_weights = compute_class_weight(
+            'balanced', 
+            classes=np.unique(train_labels), 
+            y=train_labels
         )
+        class_weights = torch.FloatTensor(class_weights)
+        
+        # Custom trainer with weighted loss
+        class WeightedTrainer(Trainer):
+            def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+                labels = inputs.get("labels")
+                outputs = model(**inputs)
+                logits = outputs.get("logits")
+                
+                loss_fct = torch.nn.CrossEntropyLoss(weight=class_weights.to(model.device))
+                loss = loss_fct(logits.view(-1, self.model.config.num_labels), labels.view(-1))
+                
+                return (loss, outputs) if return_outputs else loss
+
+        # Define training arguments with better hyperparameters
+        training_args = TrainingArguments(
+            output_dir="./BERT_models",
+            eval_strategy='epoch',  # Enable evaluation (renamed from evaluation_strategy)
+            save_strategy='epoch',
+            per_device_train_batch_size=16,  # Increased batch size
+            per_device_eval_batch_size=32,
+            num_train_epochs=5,  # More epochs
+            learning_rate=2e-5,  # Standard BERT learning rate
+            weight_decay=0.01,
+            warmup_steps=500,  # Warmup for stable training
+            logging_dir='./logs',
+            logging_steps=50,
+            load_best_model_at_end=True,
+            metric_for_best_model="eval_loss",
+            greater_is_better=False,
+            save_total_limit=2,
+            gradient_accumulation_steps=2,  # Effective batch size = 32
+            max_grad_norm=1.0,  # Gradient clipping to prevent explosion
+            fp16=True,  # Mixed precision for efficiency
+            dataloader_num_workers=4,
+            report_to=None  # Disable wandb/tensorboard if not needed
+        )
+
+        # Define evaluation metrics
+        def compute_metrics(eval_pred):
+            predictions, labels = eval_pred
+            predictions = np.argmax(predictions, axis=1)
+            
+            from sklearn.metrics import accuracy_score, precision_recall_fscore_support
+            
+            accuracy = accuracy_score(labels, predictions)
+            precision, recall, f1, _ = precision_recall_fscore_support(labels, predictions, average='weighted')
+            
+            return {
+                'accuracy': accuracy,
+                'f1': f1,
+                'precision': precision,
+                'recall': recall
+            }
 
         data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
-        # Initialize Trainer
-        trainer = Trainer(
+        # Initialize Weighted Trainer
+        trainer = WeightedTrainer(
             model=model,
             args=training_args,
             train_dataset=train_dataset,
             eval_dataset=val_dataset,
             tokenizer=tokenizer,
             data_collator=data_collator,
+            compute_metrics=compute_metrics,
         )
 
         # Train the model
+        print("Starting training...")
         trainer.train()
 
         # Make predictions on validation set
+        print("Making predictions...")
         predictions = trainer.predict(val_dataset)
         preds = np.argmax(predictions.predictions, axis=1)
 
         # Generate classification report
         report = classification_report(val_labels, preds, output_dict=True)
+        print("\nClassification Report:")
         print(classification_report(val_labels, preds))
+
+        # Print prediction distribution
+        unique, counts = np.unique(preds, return_counts=True)
+        print(f"\nPrediction distribution: {dict(zip(unique, counts))}")
 
         # Generate and display confusion matrix
         cm = confusion_matrix(val_labels, preds)
         plt.figure(figsize=(8, 6))
-        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
+                    xticklabels=['AI', 'Human'], yticklabels=['AI', 'Human'])
         plt.xlabel('Predicted')
         plt.ylabel('Actual')
         plt.title('Confusion Matrix')
