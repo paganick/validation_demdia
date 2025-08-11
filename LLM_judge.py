@@ -65,20 +65,71 @@ def prepare_df_per_file(data):
 
 from sklearn.model_selection import GroupKFold
 
-def process_json_file(json_path):
-    modified_json_path = json_path.replace("_random_response.json", "_optimal_response.json")
-    if os.path.exists(modified_json_path):
-        print(f"⏭️ Skipping {json_path}, already processed.")
+def regenerate_response_comparisons_only(json_path):
+    """Regenerate only the response_comparisons.csv file from existing optimal_response.json"""
+    
+    # Check if optimal_response.json exists
+    optimal_json_path = json_path.replace("_random_response.json", "_optimal_response.json")
+    if not os.path.exists(optimal_json_path):
+        print(f"⚠️ {optimal_json_path} not found. Skipping.")
         return
+    
+    print(f"🔄 Regenerating response comparisons for {json_path}")
+    
+    # Load the optimal response data (which should have ML_best_response and cosine_best_response)
+    with open(optimal_json_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    
+    # Prepare CSV rows
+    selected_rows = []
+    
+    for entry in data:
+        user = entry.get("user", "")
+        reply_to = entry.get("reply_to", "")
+        original_message = entry.get("original_message", "")
+        previous_response = entry.get("response", "")  # This might be the randomly selected one
+        ml_best_response = entry.get("ML_best_response", "")
+        cosine_best_response = entry.get("cosine_best_response", "")
+        
+        selected_rows.append({
+            "user": user,
+            "reply_to": reply_to,
+            "original_message": original_message,
+            "previous_response": previous_response,
+            "ML_best_response": ml_best_response,
+            "cosine_best_response": cosine_best_response
+        })
+    
+    # Write the CSV file
+    out_path = json_path.replace("_random_response.json", "_response_comparisons.csv")
+    with open(out_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=[
+            "user", "reply_to", "original_message", "previous_response", 
+            "ML_best_response", "cosine_best_response"
+        ])
+        writer.writeheader()
+        writer.writerows(selected_rows)
+    
+    print(f"✅ Regenerated {out_path} with {len(selected_rows)} rows")
+
+def process_json_file(json_path):
+    # First check if we only need to regenerate the CSV
+    optimal_json_path = json_path.replace("_random_response.json", "_optimal_response.json")
+    csv_path = json_path.replace("_random_response.json", "_response_comparisons.csv")
+    
+    if os.path.exists(optimal_json_path):
+        print(f"📋 Optimal response file exists. Regenerating CSV only for {json_path}")
+        regenerate_response_comparisons_only(json_path)
+        return
+    
+    # If optimal_response.json doesn't exist, run the full process
+    print(f"🔄 Running full process for {json_path}")
     
     with open(json_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
 
     df, meta_df = prepare_df_per_file(data)
     features_out_path = json_path.replace("_random_response.json", "_responses_features.csv")
-    if os.path.exists(modified_json_path):
-        print(f"⏭️ Skipping {json_path}, already processed.")
-        return
         
     if os.path.exists(features_out_path):
         print(f"📥 Loading cached features from {features_out_path}")
@@ -128,15 +179,17 @@ def process_json_file(json_path):
 
             candidates_raw = entry.get("all_valid_responses", [])
             if not candidates_raw:
+                # Handle empty candidates case
                 selected_rows.append({
                     "user": row["user"],
                     "reply_to": row["reply_to"],
-                    "original_message": entry["original_message"],
-                    "previous_response": entry.get("previous_response", ""),
-                    "ml_best_response": ml_best_response,
-                    "cosine_best_response": cosine_best_response
+                    "original_message": entry.get("original_message", ""),
+                    "previous_response": entry.get("response", ""),
+                    "ML_best_response": "",
+                    "cosine_best_response": ""
                 })
-                entry["response"] = ""
+                entry["ML_best_response"] = ""
+                entry["cosine_best_response"] = ""
                 entry["all_valid_responses"] = []
                 continue
 
@@ -149,18 +202,6 @@ def process_json_file(json_path):
 
             prob_lookup = dict(zip(df_unique["response"], unique_probs))
             probs_full = [prob_lookup[resp] for resp in responses]
-            selected_idx = int(np.argmax(probs_full))
-            selected_response = responses[selected_idx]
-
-            processed_group_ids.add(group_id)
-            selected_rows.append({
-                "user": row["user"],
-                "reply_to": row["reply_to"],
-                "original_message": entry["original_message"],
-                "previous_response": entry.get("response", ""),
-                "ML_best_response":  entry.get("ML_best_response", ""),
-                "cosine_best_response": entry.get("cosine_best_response", ""),
-            })
 
             # Compute cosine similarities
             original_msg = entry["original_message"]
@@ -175,20 +216,30 @@ def process_json_file(json_path):
                     "cosine_similarity": float(cos_sim)
                 })
 
-            # Sort by ML score (probability)
+            # Sort by ML score (probability) - HIGHER is better for human-like
             sorted_by_prob = sorted(enriched_responses, key=lambda x: x["probability"], reverse=True)
             ml_best_response = sorted_by_prob[0]["response"]
 
-            # Sort by cosine similarity
+            # Sort by cosine similarity - HIGHER is better for similarity to original
             sorted_by_cosine = sorted(enriched_responses, key=lambda x: x["cosine_similarity"], reverse=True)
             cosine_best_response = sorted_by_cosine[0]["response"]
+
+            processed_group_ids.add(group_id)
+            selected_rows.append({
+                "user": row["user"],
+                "reply_to": row["reply_to"],
+                "original_message": entry["original_message"],
+                "previous_response": entry.get("response", ""),
+                "ML_best_response": ml_best_response,
+                "cosine_best_response": cosine_best_response,
+            })
 
             # Save into entry
             entry["ML_best_response"] = ml_best_response
             entry["cosine_best_response"] = cosine_best_response
             entry["all_valid_responses"] = enriched_responses
 
-            
+    # Write CSV file
     out_path = json_path.replace("_random_response.json", "_response_comparisons.csv")
     with open(out_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=[
@@ -199,6 +250,7 @@ def process_json_file(json_path):
         writer.writerows(selected_rows)
     print(f"✅ Saved {out_path}")
 
+    # Save modified JSON
     modified_json_path = json_path.replace("_random_response.json", "_optimal_response.json")
     import re
 
@@ -215,7 +267,6 @@ def process_json_file(json_path):
     with open(modified_json_path, "w", encoding="utf-8") as f:
         json.dump(cleaned_data, f, indent=2, ensure_ascii=False)
     print(f"📝 Saved modified JSON with probabilities to {modified_json_path}")
-
 
 
 def main(input_folder):
