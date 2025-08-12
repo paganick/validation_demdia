@@ -10,6 +10,7 @@ from empath import Empath
 from scipy.stats import ranksums
 from scipy.spatial.distance import euclidean
 from rank_bm25 import BM25Okapi
+import os
 
 class Validator:
     """
@@ -37,6 +38,7 @@ class Validator:
         """
         Validate dataset using a pre-trained BERT model for text classification.
         """
+        os.makedirs("./BERT_models", exist_ok=True)
         # Check class distribution
         print("Class distribution:")
         print(df['labels'].value_counts())
@@ -102,8 +104,10 @@ class Validator:
             logging_dir='./logs',
             logging_steps=50,
             load_best_model_at_end=True,
-            metric_for_best_model="eval_loss",
-            greater_is_better=False,
+            # metric_for_best_model="eval_loss",
+            # greater_is_better=False,
+            metric_for_best_model="eval_f1",
+            greater_is_better=True,
             save_total_limit=2,
             gradient_accumulation_steps=2,  # Effective batch size = 32
             max_grad_norm=1.0,  # Gradient clipping to prevent explosion
@@ -131,7 +135,8 @@ class Validator:
 
         data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
-        # Initialize Weighted Trainer
+        from transformers import EarlyStoppingCallback
+
         trainer = WeightedTrainer(
             model=model,
             args=training_args,
@@ -140,6 +145,7 @@ class Validator:
             tokenizer=tokenizer,
             data_collator=data_collator,
             compute_metrics=compute_metrics,
+            callbacks=[EarlyStoppingCallback(early_stopping_patience=2)]  # stop if no improvement for 2 evals
         )
 
         # Train the model
