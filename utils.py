@@ -10,7 +10,6 @@ from empath import Empath
 from scipy.stats import ranksums
 from scipy.spatial.distance import euclidean
 from rank_bm25 import BM25Okapi
-import os
 
 class Validator:
     """
@@ -34,7 +33,82 @@ class Validator:
         cls.empath_validate(df)
     
     @classmethod
-    def bert_validate(cls, df): 
+    def bert_validate_twitter(cls, df): 
+        """
+        Validate dataset using a pre-trained BERT model for text classification.
+        """
+        # Split dataset into training and validation sets
+        train_texts, val_texts, train_labels, val_labels = train_test_split(
+            df['text'].tolist(), df['labels'].tolist(), test_size=0.2, random_state=42
+        )
+
+        # Load pre-trained tokenizer
+        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        
+        def tokenize_function(examples):
+            """Tokenizes input texts."""
+            return tokenizer(examples["text"], truncation=True, padding="max_length", max_length=512)
+
+        # Convert data to Hugging Face Dataset format
+        train_dataset = Dataset.from_dict({'text': train_texts, 'labels': train_labels})
+        val_dataset = Dataset.from_dict({'text': val_texts, 'labels': val_labels})
+
+        # Apply tokenization
+        train_dataset = train_dataset.map(tokenize_function, batched=True)
+        val_dataset = val_dataset.map(tokenize_function, batched=True)
+
+        # Load pre-trained BERT model
+        model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=2)
+        model.gradient_checkpointing_enable()  # Enable gradient checkpointing for memory efficiency
+
+        # Define training arguments
+        training_args = TrainingArguments(
+            output_dir="./BERT_models",  # Directory for model outputs
+            #evaluation_strategy='epoch',  # Evaluate at the end of each epoch
+            per_device_train_batch_size=8,
+            per_device_eval_batch_size=16,
+            num_train_epochs=3,
+            weight_decay=0.01,
+            logging_dir='./logs',  # Directory for logs
+            logging_steps=10,
+        )
+
+        data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
+
+        # Initialize Trainer
+        trainer = Trainer(
+            model=model,
+            args=training_args,
+            train_dataset=train_dataset,
+            eval_dataset=val_dataset,
+            tokenizer=tokenizer,
+            data_collator=data_collator,
+        )
+
+        # Train the model
+        trainer.train()
+
+        # Make predictions on validation set
+        predictions = trainer.predict(val_dataset)
+        preds = np.argmax(predictions.predictions, axis=1)
+
+        # Generate classification report
+        report = classification_report(val_labels, preds, output_dict=True)
+        print(classification_report(val_labels, preds))
+
+        # Generate and display confusion matrix
+        cm = confusion_matrix(val_labels, preds)
+        plt.figure(figsize=(8, 6))
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
+        plt.xlabel('Predicted')
+        plt.ylabel('Actual')
+        plt.title('Confusion Matrix')
+        plt.show()
+
+        return trainer, report, cm
+
+    @classmethod
+    def bert_validate_bluesky(cls, df): 
         """
         Validate dataset using a pre-trained BERT model for text classification.
         """
@@ -177,7 +251,7 @@ class Validator:
         plt.show()
 
         return trainer, report, cm
-
+    
     @classmethod
     def empath_validate(cls, df):
         """

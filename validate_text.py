@@ -29,7 +29,7 @@ def find_validation_files(base_folder):
     return validation_files
 
 
-def process_file(file_path, run_bert=True, run_empath=True):
+def process_file(file_path, run_bert=True, run_empath=True, data_type="twitter"):
     print(f"\nProcessing file: {file_path}")
     base, ext = os.path.splitext(file_path)
     labelled_file = base + "_labelled.csv"
@@ -50,8 +50,13 @@ def process_file(file_path, run_bert=True, run_empath=True):
 
             df['length'] = df['text'].apply(lambda x: len(str(x).split()))
             print(df.groupby('labels')['length'].describe())
-
-            trainer, report, cm = Validator.bert_validate(df)
+            
+            if data_type == "bluesky":
+                print("Using BERT validation for Bluesky data.")
+                trainer, report, cm = Validator.bert_validate_bluesky(df)
+            else:
+                print("Using BERT validation for Twitter data.")    
+                trainer, report, cm = Validator.bert_validate_twitter(df)
 
             with open(report_file, "w") as f:
                 json.dump(report, f, indent=4)
@@ -115,8 +120,16 @@ def main():
         choices=["bert", "empath", "all"],
         help="Which validation to run."
     )
+    parser.add_argument(
+        "--data_type",
+        type=str,
+        default="all",
+        choices=["twitter", "bluesky"],
+        help="Which data validation to run."
+    )
     args = parser.parse_args()
 
+    data_type = args.data_type
     run_bert = args.validation in ["bert", "all"]
     run_empath = args.validation in ["empath", "all"]
 
@@ -126,7 +139,7 @@ def main():
         return
 
     for file_path in validation_files:
-        process_file(file_path, run_bert, run_empath)
+        process_file(file_path, run_bert, run_empath, data_type)
 
 
 if __name__ == "__main__":
