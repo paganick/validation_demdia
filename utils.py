@@ -33,7 +33,7 @@ class Validator:
         cls.empath_validate(df)
     
     @classmethod
-    def bert_validate_twitter(cls, df): 
+    def bert_validate_twitter(cls, df, tokenizer): 
         """
         Validate dataset using a pre-trained BERT model for text classification.
         """
@@ -41,10 +41,7 @@ class Validator:
         train_texts, val_texts, train_labels, val_labels = train_test_split(
             df['text'].tolist(), df['labels'].tolist(), test_size=0.2, random_state=42
         )
-
-        # Load pre-trained tokenizer
-        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        
+     
         def tokenize_function(examples):
             """Tokenizes input texts."""
             return tokenizer(examples["text"], truncation=True, padding="max_length", max_length=512)
@@ -108,7 +105,7 @@ class Validator:
         return trainer, report, cm
 
     @classmethod
-    def bert_validate_bluesky(cls, df): 
+    def bert_validate_bluesky(cls, df, tokenizer): 
         """
         Validate dataset using a pre-trained BERT model for text classification.
         """
@@ -122,9 +119,6 @@ class Validator:
             df['text'].tolist(), df['labels'].tolist(), 
             test_size=0.2, random_state=42, stratify=df['labels'].tolist()  # Ensure balanced split
         )
-
-        # Load pre-trained tokenizer
-        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         
         def tokenize_function(examples):
             """Tokenizes input texts."""

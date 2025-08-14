@@ -53,10 +53,10 @@ def process_file(file_path, run_bert=True, run_empath=True, data_type="twitter")
             
             if data_type == "bluesky":
                 print("Using BERT validation for Bluesky data.")
-                trainer, report, cm = Validator.bert_validate_bluesky(df)
+                trainer, report, cm = Validator.bert_validate_bluesky(df, tokenizer)
             else:
                 print("Using BERT validation for Twitter data.")    
-                trainer, report, cm = Validator.bert_validate_twitter(df)
+                trainer, report, cm = Validator.bert_validate_twitter(df, tokenizer)
 
             with open(report_file, "w") as f:
                 json.dump(report, f, indent=4)
