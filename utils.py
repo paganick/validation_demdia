@@ -12,7 +12,6 @@ from scipy.spatial.distance import euclidean
 from rank_bm25 import BM25Okapi
 import json
 import torch
-import pickle
 
 class Validator:
     """
@@ -257,9 +256,9 @@ class Validator:
                 'precision_macro': report['macro avg']['precision'],
                 'recall_macro': report['macro avg']['recall'],
                 'report': report,
-                'confusion_matrix': cm,
-                'predictions': preds,
-                'true_labels': val_labels,
+                'confusion_matrix': cm.tolist() if isinstance(cm, np.ndarray) else cm,
+                'predictions': preds.tolist() if isinstance(preds, np.ndarray) else preds,
+                'true_labels': val_labels.tolist() if isinstance(val_labels, np.ndarray) else val_labels,
                 'val_texts': val_texts,  # Store for potential re-analysis
                 'training_history': trainer.state.log_history if hasattr(trainer.state, 'log_history') else None
             }
