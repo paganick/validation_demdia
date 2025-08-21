@@ -15,7 +15,7 @@ except ImportError:
     print("Warning: Empath module is not installed. Empath validation will be skipped.")
 
 # Import the Validator class from our utilities file
-from utils import Validator
+from utils_with_shap import Validator
 
 # Initialize the BERT tokenizer to be used throughout the script
 tokenizer = BertTokenizer.from_pretrained("bert-base-uncased", local_files_only=False)
@@ -33,6 +33,8 @@ def process_file(file_path, run_bert=True, run_empath=True, data_type="twitter")
     print(f"\nProcessing file: {file_path}")
     base, ext = os.path.splitext(file_path)
     labelled_file = base + "_labelled.csv"
+    shap_file = base + "_bert_shap_analysis.csv"
+    trainer_file = base + "_trainer_results.json"
     cm_file = base + "_confusion_matrix.csv"
     report_file = base + "_bert_report.json"
     features_file = base + "_empath_significant_features.csv"
@@ -51,12 +53,12 @@ def process_file(file_path, run_bert=True, run_empath=True, data_type="twitter")
             df['length'] = df['text'].apply(lambda x: len(str(x).split()))
             print(df.groupby('labels')['length'].describe())
             
-            if data_type == "bluesky":
-                print("Using BERT validation for Bluesky data.")
-                trainer, report, cm = Validator.bert_validate_bluesky(df, tokenizer)
-            else:
-                print("Using BERT validation for Twitter data.")    
-                trainer, report, cm = Validator.bert_validate_twitter(df, tokenizer)
+            trainer, report, cm, results, shap_data, shap_summary_stats = Validator.bert_validate(df, tokenizer, dataset_type=data_type)
+            
+            with open(trainer_file, "w") as f:
+                json.dump(results, f, indent=2, default=str)
+
+            data_file = Validator.save_shap_plotting_data(shap_data, shap_summary_stats, shap_file)
 
             with open(report_file, "w") as f:
                 json.dump(report, f, indent=4)
