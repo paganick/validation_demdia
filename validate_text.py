@@ -15,7 +15,7 @@ except ImportError:
     print("Warning: Empath module is not installed. Empath validation will be skipped.")
 
 # Import the Validator class from our utilities file
-from utils_with_shap import Validator
+from utils import Validator
 
 # Initialize the BERT tokenizer to be used throughout the script
 tokenizer = BertTokenizer.from_pretrained("bert-base-uncased", local_files_only=False)
@@ -56,7 +56,7 @@ def process_file(file_path, run_bert=True, run_empath=True, data_type="twitter")
             trainer, report, cm, results, shap_data, shap_summary_stats = Validator.bert_validate(df, tokenizer, dataset_type=data_type)
             
             with open(trainer_file, "w") as f:
-                json.dump(results, f, indent=2, default=str)
+                json.dump(results, f, default=str, indent=2)
 
             data_file = Validator.save_shap_plotting_data(shap_data, shap_summary_stats, shap_file)
 

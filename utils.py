@@ -12,6 +12,9 @@ from scipy.spatial.distance import euclidean
 from rank_bm25 import BM25Okapi
 import json
 import torch
+from datetime import datetime
+import uuid
+            
 
 class Validator:
     """
@@ -129,10 +132,18 @@ class Validator:
             # Load fresh model for each run
             model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=2)
             
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            unique_id = uuid.uuid4().hex[:8]   # short random string
+            pid = os.getpid()                  # process ID
+
+            output_dir = f"./BERT_models/run_{run_idx}_{timestamp}_{pid}_{unique_id}"
+
+            print(f"Output directory: {output_dir}")       
+
             # Speed-optimized training arguments with epoch-based evaluation
             if is_small_dataset:
                 training_args = TrainingArguments(
-                    output_dir=f"./BERT_models/run_{run_idx}",
+                    output_dir=output_dir,
                     eval_strategy='epoch',
                     save_strategy='epoch',
                     per_device_train_batch_size=16,
@@ -145,7 +156,7 @@ class Validator:
                     load_best_model_at_end=True,
                     metric_for_best_model="eval_f1",
                     greater_is_better=True,
-                    save_total_limit=1,
+                    save_total_limit=6,
                     seed=seed,
                     data_seed=seed,
                     fp16=torch.cuda.is_available(),
@@ -153,12 +164,13 @@ class Validator:
                     report_to=None,
                     remove_unused_columns=True,
                     dataloader_pin_memory=False,
+                    overwrite_output_dir=True
                 )
                 early_stopping_patience = 3
                 
             else:
                 training_args = TrainingArguments(
-                    output_dir=f"./BERT_models/run_{run_idx}",
+                    output_dir=output_dir,
                     eval_strategy='epoch',
                     save_strategy='epoch',
                     per_device_train_batch_size=32,
@@ -171,7 +183,7 @@ class Validator:
                     load_best_model_at_end=True,
                     metric_for_best_model="eval_f1",
                     greater_is_better=True,
-                    save_total_limit=1,
+                    save_total_limit=3,
                     gradient_accumulation_steps=1,
                     max_grad_norm=1.0,
                     seed=seed,
@@ -181,6 +193,7 @@ class Validator:
                     report_to=None,
                     remove_unused_columns=True,
                     dataloader_pin_memory=torch.cuda.is_available(),
+                    overwrite_output_dir=True
                 )
                 early_stopping_patience = 2
 
@@ -262,7 +275,9 @@ class Validator:
                 'val_texts': val_texts,  # Store for potential re-analysis
                 'training_history': trainer.state.log_history if hasattr(trainer.state, 'log_history') else None
             }
-            
+            import shutil
+            shutil.rmtree(output_dir)  # delete checkpoints folder
+
             all_results.append(run_result)
             all_confusion_matrices.append(cm)
             all_trainers.append(trainer)
