@@ -13,7 +13,6 @@ def main():
     parser.add_argument('--config', type=str, help="Path to a single config file")
     parser.add_argument('--config_dir', type=str, help="Folder containing multiple config files")
     parser.add_argument('--data_file', type=str, help="Path to a data file")
-    parser.add_argument('--dataset_type', type=str, help="dataset type", default="TWITTER")
     parser.add_argument('--output_dir', type=str, default="simulations/")
     parser.add_argument('--n_users', type=int, default=250)
     parser.add_argument('--n_responses_per_user', type=int, default=20)
@@ -21,8 +20,6 @@ def main():
                         help="List of keywords to filter config filenames (e.g. --filter_keywords deepseek withcontext)")
 
     args = parser.parse_args()
-
-    dataset_type = args.dataset_type
     
     os.makedirs(args.output_dir, exist_ok=True)
 
@@ -79,7 +76,7 @@ def main():
         print(f"[RUNNING] Config: {cfg_path}")
         
         if args.experiment_type == 'random_response':    
-            results = run_simulation_random_response(config, data_file, dataset_type, n_users=args.n_users, 
+            results = run_simulation_random_response(config, data_file, n_users=args.n_users, 
                                              n_responses_per_user= args.n_responses_per_user, 
                                              output_path=output_path)
         elif args.experiment_type == 'political_affiliation':
