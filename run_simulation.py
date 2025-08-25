@@ -22,9 +22,6 @@ def main():
     
     os.makedirs(args.output_dir, exist_ok=True)
 
-    if args.experiment_type not in ["random_response", "political_affiliation"]:
-        raise ValueError("You must provide a valid experiment_type between political_affiliation and random_response")
-
     # Collect all config file paths
     if args.config:
         config_paths = [args.config]
