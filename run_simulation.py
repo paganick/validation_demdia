@@ -9,7 +9,6 @@ import src.globals as globals_module
 def main():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--experiment_type', type=str, help="experiment type between political_affiliation and random_response", default="random_response")
     parser.add_argument('--config', type=str, help="Path to a single config file")
     parser.add_argument('--config_dir', type=str, help="Folder containing multiple config files")
     parser.add_argument('--data_file', type=str, help="Path to a data file")
@@ -47,7 +46,7 @@ def main():
     if args.data_file:
         data_file = args.data_file
     else:
-        data_file = "data/personas_and_tweets.df.pkl"
+       raise ValueError("You must provide either a data file using --data_file")
 
     for cfg_path in config_paths:
         config = load_config(cfg_path)
@@ -68,21 +67,17 @@ def main():
             "OPPU" if config["OPPU"] else "no_OPPU"
         ]
         output_filename = "__".join(filename_parts) 
-        output_filename += "__" + args.experiment_type + ".json"
+        output_filename += "__random_response.json"
         output_path = os.path.join(args.output_dir, output_filename)
         print(output_filename)
         print(output_path)
 
         print(f"[RUNNING] Config: {cfg_path}")
-        
-        if args.experiment_type == 'random_response':    
-            results = run_simulation_random_response(config, data_file, n_users=args.n_users, 
+       
+        results = run_simulation_random_response(config, data_file, n_users=args.n_users, 
                                              n_responses_per_user= args.n_responses_per_user, 
                                              output_path=output_path)
-        elif args.experiment_type == 'political_affiliation':
-            results = run_simulation_political_affiliation(config, n_users=args.n_users, 
-                                             output_path=output_path)
-
+        
         with open(output_path, "w") as f:
             json.dump(results, f, indent=2)
 
