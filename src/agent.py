@@ -13,11 +13,10 @@ from .model_utils import *
 from .model import Model
 
 class Agent:
-    def __init__(self, username: str, data_file: str, dataset_type: str):
+    def __init__(self, username: str, data_file: str):
         """Initialize an agent with a username and load all past text examples."""
         self.username = username
         self.data_file = data_file
-        self.dataset_type = dataset_type
         self.examples = self.load_persona_examples()
         self.create_user_history()
         self.personalized_model = None
@@ -214,7 +213,7 @@ class Agent:
                     retrieved_context = retrieve_context(last_message, bm25_client, history, k=k_retrieval)
 
         def build_prompt(persona_examples, conversation_history, retrieved_context=""):
-            prompt = f"[Instruction] {self.persona}. Continue the conversation naturally adding a concise (one sentence) tweet reply.\n"
+            prompt = f"[Instruction] {self.persona}. Continue the conversation naturally adding a concise (one sentence) reply.\n"
             if persona_examples:
                 examples = "\n".join(f"- {ex}" for ex in persona_examples)
                 prompt += f"[Writing Style] These are some tweets that represent how @{self.username} writes:\n{examples}\n\n"
@@ -241,16 +240,6 @@ class Agent:
             if "this is some useful context retrieved from" in response.lower():
                 return False
             return True
-
-        def score_response(resp):
-            
-            if self.dataset_type=='BSKY':
-                sample = weibull_min.rvs(2.476, loc=0, scale=37.787, size=1)[0]
-                target_length = max(1, round(sample))                              # FOR BLUESKY DATA
-            elif self.dataset_type == 'TWITTER':
-                target_length = np.random.poisson(lam=14)                          # FOR TWITTER DATA
-            length_diff = abs(len(resp.split()) - target_length)
-            return length_diff if is_valid_response(resp, prompt) else float("inf")
 
         valid_responses = []
         attempts = 0
@@ -283,5 +272,5 @@ class Agent:
             
 
         # Sort and return top n_candidates valid responses
-        valid_responses_sorted = sorted(valid_responses, key=score_response)
-        return valid_responses_sorted[:n_candidates]
+        #valid_responses_sorted = sorted(valid_responses, key=score_response)
+        return valid_responses[:n_candidates]

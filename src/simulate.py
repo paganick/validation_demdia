@@ -5,7 +5,7 @@ import os
 from .model import Model
 from .agent import Agent
 
-def run_simulation_random_response(config, data_file, dataset_type, n_users=1000, n_responses_per_user=1, output_path=None):
+def run_simulation_random_response(config, data_file, n_users=1000, n_responses_per_user=1, output_path=None):
 
     results = []
     existing_predictions = set()
@@ -58,7 +58,7 @@ def run_simulation_random_response(config, data_file, dataset_type, n_users=1000
     j = 0
     for username, user_df in df_test.groupby("username"):
         print(f"\n👤 Processing user: {username} ({len(user_df)} samples)")
-        agent = Agent(username, data_file, dataset_type)
+        agent = Agent(username, data_file)
         
         for i, row in enumerate(user_df.itertuples(index=False), start=1):
             reply_to = row.reply_to
@@ -80,7 +80,7 @@ def run_simulation_random_response(config, data_file, dataset_type, n_users=1000
                 continue
             
             if not model_loaded:
-                model = Model(config)
+                model = Model(config, finetuning_filepath=data_file)
                 model_loaded = True
 
             # Generate responses (returns a list of valid responses)
