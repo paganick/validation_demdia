@@ -8,7 +8,7 @@ from datasets import Dataset
 from transformers import BitsAndBytesConfig
 
 class Model:
-    def __init__(self, config, finetuning_filepath='twitter_data.pkl'):
+    def __init__(self, config, finetuning_filepath):
         self.model_name = config["model"]
         self.fine_tuned_dir = f"{config['finetuning_dir']}{config['model']}_finetuned_{os.path.splitext(finetuning_filepath)[0]}"
         self.finetuning_filepath = finetuning_filepath
