@@ -75,5 +75,10 @@ def main():
                                              n_responses_per_user= args.n_responses_per_user, 
                                              output_path=output_path)
         
+        with open(output_path, "w") as f:
+            json.dump(results, f, indent=2)
+
+        print(f"[DONE] Results saved to {output_path}")
+
 if __name__ == "__main__":
     main()
