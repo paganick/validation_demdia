@@ -57,19 +57,19 @@ def file_lock(file_path, timeout=5):
 
 def run_simulation_random_response(config, data_file, n_users=1000, n_responses_per_user=1, output_path=None):
     """
-    Enhanced version with file locking to prevent concurrent processing of the same file.
+    Version with file locking held during the entire simulation run.
     """
-    
-    # Skip if we can't acquire lock on the output file
     if output_path:
         with file_lock(output_path) as lock_acquired:
-            if lock_acquired is None:
+            if not lock_acquired:
                 print(f"🚫 Skipping {output_path} - another process is working on it")
                 return []
             
+            # All reading/writing MUST happen under the lock
             return _run_simulation_with_lock(config, data_file, n_users, n_responses_per_user, output_path)
     else:
         return _run_simulation_with_lock(config, data_file, n_users, n_responses_per_user, output_path)
+
 
 
 def _run_simulation_with_lock(config, data_file, n_users, n_responses_per_user, output_path):
