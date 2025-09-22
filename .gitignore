@@ -1,12 +1,22 @@
 results/*
 configs/*
 data/personas_and_tweets.df.pkl
+bluesky_data.pkl
+twitter_data.pkl
+reddit_data.pkl
+
 BERT_models/*
+
+check_run.py
+copy_data.py
+move_files.py
+test_apertus.py
 
 # Byte-compiled / cache files
 __pycache__/
 *.py[cod]
 
 *.json
+*.json.lock
 *.csv
 *.png
