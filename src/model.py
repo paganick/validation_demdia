@@ -24,7 +24,7 @@ class Model:
             self.model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         elif os.path.exists(self.fine_tuned_dir):
-            print(f"Loading fine-tuned model from {self.fine_tuned_dir}")
+            print(f"Loading fine-tuned model from {self.fine_tuned_dir}")           
             self.model = AutoModelForCausalLM.from_pretrained(self.fine_tuned_dir, device_map="auto")
             self.tokenizer = AutoTokenizer.from_pretrained(self.fine_tuned_dir)
             # Set generation config for fine-tuned model
@@ -54,7 +54,23 @@ class Model:
             llm_int8_threshold=6.0,
         )
 
-        tokenizer = AutoTokenizer.from_pretrained(self.model_name, use_fast=False, legacy=True)
+        # Check if this is an Apertus model for minimal adjustments
+        is_apertus = "apertus" in self.model_name.lower() or "swiss-ai" in self.model_name.lower()
+
+        # MINIMAL CHANGE 1: Apertus needs trust_remote_code, others use original settings
+        if is_apertus:
+            tokenizer = AutoTokenizer.from_pretrained(
+                self.model_name, 
+                use_fast=True,
+                trust_remote_code=True
+            )
+        else:
+            tokenizer = AutoTokenizer.from_pretrained(
+                self.model_name, 
+                use_fast=False, 
+                legacy=True
+            )
+        
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
 
@@ -133,13 +149,22 @@ class Model:
 
         tokenized_train_dataset = train_dataset.map(preprocess_function, batched=False)
         tokenized_val_dataset = val_dataset.map(preprocess_function, batched=False)
-
-        model = AutoModelForCausalLM.from_pretrained(
-            self.model_name, 
-            quantization_config=bnb_config,  
-            torch_dtype=torch.float16,
-            device_map="auto"
-        )
+        
+        # MINIMAL CHANGE 2: Apertus needs different model loading to avoid dtype issues
+        if is_apertus:
+            model = AutoModelForCausalLM.from_pretrained(
+                self.model_name, 
+                torch_dtype=torch.float32,  # Use float32 for Apertus
+                device_map="auto",
+                trust_remote_code=True
+            )
+        else:
+            model = AutoModelForCausalLM.from_pretrained(
+                self.model_name, 
+                quantization_config=bnb_config,  
+                torch_dtype=torch.float16,
+                device_map="auto"
+            )
 
         # Improved LoRA configuration
         peft_config = LoraConfig(
@@ -152,10 +177,15 @@ class Model:
         )
 
         model = get_peft_model(model, peft_config)
+        
+        # MINIMAL CHANGE 3: Ensure consistent dtype for Apertus
+        if is_apertus:
+            model = model.float()  # Convert everything to float32 for Apertus
+
         model.gradient_checkpointing_enable()
         model.enable_input_require_grads()
 
-        # Improved training arguments
+        # MINIMAL CHANGE 4: Disable mixed precision for Apertus only
         training_args = TrainingArguments(
             output_dir=checkpoint_dir,
             per_device_train_batch_size=2,  # Smaller batch size
@@ -166,13 +196,13 @@ class Model:
             lr_scheduler_type="cosine",
             warmup_steps=50,
             weight_decay=0.01,  # Add weight decay for regularization
-            fp16=True,
+            fp16=False if is_apertus else True,  # Disable fp16 only for Apertus
             optim="adamw_torch",
             save_steps=200,
             save_total_limit=3,
             logging_steps=25,
             eval_strategy="steps",
-            eval_steps=100,
+            eval_steps=200,
             load_best_model_at_end=True,
             metric_for_best_model="eval_loss",
             greater_is_better=False,
