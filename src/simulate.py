@@ -95,7 +95,7 @@ def _run_simulation_with_lock(config, data_file, n_users, n_responses_per_user, 
                 results.extend(existing_results)
                 existing_predictions = {
                     (row["user"], row["original_message"], row["reply_to"], row["model"], row["fine_tuned"],
-                    row["retrieve_context"], row["OPPU"], row["n_style_examples"])
+                    row["retrieve_context"], row["OPPU"], row["n_style_examples"], row.get("with_persona", True))
                     for row in existing_results
                 }
                 print(f"📚 [DEBUG] Loaded {len(existing_results)} existing results")
@@ -170,6 +170,7 @@ def _run_simulation_with_lock(config, data_file, n_users, n_responses_per_user, 
                 config["retrieve_context"],
                 config["OPPU"],
                 config["n_style_examples"],
+                config["with_persona"],
             )
 
             if prediction_key in existing_predictions:
@@ -190,13 +191,14 @@ def _run_simulation_with_lock(config, data_file, n_users, n_responses_per_user, 
                     return results
 
             # Generate responses (returns a list of valid responses)
-            print(f"🎯 [DEBUG] Generating response with {config['n_style_examples']} style examples...")
+            print(f"🎯 [DEBUG] Generating response with {config['n_style_examples']} style examples, with_persona={config['with_persona']}...")
             try:
                 responses = agent.generate_response(
                     llm=model,
                     n_examples=config["n_style_examples"],
                     retrieve_context_bool=config["retrieve_context"],
                     personalized_bool=config["OPPU"],
+                    with_persona=config["with_persona"],
                     conversation_history=[reply_to],
                     n_candidates=20
                 )
@@ -218,6 +220,7 @@ def _run_simulation_with_lock(config, data_file, n_users, n_responses_per_user, 
                 "retrieve_context": config["retrieve_context"],
                 "OPPU": config["OPPU"],
                 "n_style_examples": config["n_style_examples"],
+                "with_persona": config["with_persona"],
                 "reply_to": reply_to,
                 "original_message": original_message,
                 "response": responses[0],

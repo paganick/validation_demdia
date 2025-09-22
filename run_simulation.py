@@ -53,6 +53,7 @@ def main():
         config.setdefault("finetuned", False)
         config.setdefault("retrieve_context", False)
         config.setdefault("n_style_examples", 0)
+        config.setdefault("with_persona", True)
         config.setdefault("OPPU", False)
 
         # Generate an output filename based on config values
@@ -64,6 +65,10 @@ def main():
             "OPPU" if config["OPPU"] else "no_OPPU"
         ]
         output_filename = "__".join(filename_parts) 
+        if config['with_persona']:
+            output_filename += "" 
+        else:
+            output_filename += "__no_persona"
         output_filename += "__random_response.json"
         output_path = os.path.join(args.output_dir, output_filename)
         print(output_filename)

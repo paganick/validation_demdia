@@ -194,6 +194,7 @@ class Agent:
         n_examples,
         retrieve_context_bool,
         personalized_bool,
+        with_persona: bool = True,
         conversation_history: list = [],
         n_candidates: int = 20,
         max_total_attempts: int = 5
@@ -213,7 +214,12 @@ class Agent:
                     retrieved_context = retrieve_context(last_message, bm25_client, history, k=k_retrieval)
 
         def build_prompt(persona_examples, conversation_history, retrieved_context=""):
-            prompt = f"[Instruction] {self.persona}. Continue the conversation naturally adding a concise (one sentence) reply.\n"
+            prompt = "[Instruction] "
+            if with_persona:
+                prompt += f"{self.persona}"
+            else:
+                prompt += f"You are @{self.username}. "
+            prompt+= "Continue the conversation naturally adding a concise (one sentence) reply.\n"
             if persona_examples:
                 examples = "\n".join(f"- {ex}" for ex in persona_examples)
                 prompt += f"[Writing Style] These are some tweets that represent how @{self.username} writes:\n{examples}\n\n"
@@ -224,7 +230,7 @@ class Agent:
             return prompt
 
         prompt = build_prompt(persona_examples, conversation_history, retrieved_context)
-
+        
         device = "cuda" if torch.cuda.is_available() else "cpu"
         model = llm.model if not personalized_bool else self.load_personalized_model(llm)
         tokenizer = llm.tokenizer if not personalized_bool else AutoTokenizer.from_pretrained(self.user_adapter_dir)
