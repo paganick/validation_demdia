@@ -38,15 +38,14 @@ class Validator:
         cls.empath_validate(df)
     
     @classmethod
-    def bert_validate(cls, df, tokenizer, dataset_type='bluesky', include_shap=True, 
-                    n_shap_samples=50, n_runs=3, random_seeds=None):
+    def bert_validate(cls, df, tokenizer, include_shap=True, 
+                    n_shap_samples=500, n_runs=3, random_seeds=None):
         """
         Fast 3-run BERT validation with comprehensive results storage and SHAP analysis.
         
         Args:
             df: DataFrame with 'text' and 'labels' columns
             tokenizer: Hugging Face tokenizer
-            dataset_type: 'bluesky' or 'twitter' - for reference
             include_shap: Whether to perform SHAP analysis
             n_shap_samples: Number of samples for SHAP
             n_runs: Number of training runs (default: 3)
@@ -340,166 +339,138 @@ class Validator:
         print("Median Confusion Matrix:")
         print(median_cm)
         
-        # SHAP Analysis Section (integrated from your code)
-        shap_data = None
-        shap_summary_stats = None
+        # SHAP Analysis Section - INITIALIZE VARIABLES FIRST
+        shap_data = {'error': 'SHAP analysis not attempted'}
+        shap_summary_stats = {'error': 'SHAP analysis not attempted'}
         
         if include_shap:
             print("\nStarting SHAP analysis...")
             
-            # Use the best model and its validation data
-            model = median_trainer.model
-            
-            # Get validation data from best run
-            val_texts = all_results[median_idx]['val_texts']
-            val_labels = all_results[median_idx]['true_labels']
-            preds = all_results[median_idx]['predictions']
-            random_seed = all_results[median_idx]['seed']
-            
-            # ---------------------------
-            # 1. Prediction wrapper
-            # ---------------------------
-            def predict_fn(texts):
-                # Ensure input is a list of strings
-                if isinstance(texts, str):
-                    texts = [texts]
-                texts = [str(t) for t in texts]
-
-                # Tokenize
-                inputs = tokenizer(
-                    texts,
-                    truncation=True,
-                    padding=True,
-                    max_length=512,
-                    return_tensors="pt"
-                )
-
-                device = next(model.parameters()).device
-                inputs = {k: v.to(device) for k, v in inputs.items()}
-
-                model.eval()
-                with torch.no_grad():
-                    outputs = model(**inputs)
-                    probs = torch.nn.functional.softmax(outputs.logits, dim=-1)
-                return probs.cpu().numpy()
-
-            # ---------------------------
-            # 2. Deterministic sampling
-            # ---------------------------
-            n_shap_samples = min(n_shap_samples, len(val_texts))
-            np.random.seed(random_seed)
-            shap_indices = np.random.choice(len(val_texts), n_shap_samples, replace=False)
-            shap_indices = np.sort(shap_indices)
-
-            shap_texts = [str(val_texts[i]) for i in shap_indices]
-            shap_true_labels = [val_labels[i] for i in shap_indices]
-            shap_pred_labels = [preds[i] for i in shap_indices]
-
-            # ---------------------------
-            # 3. Initialize SHAP explainer
-            # ---------------------------
             try:
+                # Use the median model and its validation data
+                model = median_trainer.model
+                
+                # Get validation data from median run
+                val_texts = all_results[median_idx]['val_texts']
+                val_labels = all_results[median_idx]['true_labels']
+                preds = all_results[median_idx]['predictions']
+                random_seed = all_results[median_idx]['seed']
+                
+                # ---------------------------
+                # 1. Prediction wrapper
+                # ---------------------------
+                def predict_fn(texts, batch_size=16):
+                    """Predict probabilities using the trained model."""
+                    if isinstance(texts, str):
+                        texts = [texts]
+                    texts = [str(t) for t in texts]
+
+                    all_probs = []
+                    device = next(model.parameters()).device
+
+                    for i in range(0, len(texts), batch_size):
+                        batch_texts = texts[i:i+batch_size]
+                        inputs = tokenizer(
+                            batch_texts,
+                            truncation=True,
+                            padding=True,
+                            max_length=512,
+                            return_tensors="pt"
+                        )
+                        inputs = {k: v.to(device) for k, v in inputs.items()}
+
+                        model.eval()
+                        with torch.no_grad():
+                            outputs = model(**inputs)
+                            probs = torch.nn.functional.softmax(outputs.logits, dim=-1)
+                        all_probs.append(probs.cpu())
+
+                    all_probs = torch.cat(all_probs, dim=0)
+                    return all_probs.numpy()
+
+                # ---------------------------
+                # 2. Deterministic sampling
+                # ---------------------------
+                np.random.seed(random_seed)
+                n_shap_samples = min(n_shap_samples, len(val_texts))
+                shap_indices = np.random.choice(len(val_texts), n_shap_samples, replace=False)
+                shap_indices = np.sort(shap_indices)
+
+                shap_texts = [str(val_texts[i]) for i in shap_indices]
+                shap_true_labels = [val_labels[i] for i in shap_indices]
+                shap_pred_labels = [preds[i] for i in shap_indices]
+
+                # ---------------------------
+                # 3. Initialize SHAP explainer
+                # ---------------------------
                 print(f"Using SHAP version: {shap.__version__}")
-                background_size = min(10, len(shap_texts))
+
+                # Use up to 50 background texts for stability
+                background_size = min(50, len(shap_texts))
                 background_texts = shap_texts[:background_size]
 
-                masker = shap.maskers.Text(tokenizer)
-                explainer = shap.Explainer(predict_fn, masker)
+                # Create masker and explainer
+                masker = shap.maskers.Text(tokenizer, mask_token="<mask>")
+                explainer = shap.Explainer(predict_fn, masker, output_names=['AI', 'human'])
                 print("SHAP explainer initialized successfully.")
+
+                # ---------------------------
+                # 4. Compute SHAP values
+                # ---------------------------
+                sample_size = min(500, len(shap_texts))  # Increase number of samples
+                sample_texts = [t.strip() for t in shap_texts[:sample_size] if t.strip()]
+                if not sample_texts:
+                    raise ValueError("No valid text samples for SHAP.")
+
+                print(f"Computing SHAP values for {len(sample_texts)} samples...")
+                shap_values = explainer(sample_texts)
+                print("SHAP values computed successfully.")
+
+                # ---------------------------
+                # 5. Process SHAP results robustly
+                # ---------------------------
+                shap_vals = getattr(shap_values, 'values', shap_values)
+                base_vals = getattr(shap_values, 'base_values', None)
+                feature_names = getattr(shap_values, 'feature_names', None)
+
+                # Ensure shap_vals is always a list of arrays (one per sample)
+                shap_vals_list = []
+                for val in shap_vals:
+                    arr = np.array(val)
+                    if arr.ndim == 1:
+                        arr = arr[:, np.newaxis]  # single-feature case
+                    shap_vals_list.append(arr)
+
+                shap_data = {
+                    'shap_values': shap_vals_list,
+                    'base_values': base_vals,
+                    'texts': sample_texts,
+                    'true_labels': shap_true_labels[:len(sample_texts)],
+                    'pred_labels': shap_pred_labels[:len(sample_texts)],
+                    'feature_names': feature_names,
+                    'class_names': ['AI', 'human']  # Your actual class names
+                }
+
+                # Optional summary (mean over each sample)
+                mean_abs_list = [np.mean(np.abs(x)) for x in shap_vals_list]
+                shap_summary_stats = {
+                    'mean_abs_shap': np.mean(mean_abs_list)
+                }
+                
+                print("SHAP analysis completed successfully.")
+
             except Exception as e:
-                print(f"Failed to create SHAP explainer: {e}")
-                shap_data = {'error': str(e), 'dataset_type': dataset_type}
-                shap_summary_stats = {'error': str(e), 'dataset_type': dataset_type}
-
-            # ---------------------------
-            # 4. Compute SHAP values
-            # ---------------------------
-            if shap_data is None:  # Only proceed if explainer was created successfully
-                try:
-                    sample_size = min(20, len(shap_texts))
-                    sample_texts = [t.strip() for t in shap_texts[:sample_size] if t.strip()]
-                    if not sample_texts:
-                        raise ValueError("No valid text samples for SHAP.")
-
-                    print(f"Computing SHAP values for {len(sample_texts)} samples...")
-                    shap_values = explainer(sample_texts)
-                    print("SHAP values computed successfully.")
-                except Exception as e:
-                    print(f"Error computing SHAP values: {e}")
-                    shap_data = {'error': str(e), 'dataset_type': dataset_type}
-                    shap_summary_stats = {'error': str(e), 'dataset_type': dataset_type}
-
-            # ---------------------------
-            # 5. Process SHAP results robustly
-            # ---------------------------
-            if shap_data is None:  # Only proceed if SHAP values were computed successfully
-                try:
-                    # Case 1: shap_values has .values (ExplainerOutput)
-                    if hasattr(shap_values, 'values'):
-                        shap_vals = shap_values.values
-                        base_vals = getattr(shap_values, 'base_values', None)
-                        feature_names = getattr(shap_values, 'feature_names', None)
-                    else:
-                        shap_vals = shap_values
-                        base_vals = None
-
-                    # Ensure shap_vals is always a list of arrays (one per sample)
-                    shap_vals_list = []
-                    for val in shap_vals:
-                        arr = np.array(val)
-                        if arr.ndim == 1:
-                            arr = arr[:, np.newaxis]  # single-feature case
-                        shap_vals_list.append(arr)
-
-                    shap_data = {
-                        'shap_values': shap_vals_list,      # list of arrays
-                        'base_values': base_vals,
-                        'texts': sample_texts,
-                        'true_labels': shap_true_labels[:len(sample_texts)],
-                        'pred_labels': shap_pred_labels[:len(sample_texts)],
-                        'dataset_type': dataset_type,
-                        'feature_names': feature_names,
-                        'class_names': ['AI', 'human']
-                    }
-
-                    # Optional summary (mean over each sample, ignoring raggedness)
-                    mean_abs_list = [np.mean(np.abs(x)) for x in shap_vals_list]
-                    shap_summary_stats = {
-                        'mean_abs_shap': np.mean(mean_abs_list),
-                        'dataset_type': dataset_type
-                    }
-
-                except Exception as e:
-                    print(f"Error processing SHAP results: {e}")
-                    print("Returning partial SHAP results...")
-                    shap_data = {'error': str(e), 'dataset_type': dataset_type}
-                    shap_summary_stats = {'error': str(e), 'dataset_type': dataset_type}
+                print(f"Error in SHAP analysis: {e}")
+                shap_data = {'error': str(e)}
+                shap_summary_stats = {'error': str(e)}
+        
+        # Store additional results in the median trainer for backward compatibility
+        median_trainer.all_run_results = all_results
+        median_trainer.results_summary = results_summary
         
         # Return values for backward compatibility
         return median_trainer, median_report, median_cm, all_results, shap_data, shap_summary_stats
     
-    @classmethod
-    # def save_shap_plotting_data(cls, shap_data, shap_summary_stats, output_path="shap_plotting_data.pkl"):
-    #     """
-    #     Save SHAP data to a file for external plotting.
-    #     """
-    #     import pickle
-    #     plotting_data = {
-    #         'shap_data': shap_data,
-    #         'shap_summary_stats': shap_summary_stats,
-    #         'metadata': {
-    #             'n_samples': len(shap_data['texts']),
-    #             'n_classes': len(shap_data['class_names']),
-    #             'dataset_type': shap_data.get('dataset_type', 'unknown'),
-    #             'creation_timestamp': pd.Timestamp.now().isoformat()
-    #         }
-    #     }
-        
-    #     with open(output_path, 'wb') as f:
-    #         pickle.dump(plotting_data, f)
-        
-    #     print(f"SHAP plotting data saved to {output_path}")
-    #     return output_path
 
     @classmethod
     def save_shap_plotting_data(cls, shap_data, shap_summary_stats, output_path="shap_plotting_data.json"):
@@ -535,7 +506,6 @@ class Validator:
             'metadata': {
                 'n_samples': len(shap_data.get('texts', [])),
                 'n_classes': len(class_names),
-                'dataset_type': shap_data.get('dataset_type', 'unknown'),
                 'creation_timestamp': pd.Timestamp.now().isoformat()
             }
         }

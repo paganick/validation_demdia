@@ -29,11 +29,11 @@ def find_validation_files(base_folder):
     return validation_files
 
 
-def process_file(file_path, run_bert=True, run_empath=True, data_type="twitter"):
+def process_file(file_path, run_bert=True, run_empath=True):
     print(f"\nProcessing file: {file_path}")
     base, ext = os.path.splitext(file_path)
     labelled_file = base + "_labelled.csv"
-    shap_file = base + "_bert_shap_analysis.csv"
+    shap_file = base + "_bert_shap_analysis.json"
     trainer_file = base + "_trainer_results.json"
     cm_file = base + "_confusion_matrix.csv"
     report_file = base + "_bert_report.json"
@@ -43,7 +43,7 @@ def process_file(file_path, run_bert=True, run_empath=True, data_type="twitter")
     # Run BERT Validation
     # =======================
     if run_bert:
-        if os.path.exists(labelled_file) and os.path.exists(cm_file): # and os.path.exists(report_file):
+        if False: #os.path.exists(labelled_file) and os.path.exists(cm_file): # and os.path.exists(report_file):
             print("BERT validation already done. Skipping.")
         else:
             print("Running BERT validation...")
@@ -53,7 +53,7 @@ def process_file(file_path, run_bert=True, run_empath=True, data_type="twitter")
             df['length'] = df['text'].apply(lambda x: len(str(x).split()))
             print(df.groupby('labels')['length'].describe())
             
-            trainer, report, cm, results, shap_data, shap_summary_stats = Validator.bert_validate(df, tokenizer, dataset_type=data_type)
+            trainer, report, cm, results, shap_data, shap_summary_stats = Validator.bert_validate(df, tokenizer)
             
             with open(trainer_file, "w") as f:
                 json.dump(results, f, default=str, indent=2)
@@ -122,16 +122,8 @@ def main():
         choices=["bert", "empath", "all"],
         help="Which validation to run."
     )
-    parser.add_argument(
-        "--data_type",
-        type=str,
-        default="all",
-        choices=["twitter", "bluesky"],
-        help="Which data validation to run."
-    )
     args = parser.parse_args()
 
-    data_type = args.data_type
     run_bert = args.validation in ["bert", "all"]
     run_empath = args.validation in ["empath", "all"]
 
@@ -141,7 +133,7 @@ def main():
         return
 
     for file_path in validation_files:
-        process_file(file_path, run_bert, run_empath, data_type)
+        process_file(file_path, run_bert, run_empath)
 
 
 if __name__ == "__main__":
