@@ -9,7 +9,6 @@ def main():
     parser.add_argument(
         "--real_file",
         type=str,
-        default="twitter_data.pkl",
         help="Path to the pickle file containing real (human) tweet replies."
     )
     parser.add_argument(
