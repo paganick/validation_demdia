@@ -38,7 +38,7 @@ class Validator:
         cls.empath_validate(df)
     
     @classmethod
-    def bert_validate(cls, df, tokenizer, include_shap=True, 
+    def bert_validate(cls, df, tokenizer, include_shap=False, 
                     n_shap_samples=500, n_runs=3, random_seeds=None):
         """
         Fast 3-run BERT validation with comprehensive results storage and SHAP analysis.
