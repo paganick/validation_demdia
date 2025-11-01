@@ -1,23 +1,31 @@
 USAGE:
 python run_simulation.py --config_dir=configs --n_users=250 --output_dir=results
 
-python LLM_judge.py results
+python LLM_judge.py results --include-advanced
 
 python convert_emojiis.py results
 
-python build_validation_data.py --folder=results --sample_size=5000
+python build_validation_data.py --folder=results/results_bluesky --sample_size=1180 --real_file=bluesky_data.pkl
+python build_validation_data.py --folder=results/results_twitter --sample_size=5000 --real_file=twitter_data.pkl
+python build_validation_data.py --folder=results/results_reddit --sample_size=9840 --real_file=reddit_data.pkl
 
-python validate_text.py --input_dir=results
+
+conda activate shap_env
+
+python validate_text.py --input_dir=results/results_bluesky/ --validation=all
+python validate_text.py --input_dir=results/results_twitter/ --validation=all
+python validate_text.py --input_dir=results/results_reddit/ --validation=all
 
 # do not need validation:
-# python generate_stats.py results
 python post_process.py results
-
 python features_analysis.py compute_features results
 
 
+# does need validate_text.py:
 python features_analysis.py evaluate results labels
-# python features_analysis.py evaluate results bert_prediction
+
+
+
 
 python plot_features_differences.py results
 
