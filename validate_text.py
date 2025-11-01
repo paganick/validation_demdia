@@ -43,7 +43,7 @@ def process_file(file_path, run_bert=True, run_empath=True):
     # Run BERT Validation
     # =======================
     if run_bert:
-        if False: #os.path.exists(labelled_file) and os.path.exists(cm_file): # and os.path.exists(report_file):
+        if os.path.exists(labelled_file) and os.path.exists(cm_file) and os.path.exists(report_file):
             print("BERT validation already done. Skipping.")
         else:
             print("Running BERT validation...")
@@ -99,7 +99,7 @@ def process_file(file_path, run_bert=True, run_empath=True):
             print("Running Empath validation...")
             df = pd.read_csv(file_path)
             df['text'] = df['text'].astype(str)
-
+            
             significant_features, distance = Validator.empath_validate(df)
 
             significant_features.to_csv(features_file, index=False)
