@@ -3,6 +3,7 @@ import time
 import os
 import json
 import pandas as pd
+import torch
 from contextlib import contextmanager
 
 from .model import Model 
@@ -15,6 +16,11 @@ def file_lock(file_path, timeout=5):
     Returns None if lock cannot be acquired within timeout.
     """
     lock_file = file_path + ".lock"
+    
+    # Ensure the directory exists before trying to create the lock file
+    lock_dir = os.path.dirname(lock_file)
+    if lock_dir and not os.path.exists(lock_dir):
+        os.makedirs(lock_dir, exist_ok=True)
     
     try:
         # Try to acquire lock (works on both Windows and Unix)
@@ -203,8 +209,12 @@ def _run_simulation_with_lock(config, data_file, n_users, n_responses_per_user, 
                     n_candidates=20
                 )
                 print(f"📝 [DEBUG] Generated {len(responses) if responses else 0} valid responses")
+                # Clear CUDA cache after generation
+                torch.cuda.empty_cache()
+                
             except Exception as e:
                 print(f"❌ [DEBUG] Error generating response for {username}: {e}")
+                torch.cuda.empty_cache()  # Also clear on error
                 continue
 
             # Skip if no valid responses
