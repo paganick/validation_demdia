@@ -60,7 +60,8 @@ def main():
 
                 for col, suffix in [
                     ("ML_best_response", "_ml_validation_data.csv"),
-                    ("cosine_best_response", "_cosine_validation_data.csv")
+                    ("cosine_best_response", "_cosine_validation_data.csv"),
+                    ("response", "_random_validation_data.csv")
                 ]:
                     if col not in df_ai.columns:
                         print(f"Warning: Column '{col}' not found in {csv_path}. Skipping.")
