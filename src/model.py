@@ -21,14 +21,30 @@ class Model:
     def load(self):
         if not self.finetuned:
             print(f"Loading base model: {self.model_name}")
-            self.model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
+            
+            # REMOVE 8-bit quantization to avoid the hang
+            self.model = AutoModelForCausalLM.from_pretrained(
+                self.model_name,
+                device_map="auto",
+                torch_dtype=torch.float16,
+                low_cpu_mem_usage=True
+            )
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+            print("✅ Base model loaded")
+            
         elif os.path.exists(self.fine_tuned_dir):
-            print(f"Loading fine-tuned model from {self.fine_tuned_dir}")           
-            self.model = AutoModelForCausalLM.from_pretrained(self.fine_tuned_dir, device_map="auto")
+            print(f"Loading fine-tuned model from {self.fine_tuned_dir}")
+            
+            self.model = AutoModelForCausalLM.from_pretrained(
+                self.fine_tuned_dir,
+                device_map="auto",
+                torch_dtype=torch.float16,
+                low_cpu_mem_usage=True
+            )
             self.tokenizer = AutoTokenizer.from_pretrained(self.fine_tuned_dir)
-            # Set generation config for fine-tuned model
             self._configure_generation()
+            print("✅ Fine-tuned model loaded")
+            
         else:
             print(f"Fine-tuning and saving model to {self.fine_tuned_dir}")
             self.finetune_model()
