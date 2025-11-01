@@ -17,6 +17,7 @@ fieldnames = [
     'retrieve_context',
     'pesonalized',
     'reply_to',
+    'response',
     'ML_best_response',
     'cosine_best_response'
 ]
@@ -47,6 +48,7 @@ for root, _, files in os.walk(args.input_folder):
                     'retrieve_context': entry.get('retrieve_context', False),
                     'pesonalized': entry.get('OPPU', False),
                     'reply_to': entry.get('reply_to', ''),
+                    'response': entry.get('response', ''),
                     'ML_best_response': entry.get('ML_best_response', ''),
                     'cosine_best_response': entry.get('cosine_best_response', ''),
                 })
