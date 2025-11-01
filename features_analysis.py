@@ -1,96 +1,434 @@
 import os
 import argparse
 import pandas as pd
-from feature_utils import extract_features, evaluate_features_single_dataset
+import traceback
+import sys
+from feature_utils import *
 from plotting_utils import parse_filename
 
+def find_row_mismatch(input_df, cache_df, input_col='length', cache_col='word_count'):
+    """
+    Find where two DataFrames diverge by comparing a common column.
+    Returns info about the first misaligned row.
+    """
+    print(f"DEBUG: Comparing {input_col} vs {cache_col} columns...")
+    
+    # Check if columns exist
+    if input_col not in input_df.columns:
+        print(f"ERROR: Column '{input_col}' not found in input CSV")
+        print(f"Available columns: {list(input_df.columns)}")
+        return None
+        
+    if cache_col not in cache_df.columns:
+        print(f"ERROR: Column '{cache_col}' not found in cache CSV") 
+        print(f"Available columns: {list(cache_df.columns)}")
+        return None
+    
+    input_vals = input_df[input_col].values
+    cache_vals = cache_df[cache_col].values
+    
+    print(f"DEBUG: Input values range: {input_vals[:5]} ... {input_vals[-5:]}")
+    print(f"DEBUG: Cache values range: {cache_vals[:5]} ... {cache_vals[-5:]}")
+    
+    # Compare row by row until we find a mismatch
+    min_len = min(len(input_vals), len(cache_vals))
+    
+    for i in range(min_len):
+        if input_vals[i] != cache_vals[i]:
+            return {
+                'position': i,
+                'input_idx': i,
+                'cache_idx': i, 
+                'input_val': input_vals[i],
+                'cache_val': cache_vals[i]
+            }
+    
+    # If all compared rows match, the extra row(s) are at the end
+    if len(cache_vals) > len(input_vals):
+        return {
+            'position': len(input_vals),
+            'input_idx': None,
+            'cache_idx': len(input_vals),
+            'input_val': None,
+            'cache_val': cache_vals[len(input_vals)]
+        }
+    elif len(input_vals) > len(cache_vals):
+        return {
+            'position': len(cache_vals),
+            'input_idx': len(cache_vals),
+            'cache_idx': None,
+            'input_val': input_vals[len(cache_vals)],
+            'cache_val': None
+        }
+    
+    print("DEBUG: No mismatch found - all values match!")
+    return None
+
 def compute_features_for_all(folder_path):
-    for root, _, files in os.walk(folder_path):
+    print(f"DEBUG: Starting compute_features_for_all with folder_path: {folder_path}")
+    
+    if not os.path.exists(folder_path):
+        print(f"ERROR: Folder path does not exist: {folder_path}")
+        return
+    
+    files_found = 0
+    files_processed = 0
+    
+    for root, dirs, files in os.walk(folder_path):
+        print(f"DEBUG: Scanning directory: {root}")
+        print(f"DEBUG: Found {len(files)} files in directory")
+        
         for filename in files:
-            if filename.endswith('validation_data.csv') and ('cosine' in filename or 'ml' in filename):
+            if filename.endswith('validation_data.csv') and ('random' in filename or 'cosine' in filename or 'ml' in filename):
+                files_found += 1
                 full_path = os.path.join(root, filename)
+                print(f'DEBUG: Found matching file #{files_found}: {full_path}')
                 print(f'Computing features for {full_path}.')
 
-                df = pd.read_csv(full_path)
-                df['text'] = df['text'].fillna('').astype(str)
+                try:
+                    df = safe_read_csv(full_path)
+                    if df is None:
+                        print(f"ERROR: Could not read {full_path}. Skipping.")
+                        continue
+                        
+                    print(f"DEBUG: CSV loaded successfully. Shape: {df.shape}")
+                    print(f"DEBUG: Columns: {list(df.columns)}")
+                    
+                    if 'text' not in df.columns:
+                        print(f"ERROR: 'text' column not found in {full_path}")
+                        print(f"DEBUG: Available columns: {list(df.columns)}")
+                        continue
+                    
+                    df['text'] = df['text'].fillna('').astype(str)
+                    print(f"DEBUG: Text column processed. Non-null text entries: {df['text'].ne('').sum()}")
 
-                feature_cache_path = full_path.replace(".csv", "_features.csv")
-                _ = extract_features(df, cache_path=feature_cache_path)
-                print(f'Saved features to {feature_cache_path}')
+                    feature_cache_path = full_path.replace(".csv", "_features.csv")
+                    print(f"DEBUG: Feature cache path: {feature_cache_path}")
+                    
+                    features_df = extract_features(df, cache_path=feature_cache_path)
+                    print(f'Saved features to {feature_cache_path}')
+                    print(f"DEBUG: Features shape: {features_df.shape}")
+                    
+                    files_processed += 1
+                    
+                except Exception as e:
+                    print(f"ERROR: Failed to process {full_path}")
+                    print(f"ERROR: {str(e)}")
+                    print("Full traceback:")
+                    traceback.print_exc()
+                    continue
+    
+    print(f"DEBUG: Summary - Found {files_found} files, successfully processed {files_processed}")
 
+def analyze_data_quality(df, label_source, file_path):
+    """
+    Comprehensive analysis of data quality issues in the DataFrame
+    """
+    print(f"\n=== DATA QUALITY ANALYSIS FOR {file_path} ===")
+    
+    total_rows = len(df)
+    print(f"Total rows: {total_rows}")
+    
+    # 1. Analyze text column
+    print(f"\n--- TEXT COLUMN ANALYSIS ---")
+    text_null = df['text'].isna().sum()
+    text_empty = (df['text'] == '').sum()
+    text_whitespace_only = df['text'].str.strip().eq('').sum()
+    
+    print(f"Text null values: {text_null}")
+    print(f"Text empty strings: {text_empty}")
+    print(f"Text whitespace-only: {text_whitespace_only}")
+    
+    if text_null > 0:
+        text_null_indices = df.index[df['text'].isna()].tolist()
+        print(f"Rows with null text: {text_null_indices[:10]}" + ("..." if len(text_null_indices) > 10 else ""))
+    
+    if text_empty > 0:
+        text_empty_indices = df.index[df['text'] == ''].tolist()
+        print(f"Rows with empty text: {text_empty_indices[:10]}" + ("..." if len(text_empty_indices) > 10 else ""))
+    
+    # 2. Analyze labels column
+    print(f"\n--- LABELS COLUMN ANALYSIS ({label_source}) ---")
+    labels_null = df[label_source].isna().sum()
+    labels_unique = df[label_source].unique()
+    labels_counts = df[label_source].value_counts(dropna=False)
+    
+    print(f"Labels null values: {labels_null}")
+    print(f"Unique label values: {sorted([x for x in labels_unique if pd.notna(x)])}")
+    print(f"Label distribution:\n{labels_counts}")
+    
+    if labels_null > 0:
+        labels_null_indices = df.index[df[label_source].isna()].tolist()
+        print(f"Rows with null labels: {labels_null_indices[:10]}" + ("..." if len(labels_null_indices) > 10 else ""))
+        
+        # Show details of rows with null labels
+        print(f"\nDetailed analysis of rows with null labels:")
+        null_label_rows = df[df[label_source].isna()].head(5)
+        for idx, row in null_label_rows.iterrows():
+            print(f"  Row {idx}:")
+            print(f"    - text: {repr(str(row['text'])[:100])}...")
+            print(f"    - length: {row.get('length', 'N/A')}")
+            print(f"    - {label_source}: {row[label_source]}")
+            print(f"    - bert_prediction: {row.get('bert_prediction', 'N/A')}")
+    
+    # 3. Analyze length column
+    print(f"\n--- LENGTH COLUMN ANALYSIS ---")
+    if 'length' in df.columns:
+        length_null = df['length'].isna().sum()
+        length_zero = (df['length'] == 0).sum()
+        length_negative = (df['length'] < 0).sum()
+        
+        print(f"Length null values: {length_null}")
+        print(f"Length zero values: {length_zero}")
+        print(f"Length negative values: {length_negative}")
+        
+        if length_null > 0:
+            length_null_indices = df.index[df['length'].isna()].tolist()
+            print(f"Rows with null length: {length_null_indices[:10]}" + ("..." if len(length_null_indices) > 10 else ""))
+            
+            # Check if null length corresponds to problematic text
+            print(f"Analysis of rows with null length:")
+            null_length_rows = df[df['length'].isna()].head(5)
+            for idx, row in null_length_rows.iterrows():
+                text_val = row['text']
+                manual_word_count = len(str(text_val).split()) if pd.notna(text_val) else 0
+                print(f"  Row {idx}:")
+                print(f"    - text: {repr(str(text_val)[:100])}...")
+                print(f"    - stored length: {row['length']}")
+                print(f"    - manual word count: {manual_word_count}")
+                print(f"    - {label_source}: {row[label_source]}")
+    
+    # 4. Find rows with multiple issues
+    print(f"\n--- MULTI-ISSUE ROWS ---")
+    problematic_mask = df['text'].isna() | (df['text'] == '') | df[label_source].isna()
+    if 'length' in df.columns:
+        problematic_mask = problematic_mask | df['length'].isna()
+    
+    problematic_count = problematic_mask.sum()
+    print(f"Rows with any issues: {problematic_count}")
+    
+    if problematic_count > 0:
+        problematic_indices = df.index[problematic_mask].tolist()
+        print(f"Problematic row indices: {problematic_indices[:20]}" + ("..." if len(problematic_indices) > 20 else ""))
+        
+        print(f"\nDetailed analysis of first 3 problematic rows:")
+        problem_rows = df[problematic_mask].head(3)
+        for idx, row in problem_rows.iterrows():
+            issues = []
+            if pd.isna(row['text']) or row['text'] == '':
+                issues.append("empty/null text")
+            if pd.isna(row[label_source]):
+                issues.append(f"null {label_source}")
+            if 'length' in row and pd.isna(row['length']):
+                issues.append("null length")
+            
+            print(f"  Row {idx} - Issues: {', '.join(issues)}")
+            print(f"    - text: {repr(str(row['text'])[:100])}...")
+            print(f"    - {label_source}: {row[label_source]}")
+            print(f"    - length: {row.get('length', 'N/A')}")
+            print(f"    - bert_prediction: {row.get('bert_prediction', 'N/A')}")
+    
+    # 5. Summary and recommendations
+    print(f"\n--- SUMMARY ---")
+    clean_rows = total_rows - problematic_count
+    print(f"Clean rows: {clean_rows}/{total_rows} ({clean_rows/total_rows*100:.1f}%)")
+    print(f"Problematic rows: {problematic_count}/{total_rows} ({problematic_count/total_rows*100:.1f}%)")
+    
+    return problematic_mask
 
 def evaluate_all_datasets(folder_path, label_source):
+    print(f"DEBUG: Starting evaluate_all_datasets with folder_path: {folder_path}, label_source: {label_source}")
+    
     assert label_source in ['labels', 'bert_prediction'], "label_source must be 'labels' or 'bert_prediction'"
+
+    if not os.path.exists(folder_path):
+        print(f"ERROR: Folder path does not exist: {folder_path}")
+        return
 
     results_auc = []
     results_importances = []
     results_correlation = []
-
+    
     suffix = "_from_bert" if label_source == "bert_prediction" else "_from_labels"
+    files_found = 0
+    files_processed = 0
 
     for root, _, files in os.walk(folder_path):
+        print(f"DEBUG: Scanning directory: {root}")
+        
         for filename in files:
-            if filename.endswith('validation_data_labelled.csv') and ('cosine' in filename or 'ml' in filename):
+            if filename.endswith('validation_data_labelled.csv') and ('random' in filename or 'cosine' in filename or 'ml' in filename):
+                files_found += 1
                 full_path = os.path.join(root, filename)
+                print(f'DEBUG: Found matching file #{files_found}: {full_path}')
                 print(f'Evaluating {full_path}.')
 
-                df = pd.read_csv(full_path)
-                df['text'] = df['text'].fillna('').astype(str)
+                try:
+                    df = safe_read_csv(full_path)
+                    if df is None:
+                        print(f"ERROR: Could not read {full_path}. Stopping.")
+                        sys.exit(1)
+                        
+                    print(f"DEBUG: CSV loaded successfully. Shape: {df.shape}")
+                    print(f"DEBUG: Columns: {list(df.columns)}")
+                    
+                    if 'text' not in df.columns:
+                        print(f"ERROR: 'text' column not found in {full_path}. Stopping.")
+                        sys.exit(1)
+                        
+                    if label_source not in df.columns:
+                        print(f"ERROR: Label source '{label_source}' column not found in {full_path}. Stopping.")
+                        print(f"DEBUG: Available columns: {list(df.columns)}")
+                        sys.exit(1)
 
-                feature_cache_path = full_path.replace("_labelled.csv", "_features.csv")
-                base_output_path = full_path.replace(".csv", f"{suffix}")
-                stats_output_path = base_output_path + "_feature_importance_stats.csv"
-                correlation_output_path = base_output_path + "_feature_correlation_stats.csv"
+                    # Comprehensive data quality analysis
+                    problematic_mask = analyze_data_quality(df, label_source, full_path)
+                    
+                    # Clean the data based on analysis
+                    df['text'] = df['text'].fillna('').astype(str)
+                    print(f"DEBUG: Text column processed. Non-null text entries: {df['text'].ne('').sum()}")
+                    
+                    # Check and clean labels column
+                    labels_before = len(df)
+                    labels_null_count = df[label_source].isna().sum()
+                    
+                    if labels_null_count > 0:
+                        print(f"WARNING: Found {labels_null_count} rows with missing/null labels")
+                        print(f"DEBUG: Removing rows with missing labels...")
+                        df = df.dropna(subset=[label_source])
+                        print(f"DEBUG: After removing null labels: {len(df)} rows (removed {labels_before - len(df)} rows)")
+                    
+                    print(f"DEBUG: Labels distribution: {df[label_source].value_counts().to_dict()}")
 
-                # Determine source type (cosine or ml)
-                source_type = "cosine" if "cosine" in filename else "ml"
+                    feature_cache_path = full_path.replace("_labelled.csv", "_features.csv")
+                    print(f"DEBUG: Looking for feature cache at: {feature_cache_path}")
+                    
+                    if not os.path.exists(feature_cache_path):
+                        print(f"ERROR: Feature cache file not found: {feature_cache_path}. Stopping.")
+                        print("Run 'compute_features' first!")
+                        sys.exit(1)
+                    
+                    # Check for shape mismatch AFTER cleaning labels
+                    cache_df = None
+                    if os.path.exists(feature_cache_path):
+                        cache_df = pd.read_csv(feature_cache_path)
+                        print(f"DEBUG: Feature cache shape: {cache_df.shape}")
+                        
+                        if len(cache_df) != len(df):
+                            print(f"WARNING: Shape mismatch detected!")
+                            print(f"  - Input CSV (after cleaning): {len(df)} rows")
+                            print(f"  - Feature cache: {len(cache_df)} rows")
+                            print(f"  - Difference: {len(cache_df) - len(df)} rows")
+                            
+                            print("SOLUTION: Automatically regenerating features to match current data...")
+                            
+                            # Delete the old cache and regenerate
+                            os.remove(feature_cache_path)
+                            print(f"DEBUG: Deleted old cache file: {feature_cache_path}")
+                            cache_df = None
+                        else:
+                            print("DEBUG: Cache size matches input data - using existing features")
+                    else:
+                        print(f"DEBUG: No feature cache found at: {feature_cache_path}")
+                    
+                    # Compute or load features
+                    if cache_df is None:
+                        print(f"DEBUG: Computing features for {len(df)} rows...")
+                        features_df = extract_features(df, cache_path=feature_cache_path)
+                        print(f"DEBUG: Features computed. Shape: {features_df.shape}")
+                    else:
+                        print(f"DEBUG: Using existing feature cache")
+                        features_df = cache_df
+                        
+                    base_output_path = full_path.replace(".csv", f"{suffix}")
+                    stats_output_path = base_output_path + "_feature_importance_stats.csv"
+                    correlation_output_path = base_output_path + "_feature_correlation_stats.csv"
 
-                # Evaluate from cached features
-                auc, feature_importance, correlation_df = evaluate_features_single_dataset(
-                    df, feature_cache_path, label_source=label_source
-                )
+                    # Determine source type (cosine or ml)
+                    if "random" in filename:
+                        source_type ='random'
+                    else:
+                        source_type = "cosine" if "cosine" in filename else "ml"
+                    print(f"DEBUG: Source type: {source_type}")
 
-                model, ft, context, style, oppu = parse_filename(filename)
+                    try:
+                        model, ft, context, style, oppu = parse_filename(filename)
+                        print(f"DEBUG: Parsed filename - model: {model}, ft: {ft}, context: {context}, style: {style}, oppu: {oppu}")
+                    except Exception as parse_error:
+                        print(f"ERROR: Could not parse filename {filename}: {parse_error}")
+                        print("STOPPING EXECUTION due to filename parsing error.")
+                        sys.exit(1)
 
-                # Save AUC summary
-                results_auc.append({
-                    'model': model,
-                    'ft': ft,
-                    'context': context,
-                    'style': style,
-                    'oppu': oppu,
-                    'auc': auc,
-                    'label_source': label_source,
-                    'source_type': source_type
-                })
+                    # Evaluate from cached features
+                    print("DEBUG: Starting feature evaluation...")
+                    auc, feature_importance, correlation_df = evaluate_features_single_dataset(
+                        df, feature_cache_path, label_source=label_source
+                    )
+                    print(f"DEBUG: Evaluation complete. AUC: {auc}")
 
-                # Save feature importance
-                feature_dict = feature_importance.to_dict()
-                feature_dict.update({
-                    'model': model,
-                    'ft': ft,
-                    'context': context,
-                    'style': style,
-                    'oppu': oppu,
-                    'label_source': label_source,
-                    'source_type': source_type
-                })
-                results_importances.append(feature_dict)
-                pd.DataFrame([feature_dict | {'auc': auc}]).to_csv(stats_output_path, index=False)
-                print(f'Saved stats to {stats_output_path}')
+                    # Save AUC summary
+                    results_auc.append({
+                        'model': model,
+                        'ft': ft,
+                        'context': context,
+                        'style': style,
+                        'oppu': oppu,
+                        'auc': auc,
+                        'label_source': label_source,
+                        'source_type': source_type
+                    })
 
-                # Save correlation stats
-                correlation_df.to_csv(correlation_output_path, index=False)
-                print(f'Saved correlation stats to {correlation_output_path}')
-                correlation_df['source_type'] = source_type
-                results_correlation.append(correlation_df)
+                    # Save feature importance
+                    feature_dict = feature_importance.to_dict()
+                    feature_dict.update({
+                        'model': model,
+                        'ft': ft,
+                        'context': context,
+                        'style': style,
+                        'oppu': oppu,
+                        'label_source': label_source,
+                        'source_type': source_type
+                    })
+                    results_importances.append(feature_dict)
+                    pd.DataFrame([feature_dict | {'auc': auc}]).to_csv(stats_output_path, index=False)
+                    print(f'Saved stats to {stats_output_path}')
+
+                    # Save correlation stats
+                    correlation_df.to_csv(correlation_output_path, index=False)
+                    print(f'Saved correlation stats to {correlation_output_path}')
+                    correlation_df['source_type'] = source_type
+                    results_correlation.append(correlation_df)
+                    
+                    files_processed += 1
+
+                except Exception as e:
+                    print(f"ERROR: Failed to evaluate {full_path}")
+                    print(f"ERROR: {str(e)}")
+                    print("Full traceback:")
+                    traceback.print_exc()
+                    print(f"\nCONTINUING with next file...")
+                    continue
+
+    print(f"DEBUG: Summary - Found {files_found} files, successfully processed {files_processed}")
+    
+    if not results_auc:
+        print("WARNING: No files were successfully processed. No output files will be created.")
+        return
 
     # Save combined outputs
-    pd.DataFrame(results_auc).to_csv(os.path.join(folder_path, f'auc_results{suffix}.csv'), index=False)
-    pd.DataFrame(results_importances).to_csv(os.path.join(folder_path, f'importances{suffix}.csv'), index=False)
-    pd.concat(results_correlation, ignore_index=True).to_csv(os.path.join(folder_path, f'correlation_results{suffix}.csv'), index=False)
-
-
+    try:
+        pd.DataFrame(results_auc).to_csv(os.path.join(folder_path, f'auc_results{suffix}.csv'), index=False)
+        print(f"DEBUG: Saved AUC results to: {os.path.join(folder_path, f'auc_results{suffix}.csv')}")
+        
+        pd.DataFrame(results_importances).to_csv(os.path.join(folder_path, f'importances{suffix}.csv'), index=False)
+        print(f"DEBUG: Saved importance results to: {os.path.join(folder_path, f'importances{suffix}.csv')}")
+        
+        pd.concat(results_correlation, ignore_index=True).to_csv(os.path.join(folder_path, f'correlation_results{suffix}.csv'), index=False)
+        print(f"DEBUG: Saved correlation results to: {os.path.join(folder_path, f'correlation_results{suffix}.csv')}")
+        
+    except Exception as e:
+        print(f"ERROR: Failed to save combined results: {e}")
+        traceback.print_exc()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Pipeline to compute features and evaluate feature importance.")
@@ -104,8 +442,18 @@ if __name__ == "__main__":
     eval_parser.add_argument("label_source", type=str, choices=["labels", "bert_prediction"], help="Which label source to use.")
 
     args = parser.parse_args()
+    
+    print(f"DEBUG: Parsed arguments - command: {args.command}")
 
     if args.command == "compute_features":
+        print(f"DEBUG: Running compute_features with folder_path: {args.folder_path}")
         compute_features_for_all(args.folder_path)
     elif args.command == "evaluate":
+        print(f"DEBUG: Running evaluate with folder_path: {args.folder_path}, label_source: {args.label_source}")
         evaluate_all_datasets(args.folder_path, args.label_source)
+        evaluate_all_datasets_median_run(args.folder_path, args.label_source)
+    else:
+        print("ERROR: No command specified or invalid command")
+        parser.print_help()
+    
+    print("DEBUG: Script completed")

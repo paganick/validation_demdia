@@ -5,6 +5,7 @@ import re
 import numpy as np
 import pandas as pd
 import emoji
+import traceback
 from collections import Counter
 import nltk
 from sklearn.ensemble import RandomForestClassifier
@@ -12,6 +13,7 @@ from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import train_test_split
 from transformers import pipeline
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
+from plotting_utils import parse_filename
 
 # Load toxicity model once
 toxicity_model = pipeline("text-classification", model="unitary/toxic-bert", tokenizer="unitary/toxic-bert", truncation=True, device=0)
@@ -469,3 +471,462 @@ def evaluate_features_single_dataset(
     correlation_df = pd.DataFrame(correlation_signs)
 
     return auc, importances, correlation_df
+
+def safe_read_csv(file_path, max_retries=3):
+    """
+    Safely read CSV with multiple fallback strategies for malformed files.
+    """
+    print(f"DEBUG: Attempting to read CSV: {file_path}")
+    
+    # Check if file exists and get basic info
+    if not os.path.exists(file_path):
+        print(f"ERROR: File does not exist: {file_path}")
+        return None
+        
+    file_size = os.path.getsize(file_path)
+    print(f"DEBUG: File size: {file_size:,} bytes")
+    
+    # Strategy 1: Try default pandas read_csv
+    try:
+        print("DEBUG: Trying default pandas read_csv...")
+        df = pd.read_csv(file_path)
+        print(f"DEBUG: Successfully loaded with default method. Shape: {df.shape}")
+        return df
+    except Exception as e:
+        print(f"DEBUG: Default method failed: {str(e)[:200]}")
+    
+    # Strategy 2: Try with error handling and different engine
+    try:
+        print("DEBUG: Trying with python engine and error handling...")
+        df = pd.read_csv(file_path, engine='python', on_bad_lines='warn')
+        print(f"DEBUG: Successfully loaded with python engine. Shape: {df.shape}")
+        return df
+    except Exception as e:
+        print(f"DEBUG: Python engine method failed: {str(e)[:200]}")
+    
+    print("ERROR: All CSV reading strategies failed. File may be severely corrupted.")
+    return None
+
+import json
+import numpy as np
+import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import roc_auc_score
+import os
+
+def find_median_accuracy_run(trainer_results_path):
+    """
+    Find the training run with median accuracy from BERT trainer results.
+    
+    Args:
+        trainer_results_path: Path to the JSON file containing training results
+        
+    Returns:
+        dict: The training run data with median accuracy
+    """
+    print(f"DEBUG: Loading trainer results from: {trainer_results_path}")
+    
+    with open(trainer_results_path, 'r') as f:
+        results = json.load(f)
+    
+    # Extract accuracies and find median
+    accuracies = [run['accuracy'] for run in results]
+    print(f"DEBUG: Found accuracies: {accuracies}")
+    
+    median_accuracy = np.median(accuracies)
+    print(f"DEBUG: Median accuracy: {median_accuracy}")
+    
+    # Find the run closest to median accuracy
+    median_run = min(results, key=lambda x: abs(x['accuracy'] - median_accuracy))
+    print(f"DEBUG: Selected run {median_run['run']} with accuracy {median_run['accuracy']}")
+    
+    return median_run
+
+def create_validation_dataframe(median_run):
+    """
+    Create a DataFrame from the median run's validation data.
+    
+    Args:
+        median_run: Dictionary containing the median accuracy run data
+        
+    Returns:
+        pd.DataFrame: DataFrame with text, labels, and bert_prediction columns
+    """
+    val_texts = median_run['val_texts']
+    true_labels = median_run['true_labels']
+    bert_predictions = median_run['predictions']
+    
+    print(f"DEBUG: Creating DataFrame with {len(val_texts)} validation samples")
+    
+    df = pd.DataFrame({
+        'text': val_texts,
+        'labels': true_labels,
+        'bert_prediction': bert_predictions
+    })
+    
+    print(f"DEBUG: Validation DataFrame shape: {df.shape}")
+    print(f"DEBUG: Label distribution - True: {pd.Series(true_labels).value_counts().to_dict()}")
+    print(f"DEBUG: Label distribution - BERT: {pd.Series(bert_predictions).value_counts().to_dict()}")
+    
+    return df
+
+def evaluate_with_median_run_data(full_path, label_source):
+    """
+    Modified evaluation function that uses median accuracy run validation data.
+    Trains Random Forest on all data EXCEPT the validation set.
+    
+    Args:
+        full_path: Path to the original validation data file
+        label_source: Either 'labels' or 'bert_prediction'
+    """
+    print(f"DEBUG: Starting evaluation with median run data for: {full_path}")
+    
+    # Find corresponding trainer results file
+    trainer_results_path = full_path.replace('_validation_data_labelled.csv', '_validation_data_trainer_results.json')
+    
+    if not os.path.exists(trainer_results_path):
+        print(f"ERROR: Trainer results file not found: {trainer_results_path}")
+        return
+    
+    # Get median accuracy run data
+    median_run = find_median_accuracy_run(trainer_results_path)
+    
+    # Create validation DataFrame
+    val_df = create_validation_dataframe(median_run)
+    
+    # Load full dataset 
+    print(f"DEBUG: Loading full dataset...")
+    full_df = safe_read_csv(full_path)
+    if full_df is None:
+        print(f"ERROR: Could not read full dataset: {full_path}")
+        return
+    
+    print(f"DEBUG: Full dataset shape: {full_df.shape}")
+    
+    # Clean the full dataset
+    full_df['text'] = full_df['text'].fillna('').astype(str)
+    full_df = full_df.dropna(subset=[label_source])
+    
+    print(f"DEBUG: Full dataset after cleaning: {full_df.shape}")
+    
+    # Create a set of validation texts to exclude from training
+    val_texts_set = set(val_df['text'].tolist())
+    print(f"DEBUG: Validation set contains {len(val_texts_set)} unique texts")
+    
+    # Split full dataset: training = all data EXCEPT validation texts
+    train_mask = ~full_df['text'].isin(val_texts_set)
+    train_df = full_df[train_mask].copy()
+    
+    print(f"DEBUG: Training set shape after excluding validation: {train_df.shape}")
+    print(f"DEBUG: Excluded {len(full_df) - len(train_df)} validation samples from training")
+    
+    if len(train_df) == 0:
+        print(f"ERROR: No training data remaining after excluding validation set!")
+        return
+    
+    # Extract features for training dataset
+    feature_cache_path = full_path.replace("_labelled.csv", "_features.csv")
+    print(f"DEBUG: Using feature cache: {feature_cache_path}")
+    
+    if not os.path.exists(feature_cache_path):
+        print(f"ERROR: Feature cache not found: {feature_cache_path}")
+        print("Run 'compute_features' first!")
+        return
+    
+    # Load full feature cache
+    features_df = pd.read_csv(feature_cache_path)
+    print(f"DEBUG: Full features shape: {features_df.shape}")
+    
+    if len(features_df) != len(full_df):
+        print(f"WARNING: Feature cache size mismatch. Regenerating features...")
+        features_df = extract_features(full_df, cache_path=feature_cache_path)
+    
+    # IMPORTANT: Reset indices to ensure alignment
+    full_df = full_df.reset_index(drop=True)
+    features_df = features_df.reset_index(drop=True)
+    
+    # Verify alignment after reset
+    if len(features_df) != len(full_df):
+        print(f"ERROR: After reset, features ({len(features_df)}) and data ({len(full_df)}) still don't match!")
+        return
+    
+    print(f"DEBUG: After index reset - Full DF: {full_df.shape}, Features: {features_df.shape}")
+    
+    # Recreate train_mask after index reset
+    train_mask = ~full_df['text'].isin(val_texts_set)
+    train_df = full_df[train_mask].copy()
+    
+    print(f"DEBUG: Training set shape after excluding validation: {train_df.shape}")
+    print(f"DEBUG: Excluded {len(full_df) - len(train_df)} validation samples from training")
+    
+    # Get features for training set only (exclude validation indices)
+    train_features = features_df[train_mask].copy()
+    print(f"DEBUG: Training features shape: {train_features.shape}")
+    
+    # Verify that train_features and train_df have matching lengths
+    if len(train_features) != len(train_df):
+        print(f"ERROR: Training features ({len(train_features)}) and training data ({len(train_df)}) lengths don't match!")
+        return
+    
+    # Train Random Forest on training set only
+    print(f"DEBUG: Training Random Forest on training set (excluding validation)...")
+    exclude_features = ['spelling_grammar_errors', 'has_emoji', 'has_mention', 'has_link']
+    X_train = train_features.drop(columns=[f for f in exclude_features if f in train_features.columns], errors="ignore")
+    y_train = train_df[label_source]
+    
+    print(f"DEBUG: Training set label distribution: {y_train.value_counts().to_dict()}")
+    
+    clf = RandomForestClassifier(n_estimators=100, random_state=42)
+    clf.fit(X_train, y_train)
+    
+    print(f"DEBUG: Random Forest trained successfully on {len(X_train)} samples")
+    
+    # Extract features for validation set
+    print(f"DEBUG: Extracting features for validation set...")
+    val_features = extract_features(val_df)
+    X_val = val_features.drop(columns=[f for f in exclude_features if f in val_features.columns], errors="ignore")
+    
+    # Ensure same feature columns
+    missing_features = set(X_train.columns) - set(X_val.columns)
+    extra_features = set(X_val.columns) - set(X_train.columns)
+    
+    if missing_features:
+        print(f"WARNING: Missing features in validation set: {missing_features}")
+        for feature in missing_features:
+            X_val[feature] = 0  # Add missing features with default value
+    
+    if extra_features:
+        print(f"WARNING: Extra features in validation set: {extra_features}")
+        X_val = X_val.drop(columns=list(extra_features))
+    
+    # Reorder columns to match training set
+    X_val = X_val[X_train.columns]
+    
+    # Make predictions on validation set
+    print(f"DEBUG: Making Random Forest predictions on validation set...")
+    rf_predictions = clf.predict(X_val)
+    rf_probabilities = clf.predict_proba(X_val)[:, 1]
+    
+    # Calculate AUC
+    y_val = val_df[label_source]
+    auc = roc_auc_score(y_val, rf_probabilities)
+    print(f"DEBUG: Random Forest AUC on validation set: {auc:.4f}")
+    
+    # Create results DataFrame
+    results_df = pd.DataFrame({
+        'text': val_df['text'],
+        'actual_label': val_df['labels'],
+        'bert_prediction': val_df['bert_prediction'],
+        'rf_prediction': rf_predictions,
+        'rf_probability': rf_probabilities
+    })
+    
+    # Save results
+    suffix = "_from_bert" if label_source == "bert_prediction" else "_from_labels"
+    output_path = full_path.replace("_labelled.csv", f"{suffix}_median_run_results.csv")
+    results_df.to_csv(output_path, index=False)
+    
+    print(f"DEBUG: Results saved to: {output_path}")
+    print(f"DEBUG: Results shape: {results_df.shape}")
+    
+    # Print summary statistics
+    print(f"\n=== EVALUATION SUMMARY ===")
+    print(f"Validation set size: {len(results_df)}")
+    print(f"Random Forest AUC: {auc:.4f}")
+    print(f"Actual label distribution: {results_df['actual_label'].value_counts().to_dict()}")
+    print(f"BERT prediction distribution: {results_df['bert_prediction'].value_counts().to_dict()}")
+    print(f"RF prediction distribution: {results_df['rf_prediction'].value_counts().to_dict()}")
+    
+    # Calculate agreement between models
+    bert_rf_agreement = (results_df['bert_prediction'] == results_df['rf_prediction']).mean()
+    bert_actual_agreement = (results_df['bert_prediction'] == results_df['actual_label']).mean()
+    rf_actual_agreement = (results_df['rf_prediction'] == results_df['actual_label']).mean()
+    
+    # Three-way agreement analysis
+    all_three_agree = (
+        (results_df['actual_label'] == results_df['bert_prediction']) & 
+        (results_df['bert_prediction'] == results_df['rf_prediction'])
+    ).mean()
+    
+    # Models agree with each other (but may be wrong)
+    models_agree = (results_df['bert_prediction'] == results_df['rf_prediction']).mean()
+    
+    # Models agree AND are correct
+    models_agree_correct = (
+        (results_df['bert_prediction'] == results_df['rf_prediction']) & 
+        (results_df['bert_prediction'] == results_df['actual_label'])
+    ).mean()
+    
+    # Models agree BUT are wrong
+    models_agree_wrong = (
+        (results_df['bert_prediction'] == results_df['rf_prediction']) & 
+        (results_df['bert_prediction'] != results_df['actual_label'])
+    ).mean()
+    
+    # Majority vote analysis (2 out of 3 agree)
+    # BERT and Actual agree (RF disagrees)
+    bert_actual_vs_rf = (
+        (results_df['bert_prediction'] == results_df['actual_label']) & 
+        (results_df['rf_prediction'] != results_df['actual_label'])
+    ).mean()
+    
+    # RF and Actual agree (BERT disagrees)  
+    rf_actual_vs_bert = (
+        (results_df['rf_prediction'] == results_df['actual_label']) & 
+        (results_df['bert_prediction'] != results_df['actual_label'])
+    ).mean()
+    
+    # Both models wrong, but in same way
+    both_models_wrong_same = (
+        (results_df['bert_prediction'] == results_df['rf_prediction']) & 
+        (results_df['bert_prediction'] != results_df['actual_label'])
+    ).mean()
+    
+    # Both models wrong, but in different ways
+    both_models_wrong_different = (
+        (results_df['bert_prediction'] != results_df['actual_label']) & 
+        (results_df['rf_prediction'] != results_df['actual_label']) &
+        (results_df['bert_prediction'] != results_df['rf_prediction'])
+    ).mean()
+    
+    print(f"BERT-RF agreement: {bert_rf_agreement:.4f}")
+    print(f"BERT-Actual agreement: {bert_actual_agreement:.4f}")
+    print(f"RF-Actual agreement: {rf_actual_agreement:.4f}")
+    print(f"All three agree: {all_three_agree:.4f}")
+    print(f"Models agree (right or wrong): {models_agree:.4f}")
+    print(f"Models agree AND correct: {models_agree_correct:.4f}")
+    print(f"Models agree BUT wrong: {models_agree_wrong:.4f}")
+    
+    # Create comprehensive agreement statistics DataFrame
+    agreement_stats = pd.DataFrame({
+        'metric': [
+            'bert_rf_agreement', 'bert_actual_agreement', 'rf_actual_agreement', 
+            'all_three_agree', 'models_agree', 'models_agree_correct', 'models_agree_wrong',
+            'bert_actual_vs_rf', 'rf_actual_vs_bert', 'both_models_wrong_same', 
+            'both_models_wrong_different', 'rf_auc', 'validation_size'
+        ],
+        'value': [
+            bert_rf_agreement, bert_actual_agreement, rf_actual_agreement,
+            all_three_agree, models_agree, models_agree_correct, models_agree_wrong,
+            bert_actual_vs_rf, rf_actual_vs_bert, both_models_wrong_same,
+            both_models_wrong_different, auc, len(results_df)
+        ]
+    })
+    
+    # Save agreement statistics
+    agreement_output_path = full_path.replace("_labelled.csv", f"{suffix}_median_run_agreement.csv")
+    agreement_stats.to_csv(agreement_output_path, index=False)
+    print(f"DEBUG: Agreement statistics saved to: {agreement_output_path}")
+    
+    return auc, results_df, agreement_stats
+
+def evaluate_all_datasets_median_run(folder_path, label_source):
+    """
+    Modified version of evaluate_all_datasets that uses median run validation data.
+    """
+    print(f"DEBUG: Starting evaluate_all_datasets_median_run with folder_path: {folder_path}, label_source: {label_source}")
+    
+    assert label_source in ['labels', 'bert_prediction'], "label_source must be 'labels' or 'bert_prediction'"
+
+    if not os.path.exists(folder_path):
+        print(f"ERROR: Folder path does not exist: {folder_path}")
+        return
+
+    results_summary = []
+    agreement_summary = []
+    files_found = 0
+    files_processed = 0
+
+    for root, _, files in os.walk(folder_path):
+        print(f"DEBUG: Scanning directory: {root}")
+        
+        for filename in files:
+            if filename.endswith('validation_data_labelled.csv') and ('random' in filename or 'cosine' in filename or 'ml' in filename):
+                files_found += 1
+                full_path = os.path.join(root, filename)
+                print(f'DEBUG: Found matching file #{files_found}: {full_path}')
+
+                try:
+                    auc, results_df, agreement_stats = evaluate_with_median_run_data(full_path, label_source)
+                    
+                    # Parse filename for metadata
+                    try:
+                        model, ft, context, style, oppu = parse_filename(filename)
+                        print(f"DEBUG: Parsed filename - model: {model}, ft: {ft}, context: {context}, style: {style}, oppu: {oppu}")
+                        if 'random' in filename:
+                            source_type = 'random'
+                        else:
+                            source_type = "cosine" if "cosine" in filename else "ml"
+                        # Collect summary results
+                        results_summary.append({
+                            'model': model,
+                            'ft': ft,
+                            'context': context,
+                            'style': style,
+                            'oppu': oppu,
+                            'auc': auc,
+                            'label_source': label_source,
+                            'source_type': source_type,
+                            'validation_size': len(results_df)
+                        })
+                        
+                        # Collect agreement statistics with metadata
+                        for _, row in agreement_stats.iterrows():
+                            agreement_summary.append({
+                                'model': model,
+                                'ft': ft,
+                                'context': context,
+                                'style': style,
+                                'oppu': oppu,
+                                'label_source': label_source,
+                                'source_type': source_type,
+                                'metric': row['metric'],
+                                'value': row['value']
+                            })
+                        
+                    except Exception as parse_error:
+                        print(f"ERROR: Could not parse filename {filename}: {parse_error}")
+                        continue
+                        
+                    files_processed += 1
+                    
+                except Exception as e:
+                    print(f"ERROR: Failed to evaluate {full_path}")
+                    print(f"ERROR: {str(e)}")
+                    print("Full traceback:")
+                    traceback.print_exc()
+                    continue
+
+    print(f"DEBUG: Summary - Found {files_found} files, successfully processed {files_processed}")
+    
+    if results_summary:
+        # Save combined summary
+        suffix = "_from_bert" if label_source == "bert_prediction" else "_from_labels"
+        
+        # Save evaluation summary
+        summary_path = os.path.join(folder_path, f'median_run_evaluation_summary{suffix}.csv')
+        pd.DataFrame(results_summary).to_csv(summary_path, index=False)
+        print(f"DEBUG: Evaluation summary saved to: {summary_path}")
+        
+        # Save agreement summary
+        agreement_summary_path = os.path.join(folder_path, f'median_run_agreement_summary{suffix}.csv')
+        pd.DataFrame(agreement_summary).to_csv(agreement_summary_path, index=False)
+        print(f"DEBUG: Agreement summary saved to: {agreement_summary_path}")
+        
+        # Print overall statistics
+        print(f"\n=== OVERALL SUMMARY ===")
+        print(f"Processed {files_processed} datasets")
+        
+        if agreement_summary:
+            agreement_df = pd.DataFrame(agreement_summary)
+            
+            # Calculate average agreements across all datasets
+            bert_rf_avg = agreement_df[agreement_df['metric'] == 'bert_rf_agreement']['value'].mean()
+            bert_actual_avg = agreement_df[agreement_df['metric'] == 'bert_actual_agreement']['value'].mean()
+            rf_actual_avg = agreement_df[agreement_df['metric'] == 'rf_actual_agreement']['value'].mean()
+            rf_auc_avg = agreement_df[agreement_df['metric'] == 'rf_auc']['value'].mean()
+            
+            print(f"Average BERT-RF agreement: {bert_rf_avg:.4f}")
+            print(f"Average BERT-Actual agreement: {bert_actual_avg:.4f}")
+            print(f"Average RF-Actual agreement: {rf_actual_avg:.4f}")
+            print(f"Average RF AUC: {rf_auc_avg:.4f}")
