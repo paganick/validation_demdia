@@ -1,0 +1,11 @@
+{
+  "test_type": "quick",
+  "created": "2025-11-17T10:57:25.951344",
+  "source_directory": "test_results",
+  "num_files": 3,
+  "files": [
+    "golden_outputs/quick/meta-llama/Llama-3.1-8B__noft__ctx1__style10__no_OPPU__random_response.json",
+    "golden_outputs/quick/meta-llama/Llama-3.1-8B__noft__ctx0__style0__no_OPPU__random_response.json",
+    "golden_outputs/quick/meta-llama/Llama-3.1-8B__noft__ctx0__style10__no_OPPU__random_response.json"
+  ]
+}

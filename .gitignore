@@ -1,4 +1,8 @@
 results/*
+updated_results/*
+basic_results/*
+llama70/*
+data/*
 configs/*
 data/personas_and_tweets.df.pkl
 bluesky_data.pkl
@@ -19,7 +23,6 @@ generate_stats.py
 __pycache__/
 *.py[cod]
 
-*.json
 *.json.lock
 *.csv
 *.png

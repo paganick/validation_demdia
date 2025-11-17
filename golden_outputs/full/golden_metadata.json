@@ -1,0 +1,17 @@
+{
+  "test_type": "full",
+  "created": "2025-11-17T10:57:32.595150",
+  "source_directory": "test_results_full",
+  "num_files": 9,
+  "files": [
+    "golden_outputs/full/mistralai/Mistral-7B-v0.1__noft__ctx0__style0__no_OPPU__random_response.json",
+    "golden_outputs/full/mistralai/Mistral-7B-v0.1__noft__ctx1__style10__no_OPPU__random_response.json",
+    "golden_outputs/full/mistralai/Mistral-7B-v0.1__noft__ctx0__style10__no_OPPU__random_response.json",
+    "golden_outputs/full/deepseek-ai/DeepSeek-R1-Distill-Llama-8B__noft__ctx1__style10__no_OPPU__random_response.json",
+    "golden_outputs/full/deepseek-ai/DeepSeek-R1-Distill-Llama-8B__noft__ctx0__style0__no_OPPU__random_response.json",
+    "golden_outputs/full/deepseek-ai/DeepSeek-R1-Distill-Llama-8B__noft__ctx0__style10__no_OPPU__random_response.json",
+    "golden_outputs/full/meta-llama/Llama-3.1-8B__noft__ctx1__style10__no_OPPU__random_response.json",
+    "golden_outputs/full/meta-llama/Llama-3.1-8B__noft__ctx0__style0__no_OPPU__random_response.json",
+    "golden_outputs/full/meta-llama/Llama-3.1-8B__noft__ctx0__style10__no_OPPU__random_response.json"
+  ]
+}
