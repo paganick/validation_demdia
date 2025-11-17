@@ -7,11 +7,11 @@ to detect regressions or unexpected changes.
 
 Usage:
     # After running tests
-    python compare_with_golden.py --test_type quick
-    python compare_with_golden.py --test_type full
+    python tests/compare_with_golden.py --test_type quick
+    python tests/compare_with_golden.py --test_type full
 
     # Detailed diff output
-    python compare_with_golden.py --test_type quick --verbose
+    python tests/compare_with_golden.py --test_type quick --verbose
 """
 
 import argparse

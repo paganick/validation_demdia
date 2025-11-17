@@ -38,7 +38,7 @@ def run_test(data_file: str, output_dir: str = "test_results_full", n_users: int
     os.makedirs(output_dir, exist_ok=True)
 
     # Test configuration directory
-    test_config_dir = "test_configs"
+    test_config_dir = "tests/test_configs"
 
     # All non-finetuned test configs (9 total)
     test_configs = [

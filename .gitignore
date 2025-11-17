@@ -1,4 +1,6 @@
 results/*
+test_results/*
+test_results_full/*
 updated_results/*
 basic_results/*
 llama70/*

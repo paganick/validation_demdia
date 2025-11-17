@@ -38,7 +38,7 @@ def run_test(data_file: str, output_dir: str = "test_results", n_users: int = 1,
     os.makedirs(output_dir, exist_ok=True)
 
     # Test configuration directory
-    test_config_dir = "test_configs"
+    test_config_dir = "tests/test_configs"
 
     # Only test Llama-3.1-8B configs (non-finetuned)
     test_configs = [
