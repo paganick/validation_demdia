@@ -1,9 +1,8 @@
 import argparse
 import os
 import json
-from src.simulate import *
-from src.config_utils import load_config
-import src.globals as globals_module
+from simulation.simulate import *
+from simulation.config_utils import load_config
 
 
 def main():
@@ -25,12 +24,12 @@ def main():
     # Set random seed if specified (for reproducible testing)
     if args.seed is not None:
         try:
-            from test_seed_utils import set_global_seed
+            from tests.test_seed_utils import set_global_seed
             set_global_seed(args.seed)
             print(f"🎲 Random seed set to {args.seed} for reproducibility")
         except ImportError:
-            print("⚠️  Warning: test_seed_utils not found. Seed setting skipped.")
-            print("   Install test_seed_utils.py to enable reproducible testing.")
+            print("⚠️  Warning: tests/test_seed_utils.py not found. Seed setting skipped.")
+            print("   Ensure tests module is available for reproducible testing.")
     
     os.makedirs(args.output_dir, exist_ok=True)
 

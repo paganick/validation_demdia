@@ -1,0 +1,40 @@
+# Core Dependencies
+torch>=2.0.0
+transformers>=4.30.0
+peft>=0.4.0
+datasets>=2.12.0
+sentence-transformers>=2.2.2
+
+# Data Processing
+pandas>=2.0.0
+numpy>=1.24.0
+scipy>=1.10.0
+
+# NLP & Linguistics
+rank-bm25>=0.2.2
+empath>=0.89
+nltk>=3.8
+emoji>=2.5.0
+
+# Machine Learning
+scikit-learn>=1.2.0
+
+# Text Analysis
+textblob>=0.17.1
+language-tool-python>=2.7.1
+
+# Visualization
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Configuration
+pyyaml>=6.0
+
+# Testing
+pytest>=7.3.0
+
+# Utilities
+tqdm>=4.65.0
+
+# Note: For exact versions and conda-specific packages, see environment.yml
+# Install with: pip install -r requirements.txt
