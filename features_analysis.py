@@ -352,8 +352,8 @@ def evaluate_all_datasets(folder_path, label_source):
                     print(f"DEBUG: Source type: {source_type}")
 
                     try:
-                        model, ft, context, style, oppu = parse_filename(filename)
-                        print(f"DEBUG: Parsed filename - model: {model}, ft: {ft}, context: {context}, style: {style}, oppu: {oppu}")
+                        model, ft, context, style, oppu, persona = parse_filename(filename)
+                        print(f"DEBUG: Parsed filename - model: {model}, ft: {ft}, context: {context}, style: {style}, oppu: {oppu}, persona: {persona}")
                     except Exception as parse_error:
                         print(f"ERROR: Could not parse filename {filename}: {parse_error}")
                         print("STOPPING EXECUTION due to filename parsing error.")
@@ -362,7 +362,8 @@ def evaluate_all_datasets(folder_path, label_source):
                     # Evaluate from cached features
                     print("DEBUG: Starting feature evaluation...")
                     auc, feature_importance, correlation_df = evaluate_features_single_dataset(
-                        df, feature_cache_path, label_source=label_source
+                        df, feature_cache_path, label_source=label_source,
+                        exclude_features=['spelling_grammar_errors', 'has_emoji', 'has_mention', 'has_link', 'perplexity_proxy', 'hedge_word_count', 'transition_word_count', 'superlative_count', 'abstract_concrete_ratio']
                     )
                     print(f"DEBUG: Evaluation complete. AUC: {auc}")
 
@@ -373,6 +374,7 @@ def evaluate_all_datasets(folder_path, label_source):
                         'context': context,
                         'style': style,
                         'oppu': oppu,
+                        'persona': persona,
                         'auc': auc,
                         'label_source': label_source,
                         'source_type': source_type
@@ -386,6 +388,7 @@ def evaluate_all_datasets(folder_path, label_source):
                         'context': context,
                         'style': style,
                         'oppu': oppu,
+                        'persona': persona,
                         'label_source': label_source,
                         'source_type': source_type
                     })

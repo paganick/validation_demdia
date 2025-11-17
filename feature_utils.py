@@ -623,7 +623,7 @@ def evaluate_features_single_dataset(
     df,
     feature_cache_path=None,
     label_source="labels",
-    exclude_features=['spelling_grammar_errors', 'has_emoji', 'has_mention', 'has_link']
+    exclude_features=['spelling_grammar_errors', 'has_emoji', 'has_mention', 'has_link', 'perplexity_proxy', 'hedge_word_count', 'transition_word_count', 'superlative_count', 'abstract_concrete_ratio']
 ):
     """
     Train Random Forest classifier on extracted features and evaluate AUC.
@@ -1097,8 +1097,8 @@ def evaluate_all_datasets_median_run(folder_path, label_source):
                     
                     # Parse filename for metadata
                     try:
-                        model, ft, context, style, oppu = parse_filename(filename)
-                        print(f"DEBUG: Parsed filename - model: {model}, ft: {ft}, context: {context}, style: {style}, oppu: {oppu}")
+                        model, ft, context, style, oppu, persona = parse_filename(filename)
+                        print(f"DEBUG: Parsed filename - model: {model}, ft: {ft}, context: {context}, style: {style}, oppu: {oppu}, persona: {persona}")
                         if 'random' in filename:
                             source_type = 'random'
                         else:
@@ -1110,6 +1110,7 @@ def evaluate_all_datasets_median_run(folder_path, label_source):
                             'context': context,
                             'style': style,
                             'oppu': oppu,
+                            'persona': persona,
                             'auc': auc,
                             'label_source': label_source,
                             'source_type': source_type,
@@ -1124,6 +1125,7 @@ def evaluate_all_datasets_median_run(folder_path, label_source):
                                 'context': context,
                                 'style': style,
                                 'oppu': oppu,
+                                'persona': persona,
                                 'label_source': label_source,
                                 'source_type': source_type,
                                 'metric': row['metric'],

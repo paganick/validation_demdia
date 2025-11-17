@@ -28,19 +28,12 @@ from plotting_utils import (
 )
 
 # === Configuration ===
-DATASETS = ['results/results_bluesky', 'results/results_twitter', 'results/results_reddit']
-OUTPUT_DIR = "SOTA_figures"
 PRESENTATION_MODE = False
 SAVE_FORMAT = 'png'
 
-# Create output directory
-Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
-
-# Normalize dataset names for consistent matching
-NORMALIZED_DATASETS = [normalize_dataset_name(d) for d in DATASETS]
 
 # === Figure 1: Best Model Performance by Dataset ===
-def generate_best_model_performance(response_type="random", metric="accuracy"):
+def generate_best_model_performance(DATASETS, OUTPUT_DIR, response_type="random", metric="accuracy"):
     """
     Bar plot showing the best accuracy achieved by each model across different datasets.
     Each model gets grouped bars showing performance on each dataset, with error bars.
@@ -49,7 +42,9 @@ def generate_best_model_performance(response_type="random", metric="accuracy"):
     
     # Load data directly here
     all_results = []
-    
+    # Normalize dataset names for consistent matching
+    NORMALIZED_DATASETS = [normalize_dataset_name(d) for d in DATASETS]
+
     for dataset in DATASETS:
         if not os.path.exists(dataset):
             print(f"Warning: Dataset {dataset} does not exist, skipping...")
@@ -184,12 +179,14 @@ def generate_best_model_performance(response_type="random", metric="accuracy"):
         print(f"  Saved to: {output_path}")
 
 # === Figure 2: First Response Similarity by Dataset ===
-def generate_first_response_similarity():
+def generate_first_response_similarity(DATASETS, OUTPUT_DIR):
     """Generate first response cosine similarity by dataset figure."""
     print("\n=== Generating Figure 2: First Response Similarity by Dataset ===")
     
     rows = []
-    
+    # Normalize dataset names for consistent matching
+    NORMALIZED_DATASETS = [normalize_dataset_name(d) for d in DATASETS]
+
     for dataset in DATASETS:
         dataset_path = Path(dataset)
         
@@ -296,12 +293,14 @@ def generate_first_response_similarity():
         print(f"  Saved to: {output_path}")
 
 # === Figure 3: ML Explainability Heatmap ===
-def generate_ml_explainability_heatmap():
+def generate_ml_explainability_heatmap(DATASETS, OUTPUT_DIR):
     """Generate ML explainability feature importance heatmap."""
     print("\n=== Generating Figure 3: ML Explainability Heatmap ===")
     
     all_data = []
-    
+    # Normalize dataset names for consistent matching
+    NORMALIZED_DATASETS = [normalize_dataset_name(d) for d in DATASETS]
+
     for dataset in DATASETS:
         dataset_path = Path(dataset)
         
@@ -474,12 +473,14 @@ def generate_ml_explainability_heatmap():
         print(f"  Saved to: {output_path}")
 
 # === Figure 4: Aggregated Feature Frequency by Model ===
-def generate_aggregated_feature_frequency():
+def generate_aggregated_feature_frequency(DATASETS, OUTPUT_DIR):
     """Generate aggregated feature frequency by model figure."""
     print("\n=== Generating Figure 4: Aggregated Feature Frequency by Model ===")
     
     all_data = []
-    
+    # Normalize dataset names for consistent matching
+    NORMALIZED_DATASETS = [normalize_dataset_name(d) for d in DATASETS]
+
     for dataset in DATASETS:
         dataset_path = Path(dataset)
         
@@ -595,20 +596,38 @@ def generate_aggregated_feature_frequency():
         print(f"  Saved to: {output_path}")
 
 # === Main Execution ===
-def main():
-    """Main function to generate all 4 required figures."""
+def main(folder="results"):
+    """
+    Main function to generate all 4 required figures.
+    
+    Args:
+        updated_folder (str): Base folder path for results. Defaults to "updated_results".
+                              OUTPUT_DIR will be created as {updated_folder}/SOTA_plots
+    """
+    # Construct dataset paths from the updated_folder argument
+    DATASETS = [
+        f'{folder}/results_bluesky',
+        f'{folder}/results_twitter',
+        f'{folder}/results_reddit'
+    ]
+    
+    # Create output directory as a subfolder of updated_folder
+    OUTPUT_DIR = f"{folder}/SOTA_plots"
+    Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
+    
     print("=" * 60)
     print("Unified Figure Generation Script")
     print("=" * 60)
+    print(f"Updated folder: {folder}")
     print(f"Output directory: {OUTPUT_DIR}")
     print(f"Datasets: {DATASETS}")
     print("Configuration filter: baseline + persona only (no ft, no style, no context)")
     
-    # Generate all 4 figures
-    generate_best_model_performance()
-    generate_first_response_similarity()
-    generate_ml_explainability_heatmap()
-    generate_aggregated_feature_frequency()
+    # Generate all 4 figures (pass DATASETS and OUTPUT_DIR if needed)
+    generate_best_model_performance(DATASETS, OUTPUT_DIR)
+    generate_first_response_similarity(DATASETS, OUTPUT_DIR)
+    generate_ml_explainability_heatmap(DATASETS, OUTPUT_DIR)
+    generate_aggregated_feature_frequency(DATASETS, OUTPUT_DIR)
     
     print("\n" + "=" * 60)
     print("All figures generated successfully!")
@@ -616,4 +635,11 @@ def main():
     print("=" * 60)
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Generate SOTA figures from results')
+    parser.add_argument('--folder', type=str, default='results',
+                        help='Base folder path for results (default: results)')
+    
+    args = parser.parse_args()
+    main(folder=args.folder)

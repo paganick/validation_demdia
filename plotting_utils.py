@@ -62,9 +62,9 @@ def get_dataset_color(dataset_path):
 # === Filename Parsing ===
 def parse_filename(filename):
     """
-    Extracts model, finetuning, context, style, and OPPU info from a filename.
+    Extracts model, finetuning, context, style, OPPU, and persona info from a filename.
     Converts them into booleans or integers for clean tabular use.
-    Handles cases where persona field might be empty.
+    Handles cases where persona field might be empty (defaults to 1).
     """
     base = os.path.basename(filename)
     # Remove any file extensions and suffixes
@@ -75,7 +75,7 @@ def parse_filename(filename):
     
     parts = base.split("__")
     
-    # Handle different numbers of parts (sometimes persona is missing)
+    # Handle different numbers of parts
     if len(parts) < 5:
         print(f"Warning: filename has only {len(parts)} parts: {parts}")
         return None, None, None, None, None, None
@@ -86,12 +86,11 @@ def parse_filename(filename):
     style = int(parts[3].replace("style", ""))
     oppu = 1 if parts[4].startswith("OPPU") and not parts[4].startswith("no_OPPU") else 0
     
-    # Handle persona - if there's no 6th part or it's empty, assume persona is on
+    # Handle persona - default to 1 if field is missing
     if len(parts) > 5:
         persona = 0 if parts[5].startswith("no_persona") else 1
     else:
-        # Default to persona on if field is missing
-        persona = 1
+        persona = 1  # Default to persona on if field is missing
     
     return model, ft, context, style, oppu, persona
 

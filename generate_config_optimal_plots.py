@@ -32,16 +32,13 @@ from plotting_utils import (
 )
 
 # === Configuration ===
-DATASETS = ['results/results_bluesky', 'results/results_twitter', 'results/results_reddit']
-OUTPUT_DIR = "configuration_optimization_figures"
-PRESENTATION_MODE = False
-SAVE_FORMAT = 'png'
+class Config:
+    PRESENTATION_MODE = False
+    SAVE_FORMAT = 'png'
+    DATASETS = []
+    OUTPUT_DIR = ""
+    NORMALIZED_DATASETS = []
 
-# Create output directory
-Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
-
-# Normalize dataset names
-NORMALIZED_DATASETS = [normalize_dataset_name(d) for d in DATASETS]
 
 # === Data Loading ===
 def load_configuration_data(folder_paths):
@@ -291,7 +288,7 @@ def save_best_configurations(df, response_type="random", metric="accuracy"):
     df_best_configs = pd.DataFrame(best_configs)
     df_best_configs = df_best_configs.sort_values(['model', 'dataset'])
     
-    output_path = os.path.join(OUTPUT_DIR, f"best_configurations_{response_type}_{metric}.csv")
+    output_path = os.path.join(Config.OUTPUT_DIR, f"best_configurations_{response_type}_{metric}.csv")
     df_best_configs.to_csv(output_path, index=False)
     print(f"  Saved to: {output_path}")
     
@@ -359,9 +356,9 @@ def plot_sota_vs_best_performance(df, response_type="random", metric="accuracy")
         df_combined['sota_std'] = 0
     
     model_order = get_ordered_models(df_combined['model'].unique())
-    datasets = NORMALIZED_DATASETS
+    datasets = Config.NORMALIZED_DATASETS
     
-    with with_plot_style(PRESENTATION_MODE):
+    with with_plot_style(Config.PRESENTATION_MODE):
         fig, ax = plt.subplots(figsize=(14, 8))
         
         n_models = len(model_order)
@@ -448,8 +445,8 @@ def plot_sota_vs_best_performance(df, response_type="random", metric="accuracy")
         ax.set_axisbelow(True)
         
         plt.tight_layout()
-        output_path = os.path.join(OUTPUT_DIR, f'config_sota_vs_best_{response_type}.{SAVE_FORMAT}')
-        fig.savefig(output_path, dpi=600, bbox_inches='tight', transparent=PRESENTATION_MODE)
+        output_path = os.path.join(Config.OUTPUT_DIR, f'config_sota_vs_best_{response_type}.{Config.SAVE_FORMAT}')
+        fig.savefig(output_path, dpi=600, bbox_inches='tight', transparent=Config.PRESENTATION_MODE)
         plt.close(fig)
         print(f"  Saved to: {output_path}")
 
@@ -508,7 +505,7 @@ def plot_intervention_steps_aggregated(df, response_type="random", metric="accur
         print("  No data available")
         return
     
-    with with_plot_style(PRESENTATION_MODE):
+    with with_plot_style(Config.PRESENTATION_MODE):
         fig, ax = plt.subplots(figsize=(14, 8))
         
         x_positions = np.arange(len(step_improvements))
@@ -540,8 +537,8 @@ def plot_intervention_steps_aggregated(df, response_type="random", metric="accur
         ax.legend(loc='lower left', fontsize=15)
         
         plt.tight_layout()
-        output_path = os.path.join(OUTPUT_DIR, f'config_stepwise_{response_type}.{SAVE_FORMAT}')
-        fig.savefig(output_path, dpi=600, bbox_inches='tight', transparent=PRESENTATION_MODE)
+        output_path = os.path.join(Config.OUTPUT_DIR, f'config_stepwise_{response_type}.{Config.SAVE_FORMAT}')
+        fig.savefig(output_path, dpi=600, bbox_inches='tight', transparent=Config.PRESENTATION_MODE)
         plt.close(fig)
         print(f"  Saved to: {output_path}")
 
@@ -617,9 +614,9 @@ def plot_response_overlap_summary(df_overlap):
     
     df_summary = pd.DataFrame(summary_data)
     model_order = get_ordered_models(df_summary['model'].unique())
-    datasets = NORMALIZED_DATASETS
+    datasets = Config.NORMALIZED_DATASETS
     
-    with with_plot_style(PRESENTATION_MODE):
+    with with_plot_style(Config.PRESENTATION_MODE):
         fig, ax = plt.subplots(figsize=(14, 8))
         
         n_models = len(model_order)
@@ -669,8 +666,8 @@ def plot_response_overlap_summary(df_overlap):
         ax.set_axisbelow(True)
         
         plt.tight_layout()
-        output_path = os.path.join(OUTPUT_DIR, f'config_overlap_summary.{SAVE_FORMAT}')
-        fig.savefig(output_path, dpi=600, bbox_inches='tight', transparent=PRESENTATION_MODE)
+        output_path = os.path.join(Config.OUTPUT_DIR, f'config_overlap_summary.{Config.SAVE_FORMAT}')
+        fig.savefig(output_path, dpi=600, bbox_inches='tight', transparent=Config.PRESENTATION_MODE)
         plt.close(fig)
         print(f"  Saved to: {output_path}")
 
@@ -755,9 +752,9 @@ def plot_configuration_consistency_with_baseline(df, metric="accuracy"):
         return
     
     model_order = get_ordered_models(df_comparison['model'].unique())
-    datasets = NORMALIZED_DATASETS
+    datasets = Config.NORMALIZED_DATASETS
     
-    with with_plot_style(PRESENTATION_MODE):
+    with with_plot_style(Config.PRESENTATION_MODE):
         fig, ax = plt.subplots(figsize=(16, 8))
         
         n_models = len(model_order)
@@ -867,8 +864,8 @@ def plot_configuration_consistency_with_baseline(df, metric="accuracy"):
         ax.set_axisbelow(True)
         
         plt.tight_layout()
-        output_path = os.path.join(OUTPUT_DIR, f'config_consistency_with_baseline.{SAVE_FORMAT}')
-        fig.savefig(output_path, dpi=600, bbox_inches='tight', transparent=PRESENTATION_MODE)
+        output_path = os.path.join(Config.OUTPUT_DIR, f'config_consistency_with_baseline.{Config.SAVE_FORMAT}')
+        fig.savefig(output_path, dpi=600, bbox_inches='tight', transparent=Config.PRESENTATION_MODE)
         plt.close(fig)
         print(f"  Saved to: {output_path}")
 
@@ -915,9 +912,9 @@ def plot_cosine_similarity_boxplot(similarity_data, df_best_configs):
     df_best = pd.concat(best_data_list, ignore_index=True)
     df_combined = pd.concat([df_sota, df_best], ignore_index=True)
     
-    datasets = NORMALIZED_DATASETS
+    datasets = Config.NORMALIZED_DATASETS
     
-    with with_plot_style(PRESENTATION_MODE):
+    with with_plot_style(Config.PRESENTATION_MODE):
         fig, ax = plt.subplots(figsize=(14, 8))
         
         box_width = 0.35
@@ -998,8 +995,8 @@ def plot_cosine_similarity_boxplot(similarity_data, df_best_configs):
                  title='Configuration Type', title_fontsize=15)
         
         plt.tight_layout()
-        output_path = os.path.join(OUTPUT_DIR, 'sota_vs_best_cosine_similarity_boxplot.png')
-        fig.savefig(output_path, dpi=300, bbox_inches="tight", transparent=PRESENTATION_MODE)
+        output_path = os.path.join(Config.OUTPUT_DIR, 'sota_vs_best_cosine_similarity_boxplot.png')
+        fig.savefig(output_path, dpi=300, bbox_inches="tight", transparent=Config.PRESENTATION_MODE)
         plt.close()
         print(f"  Saved to: {output_path}")
 
@@ -1059,9 +1056,9 @@ def plot_cosine_similarity_boxplot_all_methods(similarity_data, df_best_configs)
         return
     
     df_combined = pd.concat([df_baseline] + all_best_data, ignore_index=True)
-    datasets = NORMALIZED_DATASETS
+    datasets = Config.NORMALIZED_DATASETS
     
-    with with_plot_style(PRESENTATION_MODE):
+    with with_plot_style(Config.PRESENTATION_MODE):
         fig, ax = plt.subplots(figsize=(16, 8))
         
         box_width = 0.20
@@ -1151,8 +1148,8 @@ def plot_cosine_similarity_boxplot_all_methods(similarity_data, df_best_configs)
                  title='Configuration Type', title_fontsize=15)
         
         plt.tight_layout()
-        output_path = os.path.join(OUTPUT_DIR, 'sota_vs_best_cosine_similarity_boxplot_all_methods.png')
-        fig.savefig(output_path, dpi=300, bbox_inches="tight", transparent=PRESENTATION_MODE)
+        output_path = os.path.join(Config.OUTPUT_DIR, 'sota_vs_best_cosine_similarity_boxplot_all_methods.png')
+        fig.savefig(output_path, dpi=300, bbox_inches="tight", transparent=Config.PRESENTATION_MODE)
         plt.close()
         print(f"  Saved to: {output_path}")
 
@@ -1351,7 +1348,7 @@ def plot_empath_feature_frequency(folder_paths, df_best_configs, response_type='
     fig_width = 18
     fig_height = 8
     
-    with with_plot_style(PRESENTATION_MODE):
+    with with_plot_style(Config.PRESENTATION_MODE):
         fig, axes = plt.subplots(1, len(all_data), figsize=(fig_width, fig_height), 
                                 sharey=False)
         
@@ -1408,8 +1405,8 @@ def plot_empath_feature_frequency(folder_paths, df_best_configs, response_type='
         plt.subplots_adjust(top=0.85, bottom=0.2)
         
         # Save output
-        output_path = os.path.join(OUTPUT_DIR, f'empath_feature_frequency_top{top_n}.{SAVE_FORMAT}')
-        fig.savefig(output_path, dpi=600, bbox_inches='tight', transparent=PRESENTATION_MODE)
+        output_path = os.path.join(Config.OUTPUT_DIR, f'empath_feature_frequency_top{top_n}.{Config.SAVE_FORMAT}')
+        fig.savefig(output_path, dpi=600, bbox_inches='tight', transparent=Config.PRESENTATION_MODE)
         plt.close()
         
         print(f"  Saved to: {output_path}")
@@ -1523,9 +1520,9 @@ def plot_feature_importance_heatmap(df, max_features=10):
         print("  No feature importance data to plot")
         return
     
-    with with_plot_style(PRESENTATION_MODE):
+    with with_plot_style(Config.PRESENTATION_MODE):
         # Order datasets: Bluesky, Twitter, Reddit
-        dataset_order = NORMALIZED_DATASETS
+        dataset_order = Config.NORMALIZED_DATASETS
         datasets = [d for d in dataset_order if d in df['dataset'].unique()]
         
         # Get all models
@@ -1689,24 +1686,43 @@ def plot_feature_importance_heatmap(df, max_features=10):
         cbar.set_label('Feature Importance', fontsize=14)
         
         # Save output
-        output_path = os.path.join(OUTPUT_DIR, f'feature_importance_heatmap_top{max_features}.{SAVE_FORMAT}')
-        fig.savefig(output_path, dpi=600, bbox_inches='tight', transparent=PRESENTATION_MODE)
+        output_path = os.path.join(Config.OUTPUT_DIR, f'feature_importance_heatmap_top{max_features}.{Config.SAVE_FORMAT}')
+        fig.savefig(output_path, dpi=600, bbox_inches='tight', transparent=Config.PRESENTATION_MODE)
         plt.close()
         
         print(f"  Saved to: {output_path}")
 
 # === Main Execution ===
-def main():
-    """Main function to generate configuration optimization figures."""
+def main(folder="results"):
+    """
+    Main function to generate configuration optimization figures.
+    
+    Args:
+        folder (str): Base folder path for results. Defaults to "results".
+                      OUTPUT_DIR will be created as {folder}/configuration_optimization_figures
+    """
+    # Set up configuration
+    Config.DATASETS = [
+        f'{folder}/results_bluesky',
+        f'{folder}/results_twitter',
+        f'{folder}/results_reddit'
+    ]
+    Config.OUTPUT_DIR = f"{folder}/configuration_optimization_figures"
+    Config.NORMALIZED_DATASETS = [normalize_dataset_name(d) for d in Config.DATASETS]
+    
+    # Create output directory
+    Path(Config.OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
+    
     print("=" * 60)
     print("Configuration Optimization Analysis")
     print("=" * 60)
-    print(f"Output directory: {OUTPUT_DIR}")
-    print(f"Datasets: {DATASETS}")
+    print(f"Folder: {folder}")
+    print(f"Output directory: {Config.OUTPUT_DIR}")
+    print(f"Datasets: {Config.DATASETS}")
     
     # Load accuracy data
     print("\n=== Loading Accuracy Data ===")
-    df = load_configuration_data(DATASETS)
+    df = load_configuration_data(Config.DATASETS)
     
     if df.empty:
         print("No accuracy data found!")
@@ -1726,7 +1742,7 @@ def main():
     plot_intervention_steps_aggregated(df, response_type="random", metric="accuracy")
     
     # Analyze and plot response overlap
-    df_overlap = analyze_response_overlap(DATASETS)
+    df_overlap = analyze_response_overlap(Config.DATASETS)
     if df_overlap is not None:
         plot_response_overlap_summary(df_overlap)
     
@@ -1734,7 +1750,7 @@ def main():
     plot_configuration_consistency_with_baseline(df, metric="accuracy")
     
     # Load cosine similarity data
-    similarity_data = load_cosine_similarities_by_response_type(DATASETS)
+    similarity_data = load_cosine_similarities_by_response_type(Config.DATASETS)
     
     # Generate cosine similarity figures
     if similarity_data['random'] is not None and not similarity_data['random'].empty:
@@ -1742,19 +1758,26 @@ def main():
         plot_cosine_similarity_boxplot_all_methods(similarity_data, df_best_configs)
     
     # Generate Empath feature frequency plot
-    feature_model_counts = load_empath_feature_data(DATASETS, df_best_configs, response_type='random')
+    feature_model_counts = load_empath_feature_data(Config.DATASETS, df_best_configs, response_type='random')
     if feature_model_counts:
-        plot_empath_feature_frequency(DATASETS, df_best_configs, top_n=20)
+        plot_empath_feature_frequency(Config.DATASETS, df_best_configs, top_n=20)
     
     # Generate feature importance heatmap
-    df_importance = load_feature_importance_data(DATASETS, df_best_configs, response_type='random')
+    df_importance = load_feature_importance_data(Config.DATASETS, df_best_configs, response_type='random')
     if df_importance is not None:
         plot_feature_importance_heatmap(df_importance, max_features=10)
     
     print("\n" + "=" * 60)
     print("All figures generated successfully!")
-    print(f"Output files in: {OUTPUT_DIR}/")
+    print(f"Output files in: {Config.OUTPUT_DIR}/")
     print("=" * 60)
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Generate configuration optimization figures')
+    parser.add_argument('--folder', type=str, default='results',
+                        help='Base folder path for results (default: results)')
+    
+    args = parser.parse_args()
+    main(folder=args.folder)

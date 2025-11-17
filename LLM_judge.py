@@ -46,6 +46,15 @@ from sklearn.ensemble import RandomForestClassifier
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
+
+EXCLUDED_FEATURES_FOR_ML = [
+    "perplexity_proxy",
+    "hedge_word_count",
+    "transition_word_count",
+    "superlative_count",
+    "abstract_concrete_ratio"
+]
+
 # Load the embedding model once
 embedding_model = SentenceTransformer("/scratch/nicpag/all-MiniLM-L6-v2-local")
 
@@ -491,6 +500,7 @@ def process_json_file(json_path, force_reprocess=False, include_advanced=True):
     
     # Store which features we're using for consistent candidate processing
     feature_columns = [col for col in df.columns if col not in ['response', 'label']]
+    feature_columns = [col for col in feature_columns if col not in EXCLUDED_FEATURES_FOR_ML]
     
     groups = meta_df.apply(lambda row: f"{row['user']}|||{row['reply_to']}", axis=1)
     
@@ -507,6 +517,7 @@ def process_json_file(json_path, force_reprocess=False, include_advanced=True):
         print(f"\n🔁 Fold {fold + 1}")
 
         X_train = df.iloc[train_idx].drop(columns=["label", "response"])
+        X_train = X_train.drop(columns=[col for col in EXCLUDED_FEATURES_FOR_ML if col in X_train.columns])
         y_train = df.iloc[train_idx]["label"]
 
         clf = RandomForestClassifier(n_estimators=100, random_state=42)
@@ -568,6 +579,7 @@ def process_json_file(json_path, force_reprocess=False, include_advanced=True):
             
             # Ensure feature alignment with training data
             X_unique = df_unique.drop(columns=["response"])
+            X_unique = X_unique.drop(columns=[col for col in EXCLUDED_FEATURES_FOR_ML if col in X_unique.columns])
             
             # Make sure columns match exactly
             missing_cols = set(feature_columns) - set(X_unique.columns)
