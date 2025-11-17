@@ -1,0 +1,4 @@
+# Keep golden outputs small
+# Uncomment if outputs become too large:
+# *.json
+# !golden_metadata.json
