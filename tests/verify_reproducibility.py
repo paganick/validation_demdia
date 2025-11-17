@@ -73,8 +73,8 @@ def run_simulation(config_path: str, data_file: str, output_dir: str, seed: int)
         print(f"Error: {result.stderr}")
         raise RuntimeError(f"Simulation failed with return code {result.returncode}")
 
-    # Find the output file
-    json_files = list(Path(output_dir).glob("*.json"))
+    # Find the output file (search recursively in subdirectories)
+    json_files = list(Path(output_dir).rglob("*.json"))
     if not json_files:
         raise RuntimeError(f"No output JSON file found in {output_dir}")
 

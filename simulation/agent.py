@@ -39,9 +39,15 @@ class Agent:
         
         return self.df_user['message'].dropna().tolist()
 
-    def sample_examples(self, num_samples=10):
+    def sample_examples(self, num_samples=10, deterministic=False):
         """Returns a random subsample of the stored examples."""
-        return random.sample(self.examples, min(len(self.examples), num_samples))
+        if deterministic:
+            # Deterministic: always return first N examples (sorted for consistency)
+            sorted_examples = sorted(self.examples)
+            return sorted_examples[:min(len(sorted_examples), num_samples)]
+        else:
+            # Random: sample randomly
+            return random.sample(self.examples, min(len(self.examples), num_samples))
 
     def create_user_history(self, history_dir="data/user_histories"):
         user_history = self.df_user['message'].tolist()
@@ -197,11 +203,12 @@ class Agent:
         with_persona: bool = True,
         conversation_history: list = [],
         n_candidates: int = 20,
-        max_total_attempts: int = 5
+        max_total_attempts: int = 5,
+        deterministic: bool = False
     ):
         """Generate up to `n_candidates` valid responses, retrying if needed."""
-        
-        persona_examples = self.sample_examples(n_examples)
+
+        persona_examples = self.sample_examples(n_examples, deterministic=deterministic)
         k_retrieval = 3
         retrieved_context = ""
 
@@ -254,19 +261,33 @@ class Agent:
             remaining_needed = n_candidates - len(valid_responses)
             inputs = tokenizer(prompt, return_tensors="pt").to(device)
 
-            outputs = model.generate(
-                inputs.input_ids,
-                attention_mask=inputs.attention_mask,
-                max_new_tokens=100,
-                do_sample=True,
-                num_return_sequences=remaining_needed,
-                temperature=0.8,
-                top_p=0.9,
-                top_k=50,
-                min_new_tokens=10,
-                repetition_penalty=1.0,
-                pad_token_id=tokenizer.pad_token_id,
-            )
+            if deterministic:
+                # Deterministic mode: use greedy decoding
+                outputs = model.generate(
+                    inputs.input_ids,
+                    attention_mask=inputs.attention_mask,
+                    max_new_tokens=100,
+                    do_sample=False,  # Greedy decoding
+                    num_return_sequences=1,  # Only 1 in deterministic mode
+                    min_new_tokens=10,
+                    repetition_penalty=1.0,
+                    pad_token_id=tokenizer.pad_token_id,
+                )
+            else:
+                # Sampling mode: use temperature and top-p for diversity
+                outputs = model.generate(
+                    inputs.input_ids,
+                    attention_mask=inputs.attention_mask,
+                    max_new_tokens=100,
+                    do_sample=True,
+                    num_return_sequences=remaining_needed,
+                    temperature=0.8,
+                    top_p=0.9,
+                    top_k=50,
+                    min_new_tokens=10,
+                    repetition_penalty=1.0,
+                    pad_token_id=tokenizer.pad_token_id,
+                )
 
             for output in outputs:
                 response = tokenizer.decode(output, skip_special_tokens=True)

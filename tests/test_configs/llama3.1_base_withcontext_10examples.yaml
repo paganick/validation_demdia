@@ -3,3 +3,4 @@ finetuned: false
 retrieve_context: true
 n_style_examples: 10
 OPPU: false
+deterministic: true

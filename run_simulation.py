@@ -66,6 +66,7 @@ def main():
         config.setdefault("n_style_examples", 0)
         config.setdefault("with_persona", True)
         config.setdefault("OPPU", False)
+        config.setdefault("deterministic", False)
 
         # Generate an output filename based on config values
         filename_parts = [

@@ -197,7 +197,7 @@ def _run_simulation_with_lock(config, data_file, n_users, n_responses_per_user, 
                     return results
 
             # Generate responses (returns a list of valid responses)
-            print(f"🎯 [DEBUG] Generating response with {config['n_style_examples']} style examples, with_persona={config['with_persona']}...")
+            print(f"🎯 [DEBUG] Generating response with {config['n_style_examples']} style examples, with_persona={config['with_persona']}, deterministic={config['deterministic']}...")
             try:
                 responses = agent.generate_response(
                     llm=model,
@@ -206,7 +206,8 @@ def _run_simulation_with_lock(config, data_file, n_users, n_responses_per_user, 
                     personalized_bool=config["OPPU"],
                     with_persona=config["with_persona"],
                     conversation_history=[reply_to],
-                    n_candidates=20
+                    n_candidates=20,
+                    deterministic=config["deterministic"]
                 )
                 print(f"📝 [DEBUG] Generated {len(responses) if responses else 0} valid responses")
                 # Clear CUDA cache after generation
