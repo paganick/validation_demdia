@@ -17,8 +17,20 @@ def main():
     parser.add_argument('--n_responses_per_user', type=int, default=20)
     parser.add_argument('--filter_keywords', nargs='*', default=[],
                         help="List of keywords to filter config filenames (e.g. --filter_keywords deepseek withcontext)")
+    parser.add_argument('--seed', type=int, default=None,
+                        help="Random seed for reproducibility (optional). If set, fixes all random seeds.")
 
     args = parser.parse_args()
+
+    # Set random seed if specified (for reproducible testing)
+    if args.seed is not None:
+        try:
+            from test_seed_utils import set_global_seed
+            set_global_seed(args.seed)
+            print(f"🎲 Random seed set to {args.seed} for reproducibility")
+        except ImportError:
+            print("⚠️  Warning: test_seed_utils not found. Seed setting skipped.")
+            print("   Install test_seed_utils.py to enable reproducible testing.")
     
     os.makedirs(args.output_dir, exist_ok=True)
 

@@ -1,0 +1,5 @@
+model: meta-llama/Llama-3.1-8B
+finetuned: false
+retrieve_context: false
+n_style_examples: 0
+OPPU: false

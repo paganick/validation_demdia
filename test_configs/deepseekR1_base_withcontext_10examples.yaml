@@ -1,0 +1,5 @@
+model: deepseek-ai/DeepSeek-R1-Distill-Llama-8B
+finetuned: false
+retrieve_context: true
+n_style_examples: 10
+OPPU: false
