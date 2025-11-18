@@ -1,4 +1,19 @@
-# feature_utils.py
+"""
+Feature extraction utilities for social media text analysis.
+
+This module provides comprehensive text feature extraction for validating AI-generated
+social media posts against human writing. It includes:
+
+- Basic features: word count, links, mentions, emojis, hashtags, punctuation, sentiment, toxicity
+- Advanced features: perplexity proxy, type-token ratio, hedge words, transition words,
+  superlatives, repetitive patterns, abstract/concrete ratio, syntactic complexity
+- Batch processing for efficient feature computation
+- Random Forest-based evaluation using extracted features
+- Support for BERT-based validation integration
+
+The features are designed to distinguish between human-written and AI-generated text
+across Twitter/X, Bluesky, and Reddit platforms.
+"""
 
 import os
 import re
@@ -22,6 +37,15 @@ sentiment_analyzer = SentimentIntensityAnalyzer()
 # === Basic text feature functions ===
 
 def count_language_errors(text):
+    """
+    Count grammar and spelling errors in text using LanguageTool.
+
+    Args:
+        text: Input text to analyze
+
+    Returns:
+        int: Number of grammar/spelling errors detected, 0 if detection fails
+    """
     try:
         lang = detect(text)
         lang_map = {'en': 'en-US', 'fr': 'fr', 'de': 'de', 'it': 'it', 'es': 'es', 'nl': 'nl'}
@@ -33,34 +57,114 @@ def count_language_errors(text):
         return 0
 
 def get_toxicity_score_batch(texts, batch_size=20):
+    """
+    Compute toxicity scores for multiple texts efficiently.
+
+    Uses the unitary/toxic-bert model to detect toxic content.
+
+    Args:
+        texts: List of text strings to analyze
+        batch_size: Number of texts to process in each batch (default: 20)
+
+    Returns:
+        list: Toxicity scores (0-1) for each text
+    """
     results = toxicity_model(texts, batch_size=batch_size)
     return [r['score'] for r in results]
 
 def get_toxicity_score(text):
-    
+    """
+    Compute toxicity score for a single text.
+
+    Args:
+        text: Input text to analyze
+
+    Returns:
+        float: Toxicity score (0-1), higher indicates more toxic content
+    """
     result = toxicity_model(text)
     return result[0]['score']
 
 def get_sentiment_batch(texts):
+    """
+    Compute sentiment scores for multiple texts using VADER.
+
+    Args:
+        texts: List of text strings to analyze
+
+    Returns:
+        list: Compound sentiment scores (-1 to 1) for each text
+    """
     return [sentiment_analyzer.polarity_scores(t)['compound'] for t in texts]
 
 def get_sentiment(text):
+    """
+    Compute sentiment score for a single text using VADER.
+
+    Args:
+        text: Input text to analyze
+
+    Returns:
+        float: Compound sentiment score (-1 to 1), negative=negative, positive=positive
+    """
     return sentiment_analyzer.polarity_scores(text)['compound']
 
-def count_words(text): return len(text.split())
-def count_links(text): return len(re.findall(r'https?://\S+', text))
-def count_mentions(text): return len(re.findall(r'@\w+', text))
-def extract_emojis(text): return [c for c in text if c in emoji.EMOJI_DATA]
-def has_question_mark(text): return int('?' in text)
-def has_exclamation_mark(text): return int('!' in text)
-def count_hashtags(text): return len(re.findall(r'#\w+', text))
-def count_punctuation(text): return len(re.findall(r'[.!?,;:]', text))
-def count_uppercase_letters(text): return sum(1 for c in text if c.isupper())
-def char_count(text): return len(text)
+def count_words(text):
+    """Count number of words in text (space-separated)."""
+    return len(text.split())
+
+def count_links(text):
+    """Count number of URLs (http/https links) in text."""
+    return len(re.findall(r'https?://\S+', text))
+
+def count_mentions(text):
+    """Count number of @mentions in text."""
+    return len(re.findall(r'@\w+', text))
+
+def extract_emojis(text):
+    """Extract all emojis from text."""
+    return [c for c in text if c in emoji.EMOJI_DATA]
+
+def has_question_mark(text):
+    """Check if text contains a question mark (binary feature)."""
+    return int('?' in text)
+
+def has_exclamation_mark(text):
+    """Check if text contains an exclamation mark (binary feature)."""
+    return int('!' in text)
+
+def count_hashtags(text):
+    """Count number of #hashtags in text."""
+    return len(re.findall(r'#\w+', text))
+
+def count_punctuation(text):
+    """Count number of punctuation marks (.!?,;:) in text."""
+    return len(re.findall(r'[.!?,;:]', text))
+
+def count_uppercase_letters(text):
+    """Count number of uppercase letters in text."""
+    return sum(1 for c in text if c.isupper())
+
+def char_count(text):
+    """Count total number of characters in text."""
+    return len(text)
+
 def avg_word_length(text):
+    """
+    Calculate average word length in text.
+
+    Args:
+        text: Input text
+
+    Returns:
+        float: Average word length in characters, 0 if no words
+    """
     words = text.split()
     return np.mean([len(w) for w in words]) if words else 0
-def has_quotes(text): return int(any(c in text for c in ['"', "'", '“', '”', '‘', '’']))
+
+def has_quotes(text):
+    """Check if text contains any quotation marks (binary feature)."""
+    return int(any(c in text for c in ['"', "'", '"', '"', ''', ''']))
 
 # Download required NLTK data with fallbacks
 def setup_nltk():
@@ -266,9 +370,22 @@ def syntactic_complexity(text):
     return np.mean(clause_counts) if clause_counts else 0
 
 
-# Optimized versions that work with pre-tokenized data
+# === Optimized versions that work with pre-tokenized data ===
+# These functions avoid redundant tokenization for better performance
+
 def calculate_perplexity_proxy_from_tokens(tokens):
-    """Calculate perplexity proxy from pre-tokenized text"""
+    """
+    Calculate perplexity proxy from pre-tokenized text.
+
+    Optimized version that avoids re-tokenization. Uses word frequency
+    entropy as a proxy for language model perplexity.
+
+    Args:
+        tokens: List of lowercase word tokens
+
+    Returns:
+        float: Entropy-based perplexity proxy (higher = more diverse vocabulary)
+    """
     if len(tokens) == 0:
         return 0
     
@@ -283,13 +400,34 @@ def calculate_perplexity_proxy_from_tokens(tokens):
     return entropy
 
 def calculate_ttr_from_tokens(tokens):
-    """Calculate type-token ratio from pre-tokenized text"""
+    """
+    Calculate type-token ratio from pre-tokenized text.
+
+    Type-token ratio measures vocabulary diversity (unique words / total words).
+
+    Args:
+        tokens: List of word tokens
+
+    Returns:
+        float: Type-token ratio (0-1), higher indicates more diverse vocabulary
+    """
     if len(tokens) == 0:
         return 0
     return len(set(tokens)) / len(tokens)
 
 def calculate_sentence_variance_from_splits(sentences):
-    """Calculate sentence variance from pre-split sentences"""
+    """
+    Calculate sentence length variance from pre-split sentences.
+
+    Measures consistency of sentence lengths. Higher variance may indicate
+    more natural, varied writing.
+
+    Args:
+        sentences: List of sentence strings (already split)
+
+    Returns:
+        float: Variance of sentence lengths in words, 0 if ≤1 sentence
+    """
     if len(sentences) <= 1:
         return 0
     
@@ -300,7 +438,18 @@ def calculate_sentence_variance_from_splits(sentences):
         return 0
 
 def count_repetitive_patterns_from_tokens(tokens):
-    """Count repetitive patterns from pre-tokenized text"""
+    """
+    Count repetitive 3-gram patterns from pre-tokenized text.
+
+    Detects trigrams that appear multiple times, which may indicate
+    formulaic or AI-generated text.
+
+    Args:
+        tokens: List of word tokens
+
+    Returns:
+        int: Number of trigrams that appear more than once
+    """
     if len(tokens) < 3:
         return 0
     
@@ -310,7 +459,18 @@ def count_repetitive_patterns_from_tokens(tokens):
     return sum(1 for count in trigram_counts.values() if count > 1)
 
 def abstract_concrete_ratio_from_tokens(tokens):
-    """Calculate abstract/concrete ratio from pre-tokenized text"""
+    """
+    Calculate abstract/concrete word ratio from pre-tokenized text.
+
+    Uses predefined word lists to approximate the ratio of abstract concepts
+    to concrete objects. AI text may use more abstract language.
+
+    Args:
+        tokens: List of lowercase word tokens
+
+    Returns:
+        float: Abstract/concrete ratio, or just abstract count if no concrete words
+    """
     abstract_indicators = {
         'concept', 'idea', 'theory', 'principle', 'notion', 'philosophy',
         'methodology', 'approach', 'framework', 'perspective', 'aspect',
@@ -333,7 +493,18 @@ def abstract_concrete_ratio_from_tokens(tokens):
     return abstract_count / concrete_count
 
 def syntactic_complexity_from_sentences(sentences):
-    """Calculate syntactic complexity from pre-split sentences"""
+    """
+    Calculate syntactic complexity from pre-split sentences.
+
+    Approximates clause complexity by counting commas, semicolons,
+    and conjunctions per sentence.
+
+    Args:
+        sentences: List of sentence strings
+
+    Returns:
+        float: Average number of clauses per sentence
+    """
     if not sentences:
         return 0
     
@@ -348,6 +519,25 @@ def syntactic_complexity_from_sentences(sentences):
 # === Feature extraction ===
 
 def extract_features(df, cache_path=None):
+    """
+    Extract all text features from a DataFrame of social media posts.
+
+    Extracts 11 basic features (word count, links, emojis, sentiment, etc.) and
+    9 advanced linguistic features (perplexity, hedge words, syntactic complexity, etc.).
+    Supports incremental computation with caching to avoid re-computing features.
+
+    Args:
+        df: DataFrame with 'text' and 'labels' columns
+        cache_path: Optional path to save/load cached features as CSV
+
+    Returns:
+        pd.DataFrame: DataFrame with all extracted features (one row per input text)
+
+    Side effects:
+        - Saves features to cache_path if provided
+        - Creates a second file with '_with_text_and_label.csv' suffix containing
+          features + original text + labels
+    """
     expected_feature_funcs = {
     # === Basic features ===
     'word_count': count_words,
@@ -430,11 +620,30 @@ def extract_features(df, cache_path=None):
 # === Model training and evaluation ===
 
 def evaluate_features_single_dataset(
-    df, 
-    feature_cache_path=None, 
-    label_source="labels", 
+    df,
+    feature_cache_path=None,
+    label_source="labels",
     exclude_features=['spelling_grammar_errors', 'has_emoji', 'has_mention', 'has_link']
 ):
+    """
+    Train Random Forest classifier on extracted features and evaluate AUC.
+
+    Performs stratified train/test split, trains a Random Forest model on text features,
+    and computes feature importances with correlation signs.
+
+    Args:
+        df: DataFrame with 'text' column and label column (specified by label_source)
+        feature_cache_path: Optional path to cached features CSV
+        label_source: Name of column containing binary labels (default: "labels")
+        exclude_features: List of feature names to exclude from training (default: removes
+                         spelling_grammar_errors, has_emoji, has_mention, has_link)
+
+    Returns:
+        tuple: (auc, feature_importances, correlation_df)
+            - auc: ROC-AUC score on test set
+            - feature_importances: pd.Series mapping feature names to importance scores
+            - correlation_df: DataFrame with feature, importance, and correlation_sign columns
+    """
     assert label_source in df.columns, f"Label source '{label_source}' not found in DataFrame."
     exclude_features = exclude_features or []
     
@@ -572,12 +781,33 @@ def create_validation_dataframe(median_run):
 
 def evaluate_with_median_run_data(full_path, label_source):
     """
-    Modified evaluation function that uses median accuracy run validation data.
-    Trains Random Forest on all data EXCEPT the validation set.
-    
+    Evaluate Random Forest using BERT's median-accuracy validation set.
+
+    This function integrates Random Forest evaluation with BERT validation results.
+    It trains the RF on all data EXCEPT the BERT validation set, then evaluates on
+    the same validation set BERT used (specifically from the median-accuracy run).
+
+    Process:
+        1. Load BERT training results (multiple runs) from JSON
+        2. Select the run with median accuracy
+        3. Extract that run's validation texts and predictions
+        4. Train Random Forest on all data EXCEPT those validation texts
+        5. Predict on the validation set and compare RF vs BERT vs actual labels
+
     Args:
-        full_path: Path to the original validation data file
-        label_source: Either 'labels' or 'bert_prediction'
+        full_path: Path to validation CSV (e.g., '*_validation_data_labelled.csv')
+        label_source: Either 'labels' (ground truth) or 'bert_prediction' (BERT's labels)
+
+    Returns:
+        tuple: (auc, results_df, agreement_stats)
+            - auc: Random Forest ROC-AUC on validation set
+            - results_df: Validation predictions with actual_label, bert_prediction,
+                         rf_prediction, rf_probability columns
+            - agreement_stats: DataFrame with agreement metrics between models
+
+    Side effects:
+        - Saves results to '*_{from_bert|from_labels}_median_run_results.csv'
+        - Saves agreement stats to '*_{from_bert|from_labels}_median_run_agreement.csv'
     """
     print(f"DEBUG: Starting evaluation with median run data for: {full_path}")
     
@@ -822,7 +1052,23 @@ def evaluate_with_median_run_data(full_path, label_source):
 
 def evaluate_all_datasets_median_run(folder_path, label_source):
     """
-    Modified version of evaluate_all_datasets that uses median run validation data.
+    Evaluate all validation datasets in a folder using median-run methodology.
+
+    Recursively walks through folder_path, finds all validation CSV files, and
+    runs evaluate_with_median_run_data on each. Aggregates results into summary CSVs.
+
+    Args:
+        folder_path: Root directory containing validation data files
+        label_source: Either 'labels' or 'bert_prediction' to use for RF training
+
+    Side effects:
+        - Processes all files matching '*validation_data_labelled.csv' with 'random',
+          'cosine', or 'ml' in the filename
+        - Saves 'median_run_evaluation_summary_{from_bert|from_labels}.csv' with
+          per-dataset AUC scores
+        - Saves 'median_run_agreement_summary_{from_bert|from_labels}.csv' with
+          aggregated agreement metrics across all datasets
+        - Prints detailed debug info and summary statistics
     """
     print(f"DEBUG: Starting evaluate_all_datasets_median_run with folder_path: {folder_path}, label_source: {label_source}")
     

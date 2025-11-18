@@ -1,3 +1,49 @@
+"""
+Generate persona descriptions for Reddit users using GPT-4.
+
+This script processes individual user CSV files (from parse_reddit_data.py),
+generates persona descriptions using GPT-4, and creates a consolidated dataset
+suitable for personalized LLM training.
+
+Process:
+    1. Scan reddit_data/ directory for user folders
+    2. For each user with sufficient posts (>= min_rows):
+       a. Split data 80/20 into training/test sets
+       b. Generate persona description from training posts using GPT-4
+       c. Add username, persona, and training flag to dataset
+    3. Concatenate all users into single pickle file
+
+Persona generation:
+    - Uses GPT-4 to analyze user's training posts
+    - Creates description starting with "You are u/{username}, ..."
+    - Based on writing style, topics, and patterns in posts
+    - Limited to first 50 posts to stay within token limits
+
+Output:
+    personas.pkl with columns:
+        - username: Reddit username
+        - persona: GPT-4 generated description
+        - message: The user's actual post text
+        - reply_to: Parent content being replied to
+        - training: 1 for training set, 0 for test set
+
+This dataset enables:
+    - Training personalized models that mimic specific users
+    - Evaluating persona-based vs example-based personalization
+    - Studying individual writing style variation
+
+Usage:
+    python aggregate_reddit_data.py \\
+        --input_dir reddit_data/ \\
+        --output_file personas.pkl \\
+        --min_rows 100 \\
+        --max_users 50
+
+Requires:
+    - OPENAI_API_KEY environment variable
+    - GPT-4 API access
+"""
+
 import os
 import pandas as pd
 import random
@@ -10,9 +56,19 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def generate_persona(username, messages):
     """
-    Generate a persona description for a given Reddit user.
-    Format: 'You are u/{username}, a ...'
-    Returns: persona_text
+    Generate persona description for a Reddit user using GPT-4.
+
+    Analyzes user's posts to create a persona description that captures their
+    writing style, interests, and personality. The description is designed to
+    be used as a system prompt for LLM personalization.
+
+    Args:
+        username: Reddit username (without u/ prefix)
+        messages: List of user's message texts (up to 50 used for analysis)
+
+    Returns:
+        str: Persona description starting with "You are u/{username}, ..."
+        None: If GPT-4 API call fails
     """
     prompt = (
         f"You are analyzing Reddit users. Based on the following posts from u/{username}, "
@@ -41,6 +97,17 @@ def generate_persona(username, messages):
 
 
 def process_csv_file(csv_path, username):
+    """
+    Process a single user's CSV file: generate persona and prepare dataset.
+
+    Args:
+        csv_path: Path to user's CSV file (from parse_reddit_data.py)
+        username: Reddit username
+
+    Returns:
+        pd.DataFrame: Processed dataset with username, persona, message, reply_to, training columns
+        None: If user has too few posts or persona generation fails
+    """
     df = pd.read_csv(csv_path)
 
     if len(df) < args.min_rows:
