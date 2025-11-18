@@ -1,3 +1,42 @@
+"""
+Parse raw Reddit data into structured CSV files organized by author.
+
+This script processes JSONL files containing Reddit comments and submissions,
+extracting comment-reply pairs and organizing them by author. It creates a
+directory structure suitable for training personalized language models.
+
+Input format:
+    - Comments: JSONL file with one comment per line (filtered_comments.jsonl)
+    - Submissions: JSONL file with one submission per line (rpolitics_submissions.txt)
+
+Each comment contains:
+    - author: Reddit username
+    - body: Comment text
+    - parent_id: ID of parent submission or comment (format: t3_xxxxx for submissions)
+
+Output structure:
+    reddit_data/
+        {author1}/
+            {author1}.csv (columns: text, reply_to)
+        {author2}/
+            {author2}.csv
+        ...
+
+The CSV files contain:
+    - text: The comment body (AI will learn to generate this)
+    - reply_to: The parent submission title or comment (context for generation)
+
+This structure enables:
+    1. Per-user datasets for personalized model training (OPPU)
+    2. Easy filtering by author activity level
+    3. Preservation of conversational context
+
+Usage:
+    python parse_reddit_data.py
+
+Note: Hardcoded paths point to /scratch/nicpag/ - modify if running elsewhere
+"""
+
 import json
 import os
 import pandas as pd
@@ -6,7 +45,16 @@ import re
 
 def sanitize_filename(filename):
     """
-    Sanitize filename to be safe for filesystem
+    Sanitize author names for safe filesystem usage.
+
+    Removes invalid filename characters and limits length to prevent issues
+    with long usernames.
+
+    Args:
+        filename: Author name or other string to use as filename
+
+    Returns:
+        str: Sanitized filename (max 50 characters, invalid chars replaced with _)
     """
     # Remove or replace invalid characters
     filename = re.sub(r'[<>:"/\\|?*]', '_', filename)
@@ -16,7 +64,28 @@ def sanitize_filename(filename):
 
 def process_reddit_data(comments_file, submissions_file):
     """
-    Process Reddit comments and submissions data
+    Extract comment-reply pairs from Reddit data and organize by author.
+
+    Process flow:
+        1. Load all submissions into memory for fast lookup
+        2. Stream through comments line-by-line (handles large files)
+        3. For each comment, find parent submission title
+        4. Group comments by author into author-specific CSV files
+        5. Append to existing CSVs to handle incremental processing
+
+    Args:
+        comments_file: Path to JSONL file with Reddit comments
+        submissions_file: Path to JSONL file with Reddit submissions
+
+    Side effects:
+        Creates reddit_data/ directory with subdirectories per author,
+        each containing {author}.csv with text and reply_to columns.
+
+    Notes:
+        - Only processes comments that reply to submissions (not comment replies)
+        - Skips comments with missing author, body, or parent_id
+        - Prints progress every 1000 comments
+        - Handles malformed JSON gracefully by skipping bad lines
     """
     print("Loading submissions data...")
     

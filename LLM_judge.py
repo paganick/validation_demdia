@@ -1,3 +1,39 @@
+"""
+ML-based response selection for AI-generated social media posts.
+
+This module implements the "LLM Judge" system that selects the most human-like
+AI-generated response from multiple candidates. It uses two complementary methods:
+
+1. **ML-based selection**: Trains a Random Forest classifier to distinguish human
+   from AI text based on linguistic features, then selects candidates with highest
+   "human-like" probability.
+
+2. **Cosine similarity selection**: Computes semantic similarity between candidates
+   and the original human message they're responding to, selecting the most similar.
+
+The system uses GroupKFold cross-validation to avoid data leakage and supports
+incremental processing with caching for efficiency.
+
+Features extracted:
+    - Basic: word count, links, mentions, emojis, hashtags, punctuation, sentiment, toxicity
+    - Advanced (optional): perplexity, type-token ratio, hedge words, transition words,
+      superlatives, repetitive patterns, abstract/concrete ratio, syntactic complexity
+
+Input: JSON files with structure:
+    {
+        "user": "user_id",
+        "reply_to": "message_id",
+        "original_message": "human text",
+        "response": "randomly selected AI response",
+        "all_valid_responses": ["response1", "response2", ...]
+    }
+
+Output:
+    - *_optimal_response.json: Enriched with ML_best_response, cosine_best_response,
+      and scores for all candidates
+    - *_response_comparisons.csv: Side-by-side comparison of selection methods
+"""
+
 import os
 import json
 import argparse
@@ -14,7 +50,19 @@ from sklearn.metrics.pairwise import cosine_similarity
 embedding_model = SentenceTransformer("/scratch/nicpag/all-MiniLM-L6-v2-local")
 
 def compute_cosine_similarity(a: str, b: str) -> float:
-    """Compute cosine similarity between two strings."""
+    """
+    Compute cosine similarity between two text strings using sentence embeddings.
+
+    Uses all-MiniLM-L6-v2 model to encode texts into embedding vectors,
+    then computes cosine similarity between them.
+
+    Args:
+        a: First text string
+        b: Second text string
+
+    Returns:
+        float: Cosine similarity score (0-1), where 1 = identical meaning
+    """
     embeddings = embedding_model.encode([a, b])
     return float(cosine_similarity([embeddings[0]], [embeddings[1]])[0][0])
 
@@ -32,7 +80,32 @@ from feature_utils import (
 
 
 def add_features(df, include_advanced=True):
-    """Add all features to dataframe with optional advanced features"""
+    """
+    Extract all text features from DataFrame of responses.
+
+    Computes basic features (11) for all texts. Optionally computes advanced
+    linguistic features (9 additional) that are more computationally expensive
+    but may improve classification accuracy.
+
+    Features are extracted from the 'response' column.
+
+    Args:
+        df: DataFrame with 'response' column containing text to analyze
+        include_advanced: If True, compute advanced linguistic features (default: True)
+
+    Returns:
+        pd.DataFrame: Input DataFrame with new feature columns added
+
+    Features added:
+        Basic: word_count, link_count, mention_count, emoji_count, hashtag_count,
+               punctuation_count, uppercase_count, char_count, avg_word_length,
+               sentiment, toxicity_score
+        Advanced (if enabled): perplexity_proxy, type_token_ratio,
+                              sentence_length_variance, hedge_word_count,
+                              transition_word_count, superlative_count,
+                              repetitive_patterns, abstract_concrete_ratio,
+                              syntactic_complexity
+    """
     
     # Handle empty dataframes
     if df.empty or len(df) == 0:
@@ -102,6 +175,27 @@ def add_features(df, include_advanced=True):
 
 
 def prepare_df_per_file(data):
+    """
+    Convert JSON data into DataFrames for ML processing.
+
+    Extracts original human messages (label=0) and AI-generated candidates (label=1)
+    into a flat DataFrame structure suitable for feature extraction and training.
+
+    Args:
+        data: List of dictionaries with structure:
+              {
+                  "user": str,
+                  "reply_to": str,
+                  "original_message": str,
+                  "all_valid_responses": List[str]
+              }
+
+    Returns:
+        tuple: (df, meta_df)
+            - df: DataFrame with 'response' and 'label' columns
+            - meta_df: DataFrame with 'user', 'reply_to', and 'entry' columns
+                      (same length as df, maintains row correspondence)
+    """
     rows = []
     metas = []
     
@@ -133,7 +227,18 @@ def prepare_df_per_file(data):
 from sklearn.model_selection import GroupKFold
 
 def get_processed_entries(optimal_json_path):
-    """Get set of already processed entries from optimal response file"""
+    """
+    Get set of already processed entries from optimal response file.
+
+    Used for incremental processing to skip entries that already have
+    ML_best_response and cosine_best_response computed.
+
+    Args:
+        optimal_json_path: Path to *_optimal_response.json file
+
+    Returns:
+        set: Set of group IDs (format: "user|||reply_to") that have been processed
+    """
     if not os.path.exists(optimal_json_path):
         return set()
     
@@ -152,7 +257,19 @@ def get_processed_entries(optimal_json_path):
         return set()
 
 def merge_results_with_existing(new_data, optimal_json_path):
-    """Merge new results with existing optimal response file"""
+    """
+    Merge new data with existing optimal response file for incremental processing.
+
+    Preserves ML_best_response, cosine_best_response, and all_valid_responses
+    from existing entries, allowing incremental updates without re-processing.
+
+    Args:
+        new_data: List of entry dictionaries (potentially with new all_valid_responses)
+        optimal_json_path: Path to existing *_optimal_response.json file
+
+    Returns:
+        list: Merged data with existing results preserved where available
+    """
     if not os.path.exists(optimal_json_path):
         return new_data
     
@@ -184,7 +301,19 @@ def merge_results_with_existing(new_data, optimal_json_path):
         return new_data
 
 def regenerate_response_comparisons_only(json_path):
-    """Regenerate only the response_comparisons.csv file from existing optimal_response.json"""
+    """
+    Regenerate response comparison CSV from existing optimal_response.json.
+
+    Useful when optimal_response.json exists but CSV needs to be recreated
+    (e.g., after format changes or accidental deletion).
+
+    Args:
+        json_path: Path to *_random_response.json file (used to derive optimal JSON path)
+
+    Side effects:
+        - Writes *_response_comparisons.csv with user, reply_to, original_message,
+          previous_response, ML_best_response, cosine_best_response columns
+    """
     
     # Check if optimal_response.json exists
     optimal_json_path = json_path.replace("_random_response.json", "_optimal_response.json")
@@ -231,7 +360,35 @@ def regenerate_response_comparisons_only(json_path):
     print(f"✅ Regenerated {out_path} with {len(selected_rows)} rows")
 
 def process_json_file(json_path, force_reprocess=False, include_advanced=True):
-    """Process JSON file with incremental support"""
+    """
+    Process a single JSON file to select best AI responses using ML and cosine similarity.
+
+    Main processing pipeline:
+        1. Load JSON data and extract features from all responses
+        2. Use GroupKFold cross-validation (5 folds) to train Random Forest
+        3. For each test group, score all candidate responses using trained model
+        4. Select best response by ML score (highest "human-like" probability)
+        5. Select best response by cosine similarity to original message
+        6. Save enriched results to optimal_response.json and response_comparisons.csv
+
+    Supports incremental processing: skips entries already processed unless force_reprocess=True.
+
+    Args:
+        json_path: Path to *_random_response.json file
+        force_reprocess: If True, reprocess all entries even if already done (default: False)
+        include_advanced: If True, use advanced linguistic features (default: True)
+
+    Side effects:
+        - Writes *_responses_features.csv: Cached feature matrix
+        - Writes *_optimal_response.json: Original data + ML_best_response,
+          cosine_best_response, and enriched all_valid_responses with scores
+        - Writes *_response_comparisons.csv: Comparison table of selection methods
+
+    Notes:
+        - Uses GroupKFold to prevent data leakage (same user/reply_to not in train and test)
+        - Handles empty files gracefully by creating empty output files
+        - Removes unusual Unicode line terminators (\u2028, \u2029) that break JSON parsing
+    """
     
     optimal_json_path = json_path.replace("_random_response.json", "_optimal_response.json")
     csv_path = json_path.replace("_random_response.json", "_response_comparisons.csv")
@@ -499,6 +656,17 @@ def process_json_file(json_path, force_reprocess=False, include_advanced=True):
     print(f"📝 Saved modified JSON with probabilities to {optimal_json_path}")
 
 def main(input_folder, force_reprocess=False, include_advanced=True):
+    """
+    Process all *_random_response.json files in a directory tree.
+
+    Recursively finds all matching JSON files and processes each one to select
+    optimal AI responses.
+
+    Args:
+        input_folder: Root directory to search for JSON files
+        force_reprocess: If True, reprocess all files even if already done
+        include_advanced: If True, use advanced linguistic features for classification
+    """
     json_files = [
         os.path.join(root, file)
         for root, _, files in os.walk(input_folder)
