@@ -1,3 +1,41 @@
+"""
+Convert optimal_response JSON files to CSV format for easier analysis.
+
+This utility script walks through a directory tree, finds all *_optimal_response.json
+files (output from LLM_judge.py), and converts them to CSV format with standardized
+columns for tabular analysis.
+
+The CSV format makes it easier to:
+    - Import into spreadsheet software
+    - Join with other tabular data
+    - Perform quick filtering and sorting
+    - Share with collaborators who prefer CSV
+
+Each JSON entry becomes a CSV row with metadata fields (user, model, configuration)
+and response fields (random, ML-best, cosine-best).
+
+Usage:
+    python convert_emojiis.py /path/to/results/
+
+Input:
+    Directory tree containing *_optimal_response.json files
+
+Output:
+    For each *_optimal_response.json, creates *_optimal_response.csv in same location
+
+CSV columns:
+    - username: User ID who created the original message
+    - model: LLM model name (llama3.1_8b, mistral_7b, etc.)
+    - finetuned: Boolean indicating if model was fine-tuned
+    - n_examples: Number of style examples provided to model
+    - retrieve_context: Boolean indicating if context retrieval was used
+    - pesonalized: Boolean indicating if OPPU personalization was used (note: typo in original)
+    - reply_to: Message ID being replied to
+    - response: Randomly selected AI response (baseline)
+    - ML_best_response: Response selected by Random Forest as most human-like
+    - cosine_best_response: Response most similar to original message
+"""
+
 import os
 import json
 import csv

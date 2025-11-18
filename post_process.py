@@ -1,3 +1,39 @@
+"""
+Aggregate validation results from multiple experiments into a summary table.
+
+This script walks through a directory tree containing validation results from
+multiple model configurations and aggregates them into a single CSV summary file.
+
+It collects three types of metrics:
+    1. Significant features: Count of Empath features that differ significantly
+       between human and AI text (from *_significant_features.csv)
+    2. Confusion matrices: Classification results from BERT validation
+       (from *_confusion_matrix.csv)
+    3. Stylistic metrics: Average word count, links, emojis, mentions
+       (from *_aggregate_stylistic_metrics.csv)
+
+Filename format convention:
+    {model}__{ft|noft}__{ctx0|ctx1}__style{N}__{'OPPU'|'noOPPU'}__*
+
+Where:
+    - model: llama3.1_8b, mistral_7b, etc.
+    - ft/noft: Fine-tuned or not
+    - ctx0/ctx1: Context retrieval disabled/enabled
+    - styleN: Number of style examples (0, 1, 3, 5)
+    - OPPU/noOPPU: Personalized model or not
+
+Usage:
+    python post_process.py /path/to/results/
+
+Output:
+    summary_metrics.csv with columns:
+        - model, finetuning, context, style, OPPU (configuration)
+        - significant_feature_count (Empath analysis)
+        - 0-0, 1-0, 0-1, 1-1 (confusion matrix cells)
+        - avg_words, avg_links, avg_emojis, avg_mentions (stylistic metrics)
+        - top_10_emojis (most common emojis)
+"""
+
 import os
 import csv
 import argparse
@@ -5,8 +41,21 @@ import pandas as pd
 
 def parse_filename(filename):
     """
-    Extracts model, finetuning, context, style, and OPPU info from a filename.
-    Converts them into booleans or integers for clean tabular use.
+    Extract model configuration from standardized filename.
+
+    Parses filenames following the convention:
+    {model}__{ft|noft}__{ctx0|ctx1}__style{N}__{OPPU|noOPPU}__*
+
+    Args:
+        filename: Filename to parse (can be full path, will extract basename)
+
+    Returns:
+        tuple: (model, ft, context, style, oppu)
+            - model (str): Model name (e.g., "llama3.1_8b")
+            - ft (int): 1 if fine-tuned, 0 otherwise
+            - context (int): 1 if context retrieval enabled, 0 otherwise
+            - style (int): Number of style examples (0, 1, 3, 5)
+            - oppu (int): 1 if OPPU personalization enabled, 0 otherwise
     """
     base = os.path.basename(filename)
     parts = base.split("__")
@@ -19,7 +68,17 @@ def parse_filename(filename):
 
 def count_significant_features(filepath):
     """
-    Returns number of data rows in the CSV (excluding header).
+    Count number of significant Empath features from CSV.
+
+    Reads a CSV with Empath feature analysis results and counts the
+    number of features that showed significant differences (number of
+    data rows excluding header).
+
+    Args:
+        filepath: Path to *_significant_features.csv file
+
+    Returns:
+        int: Number of significant features, 0 if file cannot be read
     """
     try:
         with open(filepath, 'r') as f:
@@ -30,8 +89,22 @@ def count_significant_features(filepath):
 
 def read_confusion_matrix(filepath):
     """
-    Reads the second and third rows of the confusion matrix CSV.
-    Returns values as a dict: {'0-0': ..., '1-0': ..., '0-1': ..., '1-1': ...}
+    Parse BERT validation confusion matrix from CSV.
+
+    Reads confusion matrix with format:
+        Row 1 (Actual=0): [true_negatives, false_positives]
+        Row 2 (Actual=1): [false_negatives, true_positives]
+
+    Args:
+        filepath: Path to *_confusion_matrix.csv file
+
+    Returns:
+        dict: Confusion matrix cells with keys:
+            - '0-0': True negatives (AI correctly classified as AI)
+            - '1-0': False positives (AI misclassified as human)
+            - '0-1': False negatives (Human misclassified as AI)
+            - '1-1': True positives (Human correctly classified as human)
+        Returns None values if file cannot be read.
     """
     try:
         with open(filepath, 'r') as f:
@@ -51,7 +124,22 @@ def read_confusion_matrix(filepath):
 
 def read_aggregate_stylistic_metrics(filepath):
     """
-    Reads the aggregate stylistic metrics CSV and returns relevant metrics.
+    Extract aggregate stylistic metrics from CSV.
+
+    Reads summary statistics about text style including average word count,
+    links, emojis, mentions, and most common emojis.
+
+    Args:
+        filepath: Path to *_aggregate_stylistic_metrics.csv file
+
+    Returns:
+        dict: Stylistic metrics with keys:
+            - avg_words: Mean word count
+            - avg_links: Mean number of links
+            - avg_emojis: Mean number of emojis
+            - avg_mentions: Mean number of @mentions
+            - top_10_emojis: Most frequently used emojis
+        Returns None values if file cannot be read.
     """
     try:
         df = pd.read_csv(filepath)
@@ -68,6 +156,13 @@ def read_aggregate_stylistic_metrics(filepath):
         return {"avg_words": None, "avg_links": None, "avg_emojis": None, "avg_mentions": None, "top_10_emojis": None}
 
 def main():
+    """
+    Aggregate validation results from all experiments into summary CSV.
+
+    Walks through the directory tree starting from root_folder, finds all
+    validation result files, parses their configurations and metrics, and
+    creates a unified summary table saved to summary_metrics.csv.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("root_folder", type=str, help="Path to the root folder")
     args = parser.parse_args()
