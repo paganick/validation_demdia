@@ -1,8 +1,50 @@
+"""
+Create balanced validation datasets for human vs AI text classification.
+
+This script combines real human social media posts with AI-generated responses to
+create balanced datasets for evaluating text classifiers. It supports three response
+selection variants:
+
+    1. ML_best_response: AI responses selected by Random Forest as most human-like
+    2. cosine_best_response: AI responses most similar to original message
+    3. random_response: Randomly selected AI responses (baseline)
+
+Each validation dataset contains:
+    - N human messages (label=1)
+    - N AI-generated responses (label=0)
+    - Shuffled order to prevent learning from position
+
+The datasets enable evaluation of different response selection strategies and
+provide ground truth for training BERT and other validation models.
+
+Usage:
+    python build_validation_data.py \\
+        --real_file /path/to/human_messages.pkl \\
+        --folder /path/to/ai_responses/ \\
+        --sample_size 100
+
+Input files:
+    - real_file: Pickle file with 'message' column containing human text
+    - folder: Directory tree containing *_optimal_response.csv files from LLM_judge.py
+
+Output:
+    - *_ml_validation_data.csv: Human vs ML-selected AI responses
+    - *_cosine_validation_data.csv: Human vs cosine-selected AI responses
+    - *_random_validation_data.csv: Human vs randomly-selected AI responses
+"""
+
 import argparse
 import pandas as pd
 import os
 
 def main():
+    """
+    Build validation datasets by combining human and AI text samples.
+
+    Loads real human messages, samples them, then combines with AI-generated
+    responses from multiple selection strategies. Creates balanced datasets
+    suitable for binary classification evaluation.
+    """
     parser = argparse.ArgumentParser(
         description="Build validation datasets from real human replies and AI-generated responses (ML and cosine variants)."
     )
