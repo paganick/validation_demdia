@@ -1,0 +1,56 @@
+# Postprocessing Pipeline Configuration
+
+# Storage format settings
+storage:
+  # Use consolidated JSON format (fewer files, less duplication)
+  use_consolidated_format: true
+
+  # Keep legacy CSV files for backward compatibility
+  keep_legacy_csv: false
+
+  # Save intermediate files
+  save_comparison_csv: false      # LLM_judge comparison tables
+  save_feature_cache: false        # Feature extraction cache files
+
+# Processing settings
+processing:
+  # Which selection methods to run
+  selection_methods:
+    - random
+    - ml
+    - cosine
+
+  # Which validation methods to run
+  validation_methods:
+    - bert
+    - features
+    - empath
+
+  # Consolidate validation results
+  consolidate_validation: true     # One file per dataset vs per config
+
+# Output settings
+outputs:
+  # Where to save results
+  results_dir: "results"
+
+  # Final outputs to generate
+  generate_plots: true
+  generate_summary_csv: true
+
+  # Validation outputs
+  save_confusion_matrices: true
+  save_feature_importance: true
+  save_predictions: true           # Individual BERT predictions
+
+# Performance settings
+performance:
+  # Number of parallel processes (None = auto-detect)
+  n_jobs: null
+
+  # Batch size for feature extraction
+  batch_size: 32
+
+  # Cache settings
+  use_cache: true
+  cache_dir: ".cache"
