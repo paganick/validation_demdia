@@ -38,31 +38,31 @@ class Validator:
         cls.empath_validate(df)
     
     @classmethod
-    def bert_validate(cls, df, tokenizer, include_shap=False, 
+    def bert_validate(cls, df, tokenizer, include_shap=False,
                     n_shap_samples=500, n_runs=3, random_seeds=None):
         """
-        Fast 3-run BERT validation with comprehensive results storage and SHAP analysis.
-        
+        Fast 3-run BERT validation with comprehensive results storage.
+
         Args:
             df: DataFrame with 'text' and 'labels' columns
             tokenizer: Hugging Face tokenizer
-            include_shap: Whether to perform SHAP analysis
-            n_shap_samples: Number of samples for SHAP
+            include_shap: (Deprecated) Kept for backward compatibility, SHAP analysis removed
+            n_shap_samples: (Deprecated) Kept for backward compatibility
             n_runs: Number of training runs (default: 3)
             random_seeds: List of seeds to use. If None, uses [42, 123, 456]
-        
+
         Returns:
             trainer: Best performing trainer (for backward compatibility)
             report: Classification report from best run (for backward compatibility)
             cm: Median confusion matrix across all runs
-            shap_data: SHAP analysis results (if include_shap=True)
-            shap_summary_stats: SHAP summary statistics (if include_shap=True)
-            
+            all_results: Detailed results from all runs
+            shap_data: (Deprecated) Always returns empty dict for backward compatibility
+            shap_summary_stats: (Deprecated) Always returns empty dict for backward compatibility
+
         Additional attributes stored in trainer:
             trainer.all_run_results: Detailed results from all runs
             trainer.results_summary: Statistical summary across runs
         """
-        import shap
         import os
         import random
         from sklearn.utils.class_weight import compute_class_weight
@@ -338,131 +338,14 @@ class Validator:
         print(f"Accuracy: {median_result['accuracy']:.4f}")
         print("Median Confusion Matrix:")
         print(median_cm)
-        
-        # SHAP Analysis Section - INITIALIZE VARIABLES FIRST
-        shap_data = {'error': 'SHAP analysis not attempted'}
-        shap_summary_stats = {'error': 'SHAP analysis not attempted'}
-        
+
+        # SHAP Analysis removed - return empty dicts for backward compatibility
+        shap_data = {}
+        shap_summary_stats = {}
+
         if include_shap:
-            print("\nStarting SHAP analysis...")
-            
-            try:
-                # Use the median model and its validation data
-                model = median_trainer.model
-                
-                # Get validation data from median run
-                val_texts = all_results[median_idx]['val_texts']
-                val_labels = all_results[median_idx]['true_labels']
-                preds = all_results[median_idx]['predictions']
-                random_seed = all_results[median_idx]['seed']
-                
-                # ---------------------------
-                # 1. Prediction wrapper
-                # ---------------------------
-                def predict_fn(texts, batch_size=16):
-                    """Predict probabilities using the trained model."""
-                    if isinstance(texts, str):
-                        texts = [texts]
-                    texts = [str(t) for t in texts]
-
-                    all_probs = []
-                    device = next(model.parameters()).device
-
-                    for i in range(0, len(texts), batch_size):
-                        batch_texts = texts[i:i+batch_size]
-                        inputs = tokenizer(
-                            batch_texts,
-                            truncation=True,
-                            padding=True,
-                            max_length=512,
-                            return_tensors="pt"
-                        )
-                        inputs = {k: v.to(device) for k, v in inputs.items()}
-
-                        model.eval()
-                        with torch.no_grad():
-                            outputs = model(**inputs)
-                            probs = torch.nn.functional.softmax(outputs.logits, dim=-1)
-                        all_probs.append(probs.cpu())
-
-                    all_probs = torch.cat(all_probs, dim=0)
-                    return all_probs.numpy()
-
-                # ---------------------------
-                # 2. Deterministic sampling
-                # ---------------------------
-                np.random.seed(random_seed)
-                n_shap_samples = min(n_shap_samples, len(val_texts))
-                shap_indices = np.random.choice(len(val_texts), n_shap_samples, replace=False)
-                shap_indices = np.sort(shap_indices)
-
-                shap_texts = [str(val_texts[i]) for i in shap_indices]
-                shap_true_labels = [val_labels[i] for i in shap_indices]
-                shap_pred_labels = [preds[i] for i in shap_indices]
-
-                # ---------------------------
-                # 3. Initialize SHAP explainer
-                # ---------------------------
-                print(f"Using SHAP version: {shap.__version__}")
-
-                # Use up to 50 background texts for stability
-                background_size = min(50, len(shap_texts))
-                background_texts = shap_texts[:background_size]
-
-                # Create masker and explainer
-                masker = shap.maskers.Text(tokenizer, mask_token="<mask>")
-                explainer = shap.Explainer(predict_fn, masker, output_names=['AI', 'human'])
-                print("SHAP explainer initialized successfully.")
-
-                # ---------------------------
-                # 4. Compute SHAP values
-                # ---------------------------
-                sample_size = min(500, len(shap_texts))  # Increase number of samples
-                sample_texts = [t.strip() for t in shap_texts[:sample_size] if t.strip()]
-                if not sample_texts:
-                    raise ValueError("No valid text samples for SHAP.")
-
-                print(f"Computing SHAP values for {len(sample_texts)} samples...")
-                shap_values = explainer(sample_texts)
-                print("SHAP values computed successfully.")
-
-                # ---------------------------
-                # 5. Process SHAP results robustly
-                # ---------------------------
-                shap_vals = getattr(shap_values, 'values', shap_values)
-                base_vals = getattr(shap_values, 'base_values', None)
-                feature_names = getattr(shap_values, 'feature_names', None)
-
-                # Ensure shap_vals is always a list of arrays (one per sample)
-                shap_vals_list = []
-                for val in shap_vals:
-                    arr = np.array(val)
-                    if arr.ndim == 1:
-                        arr = arr[:, np.newaxis]  # single-feature case
-                    shap_vals_list.append(arr)
-
-                shap_data = {
-                    'shap_values': shap_vals_list,
-                    'base_values': base_vals,
-                    'texts': sample_texts,
-                    'true_labels': shap_true_labels[:len(sample_texts)],
-                    'pred_labels': shap_pred_labels[:len(sample_texts)],
-                    'feature_names': feature_names,
-                    'class_names': ['AI', 'human']  # Your actual class names
-                }
-
-                # Optional summary (mean over each sample)
-                mean_abs_list = [np.mean(np.abs(x)) for x in shap_vals_list]
-                shap_summary_stats = {
-                    'mean_abs_shap': np.mean(mean_abs_list)
-                }
-                
-                print("SHAP analysis completed successfully.")
-
-            except Exception as e:
-                print(f"Error in SHAP analysis: {e}")
-                shap_data = {'error': str(e)}
-                shap_summary_stats = {'error': str(e)}
+            print("\nWarning: SHAP analysis has been removed from this codebase.")
+            print("The include_shap parameter is deprecated and will be ignored.")
         
         # Store additional results in the median trainer for backward compatibility
         median_trainer.all_run_results = all_results
@@ -475,47 +358,20 @@ class Validator:
     @classmethod
     def save_shap_plotting_data(cls, shap_data, shap_summary_stats, output_path="shap_plotting_data.json"):
         """
-        Save SHAP data to a JSON file for external plotting.
+        (Deprecated) SHAP analysis has been removed from this codebase.
+
+        This method is kept for backward compatibility but does nothing.
+
+        Args:
+            shap_data: (Deprecated) Ignored
+            shap_summary_stats: (Deprecated) Ignored
+            output_path: (Deprecated) Ignored
+
+        Returns:
+            None
         """
-        # Convert numpy objects to JSON-serializable types
-        def to_serializable(obj):
-            if isinstance(obj, torch.Tensor):
-                return obj.detach().cpu().numpy().tolist()
-            elif isinstance(obj, np.ndarray):
-                return obj.tolist()
-            elif isinstance(obj, (np.int64, np.int32)):
-                return int(obj)
-            elif isinstance(obj, (np.float64, np.float32)):
-                return float(obj)
-            elif isinstance(obj, (list, tuple)):
-                return [to_serializable(x) for x in obj]
-            elif isinstance(obj, dict):
-                return {k: to_serializable(v) for k, v in obj.items()}
-            else:
-                return obj
-
-        serializable_shap_data = to_serializable(shap_data)
-        serializable_summary_stats = to_serializable(shap_summary_stats)
-
-        # Ensure class_names exists
-        class_names = shap_data.get('class_names', ['class_0'])
-
-        plotting_data = {
-            'shap_data': serializable_shap_data,
-            'shap_summary_stats': serializable_summary_stats,
-            'metadata': {
-                'n_samples': len(shap_data.get('texts', [])),
-                'n_classes': len(class_names),
-                'creation_timestamp': pd.Timestamp.now().isoformat()
-            }
-        }
-
-        # Save to JSON
-        with open(output_path, 'w') as f:
-            json.dump(plotting_data, f, indent=2)
-
-        print(f"SHAP plotting data saved to {output_path}")
-        return output_path
+        # No-op for backward compatibility
+        return None
 
 
 

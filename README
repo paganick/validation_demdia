@@ -12,12 +12,7 @@ python build_validation_data.py --folder={RESULTS_FOLDER}/results_bluesky --samp
 python build_validation_data.py --folder={RESULTS_FOLDER}/results_twitter --sample_size=5000 --real_file=twitter_data.pkl
 python build_validation_data.py --folder={RESULTS_FOLDER}/results_reddit --sample_size=9840 --real_file=reddit_data.pkl
 
-
-conda activate shap_env
-
-python validate_text.py --input_dir={RESULTS_FOLDER} --validation=all
-
-conda activate demdia_env
+python validation/validate_text.py --input_dir={RESULTS_FOLDER} --validation=all
 python features_analysis.py compute_features {RESULTS_FOLDER}
 python features_analysis.py evaluate {RESULTS_FOLDER} labels
 

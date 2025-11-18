@@ -33,7 +33,6 @@ def process_file(file_path, run_bert=True, run_empath=True):
     print(f"\nProcessing file: {file_path}")
     base, ext = os.path.splitext(file_path)
     labelled_file = base + "_labelled.csv"
-    shap_file = base + "_bert_shap_analysis.json"
     trainer_file = base + "_trainer_results.json"
     cm_file = base + "_confusion_matrix.csv"
     report_file = base + "_bert_report.json"
@@ -52,13 +51,13 @@ def process_file(file_path, run_bert=True, run_empath=True):
 
             df['length'] = df['text'].apply(lambda x: len(str(x).split()))
             print(df.groupby('labels')['length'].describe())
-            
+
             trainer, report, cm, results, shap_data, shap_summary_stats = Validator.bert_validate(df, tokenizer)
-            
+
             with open(trainer_file, "w") as f:
                 json.dump(results, f, default=str, indent=2)
 
-            data_file = Validator.save_shap_plotting_data(shap_data, shap_summary_stats, shap_file)
+            # SHAP analysis removed - shap_data and shap_summary_stats are now empty dicts
 
             with open(report_file, "w") as f:
                 json.dump(report, f, indent=4)
