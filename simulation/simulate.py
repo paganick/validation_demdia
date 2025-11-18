@@ -11,9 +11,23 @@ from .agent import Agent
 
 @contextmanager
 def file_lock(file_path, timeout=5):
-    """
-    Cross-platform context manager for file locking with timeout.
-    Returns None if lock cannot be acquired within timeout.
+    """Cross-platform context manager for file locking with timeout.
+
+    Implements file-based locking to prevent multiple processes from
+    simultaneously writing to the same output file. Uses OS-level file
+    creation atomicity for cross-platform compatibility.
+
+    Args:
+        file_path: Path to the file to lock. A .lock file will be created.
+        timeout: Maximum time in seconds to wait for lock acquisition (default: 5)
+
+    Yields:
+        True if lock was acquired successfully, None if timeout occurred.
+
+    Notes:
+        The lock file contains the process ID for debugging purposes.
+        Lock is automatically released when exiting the context manager.
+        Safe for both Windows and Unix-like systems.
     """
     lock_file = file_path + ".lock"
     
@@ -62,8 +76,45 @@ def file_lock(file_path, timeout=5):
 
 
 def run_simulation_random_response(config, data_file, n_users=1000, n_responses_per_user=1, output_path=None):
-    """
-    Version with file locking held during the entire simulation run.
+    """Run simulation with random response generation and file locking.
+
+    Main entry point for running simulations with multiple users. Handles
+    file locking to prevent concurrent writes and delegates to the internal
+    implementation function.
+
+    Args:
+        config: Configuration dictionary containing model settings:
+            - model: Model name/path
+            - finetuned: Whether to use fine-tuned model
+            - retrieve_context: Whether to use BM25 retrieval
+            - OPPU: Whether to use personalized user model (Online Private Personalization Unit)
+            - n_style_examples: Number of few-shot examples
+            - with_persona: Whether to include persona description
+            - deterministic: Whether to use deterministic generation
+        data_file: Path to pickle file containing user conversation data
+        n_users: Number of users to sample for simulation (default: 1000)
+        n_responses_per_user: Number of responses to generate per user (default: 1)
+        output_path: Path to save results JSON file. If None, results are not
+            saved to disk (default: None)
+
+    Returns:
+        List of result dictionaries, each containing:
+            - user: Username
+            - persona: User's persona description
+            - model: Model name used
+            - fine_tuned: Whether fine-tuned model was used
+            - retrieve_context: Whether context retrieval was used
+            - OPPU: Whether personalized model was used
+            - n_style_examples: Number of style examples used
+            - with_persona: Whether persona was included
+            - reply_to: Message being replied to
+            - original_message: Ground truth user response
+            - response: Generated response
+            - all_valid_responses: All valid candidates generated
+
+    Notes:
+        If output_path is specified, acquires an exclusive file lock for the
+        entire duration of the simulation to prevent concurrent writes.
     """
     if output_path:
         with file_lock(output_path) as lock_acquired:
@@ -79,9 +130,28 @@ def run_simulation_random_response(config, data_file, n_users=1000, n_responses_
 
 
 def _run_simulation_with_lock(config, data_file, n_users, n_responses_per_user, output_path):
-    """
-    Internal function that runs the actual simulation logic.
-    This is separated so the lock context manager can wrap the entire operation.
+    """Internal function that runs the actual simulation logic.
+
+    This is separated from run_simulation_random_response so the lock context
+    manager can wrap the entire operation. Contains the core simulation loop
+    that processes users and generates responses.
+
+    Args:
+        config: Configuration dictionary with model and generation settings
+        data_file: Path to pickle file containing user conversation data
+        n_users: Number of users to sample for simulation
+        n_responses_per_user: Number of responses to generate per user
+        output_path: Path to save results JSON file, or None for no saving
+
+    Returns:
+        List of result dictionaries containing generated responses and metadata.
+
+    Notes:
+        - Loads existing results from output_path if it exists (resumable)
+        - Samples users with random_state=42 for reproducibility
+        - Only processes test data (training == 0)
+        - Saves progress every 10 predictions
+        - Clears CUDA cache after each generation to manage memory
     """
     
     print(f"🚀 [DEBUG] Starting simulation with config: {config}")

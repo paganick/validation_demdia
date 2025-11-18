@@ -9,7 +9,34 @@ from transformers import BitsAndBytesConfig
 import numpy as np
 
 class Model:
+    """Wrapper for language models with optional fine-tuning capabilities.
+
+    Manages loading, fine-tuning, and inference for causal language models.
+    Supports both base models and fine-tuned models with LoRA adapters.
+    Handles model-specific configurations and quantization settings.
+
+    Attributes:
+        model_name: Name or path of the base language model
+        fine_tuned_dir: Directory where fine-tuned model is saved/loaded from
+        finetuning_filepath: Path to data file used for fine-tuning
+        finetuned: Whether to use/create a fine-tuned version
+        model: The loaded PyTorch model for inference
+        tokenizer: The tokenizer associated with the model
+    """
+
     def __init__(self, config, finetuning_filepath):
+        """Initialize a Model instance.
+
+        Args:
+            config: Configuration dictionary containing:
+                - model: Model name or path
+                - finetuned: Whether to load/create fine-tuned model
+                - finetuning_dir: Base directory for saving fine-tuned models
+            finetuning_filepath: Path to pickle file containing training data
+
+        Side Effects:
+            Calls self.load() to load or fine-tune the model immediately.
+        """
         self.model_name = config["model"]
         self.fine_tuned_dir = f"{config['finetuning_dir']}{config['model']}_finetuned_{os.path.splitext(finetuning_filepath)[0]}"
         self.finetuning_filepath = finetuning_filepath
@@ -19,9 +46,24 @@ class Model:
         self.load()
 
     def load(self):
+        """Load the language model and tokenizer.
+
+        Loads either a base model, an existing fine-tuned model, or triggers
+        fine-tuning if a fine-tuned model is requested but doesn't exist.
+
+        Side Effects:
+            Sets self.model and self.tokenizer.
+            May call self.finetune_model() if fine-tuned model doesn't exist.
+            Prints loading status to stdout.
+
+        Notes:
+            Base models are loaded in float16 without quantization to avoid
+            potential hanging issues. Fine-tuned models have generation config
+            automatically configured.
+        """
         if not self.finetuned:
             print(f"Loading base model: {self.model_name}")
-            
+
             # REMOVE 8-bit quantization to avoid the hang
             self.model = AutoModelForCausalLM.from_pretrained(
                 self.model_name,
@@ -31,10 +73,10 @@ class Model:
             )
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
             print("✅ Base model loaded")
-            
+
         elif os.path.exists(self.fine_tuned_dir):
             print(f"Loading fine-tuned model from {self.fine_tuned_dir}")
-            
+
             self.model = AutoModelForCausalLM.from_pretrained(
                 self.fine_tuned_dir,
                 device_map="auto",
@@ -44,15 +86,22 @@ class Model:
             self.tokenizer = AutoTokenizer.from_pretrained(self.fine_tuned_dir)
             self._configure_generation()
             print("✅ Fine-tuned model loaded")
-            
+
         else:
             print(f"Fine-tuning and saving model to {self.fine_tuned_dir}")
             self.finetune_model()
-            
+
         self.tokenizer.pad_token = self.tokenizer.eos_token
 
     def _configure_generation(self):
-        """Configure generation parameters to reduce repetition"""
+        """Configure generation parameters to reduce repetition.
+
+        Sets default generation parameters including temperature, top-p sampling,
+        and repetition penalties. These can be overridden during generation.
+
+        Side Effects:
+            Modifies self.model.generation_config if it exists.
+        """
         if hasattr(self.model, 'generation_config'):
             self.model.generation_config.do_sample = True
             self.model.generation_config.temperature = 0.8
@@ -63,6 +112,26 @@ class Model:
             self.model.generation_config.eos_token_id = self.tokenizer.eos_token_id
 
     def finetune_model(self):
+        """Fine-tune the model using LoRA on conversation data.
+
+        Trains a LoRA adapter on social media conversation data with proper
+        prompt formatting. Uses early stopping based on validation loss and
+        supports resuming from checkpoints.
+
+        Side Effects:
+            Loads training data from self.finetuning_filepath.
+            Trains a model and saves to self.fine_tuned_dir.
+            Saves checkpoints during training.
+            Sets self.model and self.tokenizer to the trained model.
+            Prints training progress to stdout.
+
+        Notes:
+            - Uses 90/10 train/validation split
+            - Implements custom early stopping with patience=3
+            - Handles model-specific quirks (e.g., Apertus models)
+            - Only computes loss on response portion of each example
+            - Training uses gradient accumulation for effective batch size of 8
+        """
         checkpoint_dir = self.fine_tuned_dir.replace("_finetuned", "_checkpoints")       
 
         bnb_config = BitsAndBytesConfig(

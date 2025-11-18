@@ -1,6 +1,7 @@
-"""
-Utilities for fixing random seeds across the simulation pipeline.
-Ensures reproducible results for testing and debugging.
+"""Utilities for fixing random seeds across the simulation pipeline.
+
+This module provides functions to ensure reproducible results for testing
+and debugging by fixing all sources of randomness in the simulation.
 """
 
 import random
@@ -10,17 +11,28 @@ import os
 
 
 def set_global_seed(seed: int = 42):
-    """
-    Fix all random seeds for reproducibility.
+    """Fix all random seeds for reproducibility across the entire pipeline.
+
+    Sets seeds for all major sources of randomness including Python's random
+    module, NumPy, and PyTorch (both CPU and CUDA). Also configures PyTorch
+    to use deterministic algorithms and sets Python hash seed.
 
     Args:
-        seed: The random seed to use (default: 42)
+        seed: The random seed to use for all random number generators
+            (default: 42)
 
-    This sets seeds for:
-    - Python's random module
-    - NumPy
-    - PyTorch (CPU and CUDA)
-    - Environment variables for hash randomization
+    Side Effects:
+        - Sets random.seed()
+        - Sets np.random.seed()
+        - Sets torch.manual_seed() and torch.cuda.manual_seed_all()
+        - Enables PyTorch deterministic mode (cudnn.deterministic=True)
+        - Disables PyTorch benchmark mode (cudnn.benchmark=False)
+        - Sets PYTHONHASHSEED environment variable
+        - Prints confirmation message to stdout
+
+    Examples:
+        >>> set_global_seed(42)
+        Global seed set to 42 for reproducibility
     """
     # Python random
     random.seed(seed)
@@ -44,11 +56,14 @@ def set_global_seed(seed: int = 42):
 
 
 def get_test_seed():
-    """
-    Returns the standard test seed.
+    """Get the standard test seed used across all tests.
 
     Returns:
-        int: The fixed seed value (42) used for all tests
+        The fixed seed value (42) used for all reproducibility tests.
+
+    Examples:
+        >>> get_test_seed()
+        42
     """
     return 42
 

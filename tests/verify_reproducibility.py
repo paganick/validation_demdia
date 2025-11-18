@@ -1,17 +1,24 @@
 #!/usr/bin/env python3
-"""
-Reproducibility Verification Script
+"""Reproducibility verification script for simulation outputs.
 
-Runs the same configuration twice with the same seed and verifies
-that the outputs are byte-for-byte identical.
+This script runs the same configuration twice with the same seed and verifies
+that the outputs are byte-for-byte identical. This is crucial for ensuring
+deterministic behavior in research experiments.
 
-This is crucial for:
-1. Debugging - ensuring changes don't affect determinism
-2. Testing - validating that seeds are properly fixed
-3. Research - ensuring reproducible results
+The verification process:
+1. Runs a simulation twice with identical parameters and seed
+2. Compares output files using SHA-256 hashing
+3. Reports whether outputs are identical or provides detailed differences
+
+This is essential for:
+    - Debugging: Ensuring code changes don't break determinism
+    - Testing: Validating that seed fixing works properly
+    - Research: Guaranteeing reproducible experimental results
 
 Usage:
     python verify_reproducibility.py --data_file bluesky_data/personas.pkl
+    python verify_reproducibility.py --data_file data.pkl --config configs/test.yaml
+    python verify_reproducibility.py --data_file data.pkl --seed 123
 """
 
 import argparse
@@ -25,14 +32,20 @@ from test_seed_utils import get_test_seed
 
 
 def compute_file_hash(filepath: str) -> str:
-    """
-    Compute SHA-256 hash of a file.
+    """Compute SHA-256 hash of a file for comparison.
+
+    Reads the file in chunks to handle large files efficiently and
+    computes a cryptographic hash for byte-level comparison.
 
     Args:
-        filepath: Path to the file
+        filepath: Path to the file to hash
 
     Returns:
-        Hexadecimal hash string
+        Hexadecimal string representation of the SHA-256 hash.
+
+    Examples:
+        >>> compute_file_hash("output.json")
+        'a3b2c1d4e5f6...'
     """
     sha256 = hashlib.sha256()
     with open(filepath, 'rb') as f:
@@ -42,17 +55,24 @@ def compute_file_hash(filepath: str) -> str:
 
 
 def run_simulation(config_path: str, data_file: str, output_dir: str, seed: int) -> str:
-    """
-    Run a single simulation.
+    """Run a single simulation instance as a subprocess.
+
+    Executes run_simulation.py with the specified parameters and waits
+    for completion. Used to run two independent simulation runs for
+    reproducibility comparison.
 
     Args:
-        config_path: Path to config file
-        data_file: Path to data file
-        output_dir: Output directory
-        seed: Random seed
+        config_path: Path to YAML configuration file
+        data_file: Path to pickle file containing user data
+        output_dir: Directory where output JSON will be saved
+        seed: Random seed for reproducibility
 
     Returns:
-        Path to output JSON file
+        Path to the generated output JSON file.
+
+    Raises:
+        RuntimeError: If the simulation fails or no output file is found
+        subprocess.TimeoutExpired: If simulation takes longer than 10 minutes
     """
     cmd = [
         sys.executable,
@@ -82,15 +102,32 @@ def run_simulation(config_path: str, data_file: str, output_dir: str, seed: int)
 
 
 def compare_json_files(file1: str, file2: str) -> dict:
-    """
-    Compare two JSON files and return detailed comparison results.
+    """Compare two JSON files and return detailed comparison results.
+
+    Performs both byte-level (hash) and structural (JSON) comparisons.
+    If differences exist, identifies which entries differ and which
+    fields within those entries are different.
 
     Args:
-        file1: Path to first JSON file
-        file2: Path to second JSON file
+        file1: Path to first JSON file to compare
+        file2: Path to second JSON file to compare
 
     Returns:
-        Dictionary with comparison results
+        Dictionary containing:
+            - identical_hashes (bool): Whether files are byte-for-byte identical
+            - hash1 (str): SHA-256 hash of file1
+            - hash2 (str): SHA-256 hash of file2
+            - identical_structure (bool): Whether files have same number of entries
+            - num_entries_1 (int): Number of entries in file1
+            - num_entries_2 (int): Number of entries in file2
+            - identical_content (bool): Whether all entries match
+            - num_differences (int): Number of differing entries
+            - differences (list): First 10 differing entries with details
+
+    Examples:
+        >>> result = compare_json_files("run1.json", "run2.json")
+        >>> result["identical_hashes"]
+        True
     """
     # First, compare file hashes (fastest check)
     hash1 = compute_file_hash(file1)
@@ -143,6 +180,11 @@ def compare_json_files(file1: str, file2: str) -> dict:
 
 
 def main():
+    """Main function to run reproducibility verification tests.
+
+    Parses command-line arguments, runs two simulations with the same seed,
+    and compares the outputs to verify deterministic behavior.
+    """
     parser = argparse.ArgumentParser(
         description="Verify reproducibility of simulation results"
     )

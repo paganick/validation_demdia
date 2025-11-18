@@ -13,8 +13,32 @@ from .model_utils import *
 from .model import Model
 
 class Agent:
+    """Represents a social media user agent with text generation capabilities.
+
+    An Agent encapsulates a user's persona, writing style, and history from social
+    media interactions. It can generate responses that mimic the user's writing
+    style using various personalization techniques including few-shot examples,
+    retrieval-augmented generation, and fine-tuned models.
+
+    Attributes:
+        username: The username of the social media user
+        data_file: Path to the pickle file containing user data
+        examples: List of example messages written by the user
+        df_user: DataFrame filtered to this user's training data
+        persona: Text description of the user's persona
+        history_file: Path to the JSON file storing user's message history
+        personalized_model: Fine-tuned model for this specific user (lazy-loaded)
+        user_output_dir: Directory where personalized model adapters are saved
+        user_adapter_dir: Directory where personalized model adapters are loaded from
+    """
+
     def __init__(self, username: str, data_file: str):
-        """Initialize an agent with a username and load all past text examples."""
+        """Initialize an agent with a username and load all past text examples.
+
+        Args:
+            username: The username of the social media user
+            data_file: Path to the pickle file containing user conversation data
+        """
         self.username = username
         self.data_file = data_file
         self.examples = self.load_persona_examples()
@@ -22,25 +46,51 @@ class Agent:
         self.personalized_model = None
 
     def load_persona_examples(self):
-        """Reads a file and stores all examples of text by the agent."""
+        """Load training examples and persona information for this user.
+
+        Reads the data file, filters to this user's training data (training == 1),
+        and extracts their writing examples and persona description.
+
+        Returns:
+            List of message strings written by this user, or empty list if no
+            training data is found.
+
+        Side Effects:
+            Sets self.df_user to the filtered DataFrame of training data.
+            Sets self.persona to the user's persona description.
+        """
         try:
             df = pd.read_pickle(self.data_file)
         except Exception as e:
             print(f"Error loading data from {self.data_file}: {e}")
             return []
-        
+
         self.df_user = df[(df['username'] == self.username) & (df['training'] == 1)]
-        
+
         self.persona = self.df_user['persona'].iloc[0] if not self.df_user.empty else None
 
         if self.df_user.empty:
             print(f"No training examples found for @{self.username}.")
             return []
-        
+
         return self.df_user['message'].dropna().tolist()
 
     def sample_examples(self, num_samples=10, deterministic=False):
-        """Returns a random subsample of the stored examples."""
+        """Sample writing style examples from the user's history.
+
+        Returns a subset of the user's example messages to use as few-shot
+        demonstrations of their writing style. Can operate in deterministic mode
+        for reproducible testing or random mode for diverse sampling.
+
+        Args:
+            num_samples: Number of examples to sample (default: 10)
+            deterministic: If True, returns sorted examples deterministically.
+                If False, samples randomly (default: False)
+
+        Returns:
+            List of up to num_samples message strings from the user's history.
+            Returns fewer if the user has fewer than num_samples examples.
+        """
         if deterministic:
             # Deterministic: always return first N examples (sorted for consistency)
             sorted_examples = sorted(self.examples)
@@ -50,6 +100,20 @@ class Agent:
             return random.sample(self.examples, min(len(self.examples), num_samples))
 
     def create_user_history(self, history_dir="data/user_histories"):
+        """Create and save a JSON file of the user's message history.
+
+        Exports all training messages to a JSON file for use with BM25 retrieval.
+        Only creates the file if it doesn't already exist to avoid overwriting.
+
+        Args:
+            history_dir: Directory where user history files are stored
+                (default: "data/user_histories")
+
+        Side Effects:
+            Creates history_dir if it doesn't exist.
+            Sets self.history_file to the path of the user's history file.
+            Writes a JSON file with the user's message history if not already present.
+        """
         user_history = self.df_user['message'].tolist()
         os.makedirs(history_dir, exist_ok=True)
         self.history_file = os.path.join(history_dir, f"user_history_{self.username}.json")
@@ -60,13 +124,34 @@ class Agent:
         else:
             print(f"User history file already exists at {self.history_file}, skipping write.")
 
-    def read_user_history(self):  
+    def read_user_history(self):
+        """Load the user's message history from the JSON file.
+
+        Returns:
+            List of message strings from the user's history, or empty list
+            if the history file doesn't exist.
+        """
         if os.path.exists(self.history_file):
             with open(self.history_file, "r") as f:
                 return json.load(f)
         return []
 
-    def train_personalized_model(self, llm: Model): 
+    def train_personalized_model(self, llm: Model):
+        """Train a personalized LoRA adapter on the user's writing style.
+
+        Creates a user-specific adapter using Parameter-Efficient Fine-Tuning (PEFT)
+        with LoRA. The adapter is trained on the user's messages with BM25 retrieval
+        augmentation to capture their writing style and content preferences.
+
+        Args:
+            llm: The base language model to personalize. Can be a base model or
+                a fine-tuned model.
+
+        Side Effects:
+            Trains a LoRA adapter and saves it to self.user_output_dir.
+            Saves the tokenizer to the same directory.
+            Prints training progress to stdout.
+        """
         if llm.fine_tuned_dir:
             base_model_dir = llm.fine_tuned_dir
             tokenizer = AutoTokenizer.from_pretrained(llm.fine_tuned_dir)
@@ -160,9 +245,26 @@ class Agent:
 
 
     def load_personalized_model(self, llm: Model):
+        """Load the user's personalized model with LoRA adapter merged.
+
+        Loads the base model and merges the user-specific LoRA adapter to create
+        a fully personalized model. If the adapter doesn't exist, trains it first.
+        Uses lazy loading - returns cached model if already loaded.
+
+        Args:
+            llm: The base language model that the adapter was trained on
+
+        Returns:
+            The personalized model with LoRA adapter merged, ready for inference.
+
+        Side Effects:
+            Calls train_personalized_model if adapter doesn't exist.
+            Sets self.personalized_model for caching.
+            Sets self.user_adapter_dir to the adapter path.
+        """
         if self.personalized_model:
             return self.personalized_model
-        
+
         if llm.fine_tuned_dir:
             base_model_dir = llm.fine_tuned_dir
         else:
@@ -172,19 +274,19 @@ class Agent:
 
         if not(os.path.isdir(self.user_adapter_dir)):
             self.train_personalized_model(llm)
-        
+
         base_model = AutoModelForCausalLM.from_pretrained(
             base_model_dir,
             torch_dtype=torch.float16,
             device_map="auto",
             ignore_mismatched_sizes=True
         )
-        base_model.eval()     
+        base_model.eval()
         # Load and merge the personalized adapter.
         try:
             adapter_model = PeftModel.from_pretrained(
-                base_model, 
-                self.user_adapter_dir, 
+                base_model,
+                self.user_adapter_dir,
                 ignore_mismatched_sizes=True
             )
             self.personalized_model = adapter_model.merge_and_unload()
@@ -206,7 +308,44 @@ class Agent:
         max_total_attempts: int = 5,
         deterministic: bool = False
     ):
-        """Generate up to `n_candidates` valid responses, retrying if needed."""
+        """Generate responses mimicking the user's writing style.
+
+        Generates multiple candidate responses to continue a conversation in the
+        user's style. Supports various personalization methods including few-shot
+        examples, BM25 retrieval, persona descriptions, and fine-tuned models.
+        Can operate in deterministic or sampling mode.
+
+        Args:
+            llm: The language model to use for generation
+            n_examples: Number of writing style examples to include in the prompt
+            retrieve_context_bool: If True, use BM25 to retrieve relevant messages
+                from the user's history
+            personalized_bool: If True, use the user's personalized fine-tuned model
+                instead of the base model
+            with_persona: If True, include the user's persona description in the
+                prompt (default: True)
+            conversation_history: List of previous messages in the conversation
+                to provide context (default: [])
+            n_candidates: Number of valid responses to generate (default: 20)
+            max_total_attempts: Maximum number of generation attempts to get
+                n_candidates valid responses (default: 5)
+            deterministic: If True, uses greedy decoding for reproducible outputs.
+                If False, uses sampling with temperature for diverse outputs
+                (default: False)
+
+        Returns:
+            List of up to n_candidates valid response strings. May return fewer
+            if max_total_attempts is reached before generating enough valid responses.
+            In deterministic mode, returns only 1 response per attempt.
+
+        Notes:
+            Deterministic mode uses greedy decoding (do_sample=False) and generates
+            only 1 sequence per attempt, ensuring fully reproducible outputs with
+            fixed seeds. Sampling mode uses temperature=0.8, top_p=0.9 for diversity.
+
+            A response is considered valid if it doesn't contain instruction text
+            and has appropriate content.
+        """
 
         persona_examples = self.sample_examples(n_examples, deterministic=deterministic)
         k_retrieval = 3
