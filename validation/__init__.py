@@ -16,6 +16,9 @@ Main Components:
 
 __version__ = "1.0.0"
 
-from .utils import Validator
+# NOTE: Commented out to avoid loading heavy BERT models on import
+# Uncomment when you need the Validator class
+# from .utils import Validator
+# __all__ = ["Validator"]
 
-__all__ = ["Validator"]
+__all__ = []

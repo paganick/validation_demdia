@@ -1,4 +1,6 @@
 results/*
+results_consolidated/*
+postprocessing_consolidated/*
 test_results/*
 test_results_full/*
 updated_results/*
@@ -6,6 +8,11 @@ basic_results/*
 llama70/*
 data/*
 configs/*
+
+# Migration and comparison outputs (can be shared separately)
+comparison_output/
+plotting/comparison_output/
+last.txt
 data/personas_and_tweets.df.pkl
 bluesky_data.pkl
 twitter_data.pkl

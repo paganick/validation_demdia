@@ -9,7 +9,7 @@ import json
 import pandas as pd
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-from data_formats import (
+from validation.data_formats import (
     UserMetadata, Prompt, ResponseEntry, ConsolidatedResponses,
     ValidationResults, SharedDataManager
 )

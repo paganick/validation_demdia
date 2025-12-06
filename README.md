@@ -97,17 +97,19 @@ python validation/features_analysis.py \
 ### Models Tested (9 total)
 
 - **Llama-3.1-8B** (base & instruct)
-- **Llama-3.1-70B** (base & instruct)
+- **Llama-3.1-70B** (base)
 - **Mistral-7B-v0.1** (base & instruct)
 - **DeepSeek-R1-Distill-Llama-8B**
-- Additional model variants
+- **Apertus-8B-2509**
+- **Gemma-3-4B-it**
+- **Qwen-2.5-7B-Instruct**
 
 ### Personalization Techniques
-- ✅ **Persona descriptions** - Generated user profiles
-- ✅ **Style examples** - Few-shot prompting (0 or 10 examples)
+- ✅ **No personas**
+- ✅ **Persona descriptions** - Generated user profiles (Baseline)
+- ✅ **Style examples** - Few-shot prompting (10 examples)
 - ✅ **Context retrieval** - BM25-based history retrieval
 - ✅ **Fine-tuning** - LoRA adapters on user data
-- ✅ **OPPU** - One-Person-Per-User personalized models
 
 ### Example Configuration
 
@@ -286,7 +288,7 @@ University of Zurich
 
 ## 🙏 Acknowledgments
 
-- Models: Meta (Llama), Mistral AI, DeepSeek
+- Models: Meta (Llama), Mistral AI, DeepSeek, Apertus, Qwen, Gemma (Google)
 - Datasets: Bluesky, Twitter/X, Reddit (public posts only)
 - Co-authors: Petter Törnberg, Christopher A. Bail, Anikó Hannák, Christopher Barrie
 
