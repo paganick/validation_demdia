@@ -212,7 +212,8 @@ class Agent:
         model_for_training.enable_input_require_grads()
         
         # Specify directories for saving personalized adapters.
-        save_base_dir = "/scratch/nicpag/personal_peft"
+        # Use environment variable or default to local directory
+        save_base_dir = os.environ.get("PEFT_MODELS_DIR", "peft_models")
 
         self.user_output_dir = f"{save_base_dir}/{self.username}/{llm.model_name}"
         os.makedirs(self.user_output_dir, exist_ok=True)
@@ -269,7 +270,8 @@ class Agent:
             base_model_dir = llm.fine_tuned_dir
         else:
             base_model_dir = llm.model_name
-        save_base_dir = "/scratch/nicpag/personal_peft"
+        # Use environment variable or default to local directory
+        save_base_dir = os.environ.get("PEFT_MODELS_DIR", "peft_models")
         self.user_adapter_dir =  f"{save_base_dir}/{self.username}/{llm.model_name}"
 
         if not(os.path.isdir(self.user_adapter_dir)):

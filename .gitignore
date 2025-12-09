@@ -7,6 +7,10 @@ test_results_full/*
 # Input data (too large for git, users should download separately)
 data/*
 
+# User-specific fine-tuned models and adapters (large files, 50GB+)
+peft_models/
+finetuned_models/
+
 # Config files are tracked, but ignore any generated/temporary configs
 configs/*.lock
 

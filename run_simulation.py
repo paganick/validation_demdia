@@ -60,7 +60,9 @@ def main():
         config = load_config(cfg_path)
 
         # Set defaults (can also be enforced in config loader)
-        config.setdefault("finetuning_dir", "/home/nicpag/scratch/finetuned_models/") # NEEDS A LARGE STORAGE SPACE
+        # Use environment variable FINETUNED_MODELS_DIR or default to local directory
+        # Note: Fine-tuned models require significant storage space (50GB+ per model)
+        config.setdefault("finetuning_dir", os.environ.get("FINETUNED_MODELS_DIR", "finetuned_models/"))
         config.setdefault("finetuned", False)
         config.setdefault("retrieve_context", False)
         config.setdefault("n_style_examples", 0)

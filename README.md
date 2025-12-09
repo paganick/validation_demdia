@@ -261,7 +261,39 @@ python tests/compare_with_golden.py --test_type quick
 - **`preprocessing/README.md`** - Data preparation guide
 - **`simulation/README.md`** - Simulation details
 - **`tests/TEST_SUITE_README.md`** - Testing guide
-- **`PROJECT_STRUCTURE.md`** - Directory organization
+
+## ⚙️ Configuration
+
+### Environment Variables
+
+The following environment variables can be set to customize storage locations for large model files:
+
+- **`FINETUNED_MODELS_DIR`** - Directory for storing fine-tuned base models
+  - Default: `finetuned_models/` (local directory)
+  - Recommended: External storage with 50GB+ per model
+  - Example: `export FINETUNED_MODELS_DIR=/path/to/large/storage/finetuned_models`
+
+- **`PEFT_MODELS_DIR`** - Directory for storing LoRA adapters (personalized models)
+  - Default: `peft_models/` (local directory)
+  - Recommended: External storage with 10GB+ per user
+  - Example: `export PEFT_MODELS_DIR=/path/to/large/storage/peft_models`
+
+These directories are automatically created if they don't exist. Both are excluded from git tracking via `.gitignore`.
+
+### Quick Start with Mock Data
+
+For testing the pipeline without downloading full datasets:
+
+```bash
+# Test with included 2-user mock dataset
+python run_simulation.py \
+    --config configs/llama3.1_base.yaml \
+    --data_file data/mock_data/personas_mock.pkl \
+    --n_users 2 \
+    --n_responses_per_user 2
+```
+
+This runs a quick simulation (2 users, 2 responses each) to verify the pipeline works.
 
 ## 🔧 Requirements
 
