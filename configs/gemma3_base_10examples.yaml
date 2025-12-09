@@ -1,4 +1,4 @@
-model: mistralai/Mistral-7B-v0.1
+model: google/gemma-3-4b-it
 finetuned: false
 context_retrieval: false
 n_style_examples: 10

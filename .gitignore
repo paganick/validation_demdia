@@ -1,25 +1,33 @@
+# Output directories
 results/*
-results_consolidated/*
 postprocessing_consolidated/*
 test_results/*
 test_results_full/*
-updated_results/*
-basic_results/*
-llama70/*
-data/*
-configs/*
 
-# Migration and comparison outputs (can be shared separately)
-comparison_output/
-plotting/comparison_output/
+# Input data (too large for git, users should download separately)
+data/*
+
+# Config files are tracked, but ignore any generated/temporary configs
+configs/*.lock
+
+# Temporary/scratch files
 last.txt
+*.json.lock
+
+# Data pickle files (if any)
 data/personas_and_tweets.df.pkl
 bluesky_data.pkl
 twitter_data.pkl
 reddit_data.pkl
 
+# Model directories (download separately)
 BERT_models/*
 
+# Byte-compiled / cache files
+__pycache__/
+*.py[cod]
+
+# Temporary utility scripts (kept locally, not in repo)
 check_run.py
 copy_data.py
 move_files.py
@@ -27,12 +35,3 @@ test_apertus.py
 copy_basic_files.py
 extract_sample.py
 generate_stats.py
-
-# Byte-compiled / cache files
-__pycache__/
-*.py[cod]
-
-*.json.lock
-*.csv
-*.png
-*.yml

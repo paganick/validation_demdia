@@ -1,4 +1,4 @@
-model: mistralai/Mistral-7B-v0.1
+model: swiss-ai/Apertus-8B-2509
 finetuned: false
 context_retrieval: true
 n_style_examples: 10

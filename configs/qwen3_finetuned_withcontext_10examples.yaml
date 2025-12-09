@@ -1,5 +1,5 @@
-model: mistralai/Mistral-7B-v0.1
-finetuned: false
+model: Qwen/Qwen2.5-7B-Instruct
+finetuned: true
 context_retrieval: true
 n_style_examples: 10
 OPPU: false

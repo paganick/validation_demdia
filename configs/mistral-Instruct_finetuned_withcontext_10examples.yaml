@@ -1,4 +1,4 @@
-model: deepseek-ai/DeepSeek-R1-Distill-Llama-8B
+model: mistralai/Mistral-7B-Instruct-v0.2
 finetuned: true
 context_retrieval: true
 n_style_examples: 10
