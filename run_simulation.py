@@ -70,17 +70,21 @@ def main():
         config.setdefault("OPPU", False)
         config.setdefault("deterministic", False)
 
-        # Generate an output filename based on config values
+        # Generate an output filename based on config values and dataset name
+        # Extract dataset name from data_file path (e.g., "bluesky" from "data/bluesky/personas.pkl")
+        dataset_name = os.path.basename(os.path.dirname(data_file))
+
         filename_parts = [
             config["model"],
             "ft" if config["finetuned"] else "noft",
             f"ctx{int(config['retrieve_context'])}",
             f"style{config['n_style_examples']}",
-            "OPPU" if config["OPPU"] else "no_OPPU"
+            "OPPU" if config["OPPU"] else "no_OPPU",
+            dataset_name  # Add dataset name to filename
         ]
-        output_filename = "__".join(filename_parts) 
+        output_filename = "__".join(filename_parts)
         if config['with_persona']:
-            output_filename += "" 
+            output_filename += ""
         else:
             output_filename += "__no_persona"
         output_filename += "__random_response.json"

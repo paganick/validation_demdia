@@ -280,20 +280,21 @@ The following environment variables can be set to customize storage locations fo
 
 These directories are automatically created if they don't exist. Both are excluded from git tracking via `.gitignore`.
 
-### Quick Start with Mock Data
+### Quick Testing
 
-For testing the pipeline without downloading full datasets:
+For testing the pipeline with minimal computational requirements:
 
 ```bash
-# Test with included 2-user mock dataset
+# Test with 1 user from each dataset
 python run_simulation.py \
     --config configs/llama3.1_base.yaml \
-    --data_file data/mock_data/personas_mock.pkl \
-    --n_users 2 \
-    --n_responses_per_user 2
+    --data_file data/bluesky/personas.pkl \
+    --n_users 1 \
+    --n_responses_per_user 20 \
+    --seed 42
 ```
 
-This runs a quick simulation (2 users, 2 responses each) to verify the pipeline works.
+This runs a quick simulation (1 user, 20 test messages) to verify the pipeline works before running full-scale experiments.
 
 ## 🔧 Requirements
 
