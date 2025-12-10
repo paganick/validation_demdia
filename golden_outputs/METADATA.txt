@@ -1,0 +1,65 @@
+GOLDEN OUTPUTS - FIRST RUN
+===========================
+
+Date Created: December 10, 2025, 09:15 UTC
+Git Commit: c39cc25 (Fix simulation issues for Gemma, Llama-70B, and Apertus models)
+
+Purpose:
+--------
+This directory contains the first complete run of all simulations to serve as a
+baseline/golden reference for reproducibility testing. These outputs will be
+compared against a second run to verify consistency and reproducibility.
+
+Simulation Details:
+-------------------
+Total Configurations: 81 expected (9 models × 9 configs each)
+Models Tested:
+  - DeepSeek-R1-Distill-Llama-8B: 9 configs
+  - Gemma-3-4B: 9 configs
+  - Llama-3.1-8B: 9 configs
+  - Llama-3.1-8B-Instruct: 9 configs
+  - Llama-3.1-70B: 9 configs
+  - Mistral-7B: 9 configs
+  - Mistral-7B-Instruct: 9 configs
+  - Qwen2.5-7B-Instruct: 9 configs
+  - Apertus-8B-2509: 9 configs
+
+Configuration Variants:
+  - base (no context, no style examples, no OPPU)
+  - base_10examples (10 style examples)
+  - base_withcontext_10examples (context + 10 style examples)
+  - finetuned_withcontext_10examples (fine-tuned + context + 10 examples)
+  - no_persona (no persona description)
+
+Platforms: Bluesky, Reddit, Twitter
+
+Model-Specific Fixes Applied:
+------------------------------
+1. Gemma models: Use bfloat16 dtype, add_bos_token=True
+2. Llama-70B: 256GB RAM, 2 GPUs (high memory allocation)
+3. Apertus models: Use float32 dtype, trust_remote_code=True
+4. All configs: Fixed context_retrieval → retrieve_context key
+
+File Format:
+------------
+Each JSON file contains an array of response objects with structure:
+{
+  "user": username,
+  "persona": persona description,
+  "model": model identifier,
+  "fine_tuned": boolean,
+  "retrieve_context": boolean,
+  "OPPU": boolean,
+  "n_style_examples": integer,
+  "with_persona": boolean,
+  "reply_to": original message ID,
+  "original_message": prompt text,
+  "response": selected response,
+  "all_valid_responses": [list of all generated responses]
+}
+
+Notes:
+------
+- This is the first complete successful run after fixing all model-specific issues
+- Used for reproducibility testing and as baseline for comparison
+- DO NOT MODIFY - treat as read-only reference data

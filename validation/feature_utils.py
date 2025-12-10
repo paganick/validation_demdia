@@ -28,6 +28,9 @@ from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import train_test_split
 from transformers import pipeline
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'plotting'))
 from plotting_utils import parse_filename
 
 # Load toxicity model once
