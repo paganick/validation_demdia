@@ -1,5 +1,5 @@
 model: google/gemma-3-4b-it
 finetuned: false
-context_retrieval: false
+retrieve_context: false
 n_style_examples: 10
 OPPU: false

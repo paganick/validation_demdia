@@ -1,5 +1,5 @@
 model: meta-llama/Llama-3.1-8B
 finetuned: true
-context_retrieval: true
+retrieve_context: true
 n_style_examples: 10
 OPPU: false

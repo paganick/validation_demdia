@@ -64,14 +64,45 @@ class Model:
         if not self.finetuned:
             print(f"Loading base model: {self.model_name}")
 
-            # REMOVE 8-bit quantization to avoid the hang
-            self.model = AutoModelForCausalLM.from_pretrained(
-                self.model_name,
-                device_map="auto",
-                torch_dtype=torch.float16,
-                low_cpu_mem_usage=True
-            )
-            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+            # Check if this is an Apertus model that needs special dtype handling
+            is_apertus = "apertus" in self.model_name.lower() or "swiss-ai" in self.model_name.lower()
+            # Check if this is a Gemma model that needs special tokenizer handling
+            is_gemma = "gemma" in self.model_name.lower()
+
+            if is_apertus:
+                # Apertus models need float32 to avoid dtype mismatch errors
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.model_name,
+                    device_map="auto",
+                    torch_dtype=torch.float32,
+                    low_cpu_mem_usage=True,
+                    trust_remote_code=True
+                )
+                self.tokenizer = AutoTokenizer.from_pretrained(
+                    self.model_name,
+                    trust_remote_code=True
+                )
+            elif is_gemma:
+                # Gemma models need special tokenizer handling to avoid CUDA errors
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.model_name,
+                    device_map="auto",
+                    torch_dtype=torch.bfloat16,  # Gemma prefers bfloat16
+                    low_cpu_mem_usage=True
+                )
+                self.tokenizer = AutoTokenizer.from_pretrained(
+                    self.model_name,
+                    add_bos_token=True  # Gemma needs explicit BOS token
+                )
+            else:
+                # Other models use float16 without quantization to avoid the hang
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.model_name,
+                    device_map="auto",
+                    torch_dtype=torch.float16,
+                    low_cpu_mem_usage=True
+                )
+                self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
             print("✅ Base model loaded")
 
         elif os.path.exists(self.fine_tuned_dir):
@@ -91,7 +122,9 @@ class Model:
             print(f"Fine-tuning and saving model to {self.fine_tuned_dir}")
             self.finetune_model()
 
-        self.tokenizer.pad_token = self.tokenizer.eos_token
+        # Set pad token if not already set (but don't override Gemma's existing pad token)
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
 
     def _configure_generation(self):
         """Configure generation parameters to reduce repetition.

@@ -1,5 +1,5 @@
 model: swiss-ai/Apertus-8B-2509
 finetuned: false
-context_retrieval: false
+retrieve_context: false
 n_style_examples: 0
 OPPU: false

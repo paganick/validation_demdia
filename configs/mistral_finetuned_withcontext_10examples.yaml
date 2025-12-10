@@ -1,5 +1,5 @@
 model: mistralai/Mistral-7B-v0.1
 finetuned: true
-context_retrieval: true
+retrieve_context: true
 n_style_examples: 10
 OPPU: false

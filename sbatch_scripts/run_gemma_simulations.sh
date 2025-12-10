@@ -1,0 +1,54 @@
+#!/bin/bash
+#SBATCH --job-name=gemma_sim
+#SBATCH --output=logs/gemma_%A_%a.out
+#SBATCH --error=logs/gemma_%A_%a.err
+#SBATCH --time=06:00:00
+#SBATCH --mem=64G
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:1
+#SBATCH --array=0-14
+
+# Run simulations for Gemma models with fixed CUDA error handling
+
+# Activate conda environment
+eval "$(conda shell.bash hook)"
+conda activate demdia_env
+
+# Navigate to project directory
+cd /home/nicpag/data/demdia_val
+
+# Create logs directory
+mkdir -p logs
+
+# Get list of non-finetuned Gemma configs
+mapfile -t CONFIGS < <(ls configs/gemma*.yaml | grep -v finetuned | sort)
+
+# Dataset array
+DATASETS=("bluesky" "twitter" "reddit")
+
+# Calculate config and dataset indices
+NUM_CONFIGS=${#CONFIGS[@]}
+NUM_DATASETS=${#DATASETS[@]}
+
+CONFIG_IDX=$((SLURM_ARRAY_TASK_ID / NUM_DATASETS))
+DATASET_IDX=$((SLURM_ARRAY_TASK_ID % NUM_DATASETS))
+
+CONFIG=${CONFIGS[$CONFIG_IDX]}
+DATASET=${DATASETS[$DATASET_IDX]}
+
+echo "========================================="
+echo "Job ID: $SLURM_ARRAY_JOB_ID-$SLURM_ARRAY_TASK_ID"
+echo "Config: $CONFIG"
+echo "Dataset: $DATASET"
+echo "========================================="
+
+# Run simulation with 1 user for testing
+python3 run_simulation.py \
+    --config "$CONFIG" \
+    --data_file "data/${DATASET}/personas.pkl" \
+    --n_users 1 \
+    --n_responses_per_user 20 \
+    --seed 42 \
+    --output_dir reference_outputs
+
+echo "Completed simulation for $CONFIG on $DATASET"
