@@ -51,10 +51,18 @@ from validation.consolidated_outputs import (
 
 
 def find_simulation_outputs(input_dir: Path) -> List[Path]:
-    """Find all simulation output JSON files."""
+    """Find all simulation output JSON files (both legacy and consolidated formats)."""
+    # First try legacy format
     json_files = list(input_dir.rglob('*_optimal_response.json'))
     if not json_files:
         json_files = list(input_dir.rglob('*_random_response.json'))
+
+    # If no legacy files, look for consolidated format in responses/ directory
+    if not json_files:
+        responses_dir = input_dir / 'responses'
+        if responses_dir.exists():
+            json_files = list(responses_dir.glob('*.json'))
+
     return json_files
 
 
@@ -75,10 +83,16 @@ def extract_config_info(filepath: Path) -> Dict[str, str]:
 
 
 def load_simulation_output(json_path: Path) -> ConsolidatedResponses:
-    """Load and convert simulation output to consolidated format."""
+    """Load simulation output (handles both legacy and consolidated formats)."""
     with open(json_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
 
+    # Check if already in consolidated format (has 'config_name' key)
+    if isinstance(data, dict) and 'config_name' in data:
+        # Already consolidated format - load directly
+        return ConsolidatedResponses.from_dict(data)
+
+    # Legacy format - convert
     config_name = json_path.stem.replace('_optimal_response', '').replace('_random_response', '')
 
     # Extract metadata
@@ -465,9 +479,9 @@ def main():
         print(f"❌ No simulation outputs found in {input_dir}")
         sys.exit(1)
 
-    # Filter by model if specified
+    # Filter by model if specified (check filename, not parent directory)
     if args.model:
-        json_files = [f for f in json_files if args.model in str(f.parent)]
+        json_files = [f for f in json_files if args.model in f.name]
         print(f"   Filtered to model: {args.model}")
 
     print(f"✅ Found {len(json_files)} configuration(s)")
