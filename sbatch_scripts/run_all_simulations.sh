@@ -12,7 +12,9 @@
 # Total: 36 configs × 3 datasets = 108 jobs (all run in parallel on different nodes)
 
 # Activate conda environment
-source ~/.bashrc
+# Load miniforge3 module and activate environment
+module load miniforge3/25.3.0-3
+eval "$(conda shell.bash hook)"
 conda activate demdia_env
 
 # Navigate to project directory
@@ -20,6 +22,9 @@ cd /home/nicpag/data/demdia_val
 
 # Create logs directory
 mkdir -p logs
+
+# Set PYTHONHASHSEED for reproducibility
+export PYTHONHASHSEED=42
 
 # Get list of non-finetuned configs
 mapfile -t CONFIGS < <(ls configs/*.yaml | grep -v finetuned | sort)

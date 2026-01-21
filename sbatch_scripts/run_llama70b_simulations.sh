@@ -23,6 +23,9 @@ cd /home/nicpag/data/demdia_val
 # Create logs directory
 mkdir -p logs
 
+# Set PYTHONHASHSEED for reproducibility
+export PYTHONHASHSEED=42
+
 # Get list of non-finetuned 70B configs (excluding finetuned ones)
 mapfile -t CONFIGS < <(ls configs/llama3.1-70B*.yaml | grep -v finetuned | sort)
 

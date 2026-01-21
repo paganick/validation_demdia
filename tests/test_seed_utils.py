@@ -49,10 +49,18 @@ def set_global_seed(seed: int = 42):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
+    # Force completely deterministic algorithms (PyTorch 1.8+)
+    # This prevents non-deterministic CUDA operations
+    torch.use_deterministic_algorithms(True, warn_only=False)
+
+    # Allow certain operations that don't have deterministic implementations
+    # but set environment variable to force deterministic behavior where possible
+    os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':4096:8'
+
     # Python hash seed (for dict/set ordering)
     os.environ['PYTHONHASHSEED'] = str(seed)
 
-    print(f"✅ Global seed set to {seed} for reproducibility")
+    print(f"✅ Global seed set to {seed} for reproducibility (fully deterministic mode)")
 
 
 def get_test_seed():

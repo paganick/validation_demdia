@@ -10,7 +10,8 @@
 # This should run AFTER all simulations complete
 
 # Activate conda environment
-source ~/.bashrc
+# Use eval to properly initialize conda in non-interactive shells
+eval "$(conda shell.bash hook)"
 conda activate demdia_env
 
 # Navigate to project directory
