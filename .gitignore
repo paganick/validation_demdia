@@ -3,6 +3,8 @@ results/*
 postprocessing_consolidated/*
 test_results/*
 test_results_full/*
+backups/*
+logs/*
 
 # Input data (too large for git, users should download separately)
 data/*
@@ -39,3 +41,6 @@ test_apertus.py
 copy_basic_files.py
 extract_sample.py
 generate_stats.py
+
+# Virtual environments
+.venv/*
