@@ -1,5 +1,6 @@
 results/*
 configs/*
+logs/*
 data/personas_and_tweets.df.pkl
 bluesky_data.pkl
 twitter_data.pkl
