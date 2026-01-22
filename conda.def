@@ -1,0 +1,12 @@
+Bootstrap: docker
+From: continuumio/miniconda3
+
+%files
+    env.yml /env.yml
+
+%post
+    conda env create -f /env.yml
+    conda clean -afy
+
+%environment
+    export PATH=/opt/conda/envs/venv/bin:$PATH
