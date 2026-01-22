@@ -1,4 +1,5 @@
 results/*
+results_replica/*
 configs/*
 logs/*
 data/personas_and_tweets.df.pkl
