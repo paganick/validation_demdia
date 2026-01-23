@@ -33,7 +33,6 @@ def process_file(file_path, run_bert=True, run_empath=True):
     print(f"\nProcessing file: {file_path}")
     base, ext = os.path.splitext(file_path)
     labelled_file = base + "_labelled.csv"
-    shap_file = base + "_bert_shap_analysis.json"
     trainer_file = base + "_trainer_results.json"
     cm_file = base + "_confusion_matrix.csv"
     report_file = base + "_bert_report.json"
@@ -47,18 +46,16 @@ def process_file(file_path, run_bert=True, run_empath=True):
             print("BERT validation already done. Skipping.")
         else:
             print("Running BERT validation...")
-            df = pd.read_csv(file_path)
+            df = pd.read_csv(file_path, engine='python')
             df['text'] = df['text'].astype(str)
 
             df['length'] = df['text'].apply(lambda x: len(str(x).split()))
             print(df.groupby('labels')['length'].describe())
-            
-            trainer, report, cm, results, shap_data, shap_summary_stats = Validator.bert_validate(df, tokenizer)
-            
+
+            trainer, report, cm, results = Validator.bert_validate(df, tokenizer)
+
             with open(trainer_file, "w") as f:
                 json.dump(results, f, default=str, indent=2)
-
-            data_file = Validator.save_shap_plotting_data(shap_data, shap_summary_stats, shap_file)
 
             with open(report_file, "w") as f:
                 json.dump(report, f, indent=4)
@@ -97,7 +94,7 @@ def process_file(file_path, run_bert=True, run_empath=True):
             print("Empath validation already done. Skipping.")
         else:
             print("Running Empath validation...")
-            df = pd.read_csv(file_path)
+            df = pd.read_csv(file_path, engine='python')
             df['text'] = df['text'].astype(str)
             
             significant_features, distance = Validator.empath_validate(df)
@@ -108,12 +105,16 @@ def process_file(file_path, run_bert=True, run_empath=True):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Validate multiple text datasets using BERT and/or Empath.")
+    parser = argparse.ArgumentParser(description="Validate text datasets using BERT and/or Empath.")
     parser.add_argument(
         "--input_dir",
         type=str,
-        required=True,
-        help="Directory containing subfolders with '_validation_data.csv' files."
+        help="Directory containing subfolders with '_validation_data.csv' files (directory mode)."
+    )
+    parser.add_argument(
+        "--input_file",
+        type=str,
+        help="Path to a single *_validation_data.csv file (single-file mode)."
     )
     parser.add_argument(
         "--validation",
@@ -124,17 +125,36 @@ def main():
     )
     args = parser.parse_args()
 
+    # Validate arguments
+    if args.input_file and args.input_dir:
+        print("Error: Cannot specify both --input_dir and --input_file. Choose one mode.")
+        return 1
+
+    if not args.input_file and not args.input_dir:
+        print("Error: Must specify either --input_dir (directory mode) or --input_file (single-file mode).")
+        return 1
+
     run_bert = args.validation in ["bert", "all"]
     run_empath = args.validation in ["empath", "all"]
 
-    validation_files = find_validation_files(args.input_dir)
-    if not validation_files:
-        print("No validation files found.")
-        return
+    if args.input_file:
+        # Single-file mode
+        if not os.path.exists(args.input_file):
+            print(f"Error: Input file does not exist: {args.input_file}")
+            return 1
+        process_file(args.input_file, run_bert, run_empath)
+    else:
+        # Directory mode
+        validation_files = find_validation_files(args.input_dir)
+        if not validation_files:
+            print("No validation files found.")
+            return 1
 
-    for file_path in validation_files:
-        process_file(file_path, run_bert, run_empath)
+        for file_path in validation_files:
+            process_file(file_path, run_bert, run_empath)
+
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    exit(main())

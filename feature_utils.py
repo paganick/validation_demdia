@@ -695,16 +695,7 @@ def safe_read_csv(file_path, max_retries=3):
     file_size = os.path.getsize(file_path)
     print(f"DEBUG: File size: {file_size:,} bytes")
     
-    # Strategy 1: Try default pandas read_csv
-    try:
-        print("DEBUG: Trying default pandas read_csv...")
-        df = pd.read_csv(file_path)
-        print(f"DEBUG: Successfully loaded with default method. Shape: {df.shape}")
-        return df
-    except Exception as e:
-        print(f"DEBUG: Default method failed: {str(e)[:200]}")
-    
-    # Strategy 2: Try with error handling and different engine
+    # Strategy 1: Try with error handling and different engine
     try:
         print("DEBUG: Trying with python engine and error handling...")
         df = pd.read_csv(file_path, engine='python', on_bad_lines='warn')
@@ -712,7 +703,16 @@ def safe_read_csv(file_path, max_retries=3):
         return df
     except Exception as e:
         print(f"DEBUG: Python engine method failed: {str(e)[:200]}")
-    
+
+    # Strategy 2: Try default pandas read_csv
+    try:
+        print("DEBUG: Trying default pandas read_csv...")
+        df = pd.read_csv(file_path)
+        print(f"DEBUG: Successfully loaded with default method. Shape: {df.shape}")
+        return df
+    except Exception as e:
+        print(f"DEBUG: Default method failed: {str(e)[:200]}")
+
     print("ERROR: All CSV reading strategies failed. File may be severely corrupted.")
     return None
 
