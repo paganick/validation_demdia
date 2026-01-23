@@ -17,15 +17,23 @@ Each validation dataset contains:
 The datasets enable evaluation of different response selection strategies and
 provide ground truth for training BERT and other validation models.
 
-Usage:
+Usage (folder mode - process all files):
     python build_validation_data.py \\
         --real_file /path/to/human_messages.pkl \\
         --folder /path/to/ai_responses/ \\
         --sample_size 100
 
+Usage (single-file mode - for parallel processing):
+    python build_validation_data.py \\
+        --real_file /path/to/human_messages.pkl \\
+        --input_file /path/to/optimal_response.csv \\
+        --reply_type ml \\
+        --sample_size 100
+
 Input files:
     - real_file: Pickle file with 'message' column containing human text
     - folder: Directory tree containing *_optimal_response.csv files from LLM_judge.py
+    - input_file: Single *_optimal_response.csv file (for parallel processing)
 
 Output:
     - *_ml_validation_data.csv: Human vs ML-selected AI responses
@@ -34,63 +42,64 @@ Output:
 """
 
 import argparse
+import csv
 import pandas as pd
 import os
 
-def main():
-    """
-    Build validation datasets by combining human and AI text samples.
 
-    Loads real human messages, samples them, then combines with AI-generated
-    responses from multiple selection strategies. Creates balanced datasets
-    suitable for binary classification evaluation.
-    """
-    parser = argparse.ArgumentParser(
-        description="Build validation datasets from real human replies and AI-generated responses (ML and cosine variants)."
-    )
-    parser.add_argument(
-        "--real_file",
-        type=str,
-        help="Path to the pickle file containing real (human) tweet replies."
-    )
-    parser.add_argument(
-        "--folder",
-        type=str,
-        help="Path to the folder containing AI-generated responses."
-    )
-    parser.add_argument(
-        "--sample_size",
-        type=int,
-        default=100,
-        help="Number of samples to randomly take from each dataset."
-    )
-    args = parser.parse_args()
+# Map reply type to column name and output suffix
+REPLY_TYPE_MAPPING = {
+    "ml": ("ML_best_response", "_ml_validation_data.csv"),
+    "cosine": ("cosine_best_response", "_cosine_validation_data.csv"),
+    "random": ("response", "_random_validation_data.csv")
+}
 
-    # ===============================
-    # Process Real Human Replies
-    # ===============================
+
+def process_single_file(csv_path, reply_type, sample_size):
+    """Process a single optimal_response.csv file with a specific reply type."""
+    if not csv_path.endswith('optimal_response.csv'):
+        print(f"Error: Input file must end with 'optimal_response.csv': {csv_path}")
+        return 1
+
+    col, suffix = REPLY_TYPE_MAPPING[reply_type]
+
     try:
-        df_real = pd.read_pickle(args.real_file)
+        df_ai = pd.read_csv(csv_path)
     except Exception as e:
-        print(f"Error loading real data file at {args.real_file}: {e}")
-        return
+        print(f"Error loading AI data file at {csv_path}: {e}")
+        return 1
 
-    if "training" in df_real.columns:
-        df_real = df_real[df_real["training"] == 1]
+    if col not in df_ai.columns:
+        print(f"Error: Column '{col}' not found in {csv_path}.")
+        return 1
 
-    if "message" not in df_real.columns:
-        print("Error: The real data file does not contain a 'message' column.")
-        return
+    if "original_message" not in df_ai.columns:
+        print(f"Warning: Original Message Column not found in {csv_path}. Skipping.")
+        return 1
+    
+    df_ai_sampled = df_ai[[col]].copy()
+    df_real_sampled = df_ai[["original_message"]].copy()
+    df_ai_sampled = df_ai_sampled.rename(columns={col: "text"})
+    df_real_sampled = df_real_sampled.rename(columns={"original_message": "text"})
+    df_ai_sampled["labels"] = 0
+    df_real_sampled["labels"] = 1
 
-    df_real = df_real.copy()
-    df_real["text"] = df_real["message"].astype(str)
-    df_real["labels"] = 1
-    df_real_sampled = df_real.sample(n=args.sample_size, random_state=42)
+    df_validation = pd.concat(
+        [df_real_sampled[["text", "labels"]], df_ai_sampled[["text", "labels"]]],
+        ignore_index=True
+    ).sample(frac=1, random_state=42).reset_index(drop=True)
 
-    # ===============================
-    # Process AI-Generated Replies
-    # ===============================
-    for root, _, files in os.walk(args.folder):
+    output_filename = csv_path.replace('optimal_response.csv', suffix)
+    # Use QUOTE_NONNUMERIC to properly handle text with newlines, quotes, etc.
+    df_validation.to_csv(output_filename, index=False, quoting=csv.QUOTE_NONNUMERIC)
+    print(f"Validation data saved to {output_filename}.")
+
+    return 0
+
+
+def process_folder(folder, sample_size):
+    """Process all optimal_response.csv files in a folder (original behavior)."""
+    for root, _, files in os.walk(folder):
         for file in files:
             if file.endswith('optimal_response.csv'):
                 csv_path = os.path.join(root, file)
@@ -100,28 +109,96 @@ def main():
                     print(f"Error loading AI data file at {csv_path}: {e}")
                     continue
 
-                for col, suffix in [
-                    ("ML_best_response", "_ml_validation_data.csv"),
-                    ("cosine_best_response", "_cosine_validation_data.csv"),
-                    ("response", "_random_validation_data.csv")
-                ]:
+                for col, suffix in REPLY_TYPE_MAPPING.values():
                     if col not in df_ai.columns:
                         print(f"Warning: Column '{col}' not found in {csv_path}. Skipping.")
                         continue
-
+                    if "original_message" not in df_ai.columns:
+                        print(f"Warning: Original Message Column not found in {csv_path}. Skipping.")
+                        continue
+                    
                     df_ai_sampled = df_ai[[col]].copy()
+                    df_real_sampled = df_ai[["original_message"]].copy()
                     df_ai_sampled = df_ai_sampled.rename(columns={col: "text"})
+                    df_real_sampled = df_real_sampled.rename(columns={"original_message": "text"})
                     df_ai_sampled["labels"] = 0
-                    df_ai_sampled = df_ai_sampled.sample(n=min(args.sample_size, len(df_ai_sampled)), random_state=42)
-
+                    df_real_sampled["labels"] = 1
+                    
                     df_validation = pd.concat(
                         [df_real_sampled[["text", "labels"]], df_ai_sampled[["text", "labels"]]],
                         ignore_index=True
                     ).sample(frac=1, random_state=42).reset_index(drop=True)
 
                     output_filename = csv_path.replace('optimal_response.csv', suffix)
-                    df_validation.to_csv(output_filename, index=False)
+                    # Use QUOTE_NONNUMERIC to properly handle text with newlines, quotes, etc.
+                    df_validation.to_csv(output_filename, index=False, quoting=csv.QUOTE_NONNUMERIC)
                     print(f"Validation data saved to {output_filename}.")
 
+
+def main():
+    """
+    Build validation datasets by combining human and AI text samples.
+
+    Supports two modes:
+    1. Folder mode: Process all optimal_response.csv files in a directory
+    2. Single-file mode: Process one file with one reply type (for parallel jobs)
+    """
+    parser = argparse.ArgumentParser(
+        description="Build validation datasets from real human replies and AI-generated responses."
+    )
+    parser.add_argument(
+        "--real_file",
+        type=str,
+        required=True,
+        help="Path to the pickle file containing real (human) replies."
+    )
+    parser.add_argument(
+        "--folder",
+        type=str,
+        help="Path to the folder containing AI-generated responses (folder mode)."
+    )
+    parser.add_argument(
+        "--input_file",
+        type=str,
+        help="Path to a single optimal_response.csv file (single-file mode)."
+    )
+    parser.add_argument(
+        "--reply_type",
+        type=str,
+        choices=["ml", "cosine", "random"],
+        help="Type of response to use: ml, cosine, or random (required for single-file mode)."
+    )
+    parser.add_argument(
+        "--sample_size",
+        type=int,
+        default=100,
+        help="Number of samples to randomly take from each dataset."
+    )
+    args = parser.parse_args()
+
+    # Validate arguments
+    if args.input_file and args.folder:
+        print("Error: Cannot specify both --folder and --input_file. Choose one mode.")
+        return 1
+
+    if not args.input_file and not args.folder:
+        print("Error: Must specify either --folder (folder mode) or --input_file (single-file mode).")
+        return 1
+
+    if args.input_file and not args.reply_type:
+        print("Error: --reply_type is required when using --input_file (single-file mode).")
+        return 1
+
+
+    # Process based on mode
+    if args.input_file:
+        # Single-file mode
+        return process_single_file(args.input_file, args.reply_type, args.sample_size)
+    else:
+        # Folder mode
+        process_folder(args.folder, args.sample_size)
+        return 0
+
+
 if __name__ == "__main__":
-    main()
+    exit(main())
