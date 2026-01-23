@@ -311,7 +311,7 @@ def evaluate_all_datasets(folder_path, label_source):
                     # Check for shape mismatch AFTER cleaning labels
                     cache_df = None
                     if os.path.exists(feature_cache_path):
-                        cache_df = pd.read_csv(feature_cache_path)
+                        cache_df = pd.read_csv(feature_cache_path, engine='python')
                         print(f"DEBUG: Feature cache shape: {cache_df.shape}")
                         
                         if len(cache_df) != len(df):
@@ -430,30 +430,226 @@ def evaluate_all_datasets(folder_path, label_source):
         print(f"ERROR: Failed to save combined results: {e}")
         traceback.print_exc()
 
+def evaluate_single_file(file_path, label_source):
+    """Evaluate features for a single validation data file."""
+    print(f"Evaluating {file_path} with label_source: {label_source}")
+
+    if not os.path.exists(file_path):
+        print(f"ERROR: File does not exist: {file_path}")
+        return None
+
+    # The input should be the labelled file (output of BERT validation)
+    if not file_path.endswith('_labelled.csv'):
+        # Try to find the labelled file
+        if file_path.endswith('_validation_data.csv'):
+            labelled_path = file_path.replace('_validation_data.csv', '_validation_data_labelled.csv')
+        else:
+            labelled_path = file_path.replace('.csv', '_labelled.csv')
+
+        if os.path.exists(labelled_path):
+            print(f"Using labelled file: {labelled_path}")
+            file_path = labelled_path
+        else:
+            print(f"ERROR: Labelled file not found. Run validate_text.py first.")
+            print(f"  Looked for: {labelled_path}")
+            return None
+
+    filename = os.path.basename(file_path)
+
+    try:
+        df = safe_read_csv(file_path)
+        if df is None:
+            print(f"ERROR: Could not read {file_path}")
+            return None
+
+        print(f"DEBUG: CSV loaded successfully. Shape: {df.shape}")
+
+        if 'text' not in df.columns:
+            print(f"ERROR: 'text' column not found in {file_path}")
+            return None
+
+        if label_source not in df.columns:
+            print(f"ERROR: Label source '{label_source}' column not found in {file_path}")
+            print(f"DEBUG: Available columns: {list(df.columns)}")
+            return None
+
+        # Clean the data
+        df['text'] = df['text'].fillna('').astype(str)
+
+        labels_null_count = df[label_source].isna().sum()
+        if labels_null_count > 0:
+            print(f"WARNING: Found {labels_null_count} rows with missing labels, removing them")
+            df = df.dropna(subset=[label_source])
+
+        # Find or compute feature cache
+        feature_cache_path = file_path.replace("_labelled.csv", "_features.csv")
+        print(f"DEBUG: Looking for feature cache at: {feature_cache_path}")
+
+        if not os.path.exists(feature_cache_path):
+            print(f"Feature cache not found. Computing features...")
+            # Need to compute features from the original validation data file
+            original_file = file_path.replace("_labelled.csv", ".csv")
+            if os.path.exists(original_file):
+                original_df = safe_read_csv(original_file)
+                if original_df is not None:
+                    original_df['text'] = original_df['text'].fillna('').astype(str)
+                    extract_features(original_df, cache_path=feature_cache_path)
+            else:
+                print(f"ERROR: Original validation file not found: {original_file}")
+                return None
+
+        # Check cache exists now
+        if not os.path.exists(feature_cache_path):
+            print(f"ERROR: Feature cache file not found: {feature_cache_path}")
+            return None
+
+        # Check for shape mismatch
+        cache_df = pd.read_csv(feature_cache_path, engine='python')
+        if len(cache_df) != len(df):
+            print(f"WARNING: Shape mismatch - regenerating features")
+            original_file = file_path.replace("_labelled.csv", ".csv")
+            if os.path.exists(original_file):
+                original_df = safe_read_csv(original_file)
+                if original_df is not None:
+                    original_df['text'] = original_df['text'].fillna('').astype(str)
+                    os.remove(feature_cache_path)
+                    extract_features(original_df, cache_path=feature_cache_path)
+
+        # Setup output paths
+        suffix = "_from_bert" if label_source == "bert_prediction" else "_from_labels"
+        base_output_path = file_path.replace(".csv", f"{suffix}")
+        stats_output_path = base_output_path + "_feature_importance_stats.csv"
+        correlation_output_path = base_output_path + "_feature_correlation_stats.csv"
+
+        # Determine source type
+        if "random" in filename:
+            source_type = 'random'
+        else:
+            source_type = "cosine" if "cosine" in filename else "ml"
+
+        # Parse filename for metadata
+        try:
+            model, ft, context, style, oppu = parse_filename(filename)
+        except Exception as parse_error:
+            print(f"WARNING: Could not parse filename {filename}: {parse_error}")
+            model, ft, context, style, oppu = "unknown", "unknown", "unknown", "unknown", "unknown"
+
+        # Evaluate features
+        print("DEBUG: Starting feature evaluation...")
+        auc, feature_importance, correlation_df = evaluate_features_single_dataset(
+            df, feature_cache_path, label_source=label_source
+        )
+        print(f"DEBUG: Evaluation complete. AUC: {auc}")
+
+        # Save feature importance stats
+        feature_dict = feature_importance.to_dict()
+        feature_dict.update({
+            'model': model,
+            'ft': ft,
+            'context': context,
+            'style': style,
+            'oppu': oppu,
+            'label_source': label_source,
+            'source_type': source_type,
+            'auc': auc
+        })
+        pd.DataFrame([feature_dict]).to_csv(stats_output_path, index=False)
+        print(f'Saved stats to {stats_output_path}')
+
+        # Save correlation stats
+        correlation_df['source_type'] = source_type
+        correlation_df.to_csv(correlation_output_path, index=False)
+        print(f'Saved correlation stats to {correlation_output_path}')
+
+        return auc
+
+    except Exception as e:
+        print(f"ERROR: Failed to evaluate {file_path}")
+        print(f"ERROR: {str(e)}")
+        traceback.print_exc()
+        return None
+
+
+def compute_features_for_single_file(file_path):
+    """Compute features for a single validation data file."""
+    print(f"Computing features for {file_path}")
+
+    if not os.path.exists(file_path):
+        print(f"ERROR: File does not exist: {file_path}")
+        return None
+
+    if not file_path.endswith('validation_data.csv'):
+        print(f"ERROR: File must end with 'validation_data.csv': {file_path}")
+        return None
+
+    try:
+        df = safe_read_csv(file_path)
+        if df is None:
+            print(f"ERROR: Could not read {file_path}")
+            return None
+
+        print(f"CSV loaded successfully. Shape: {df.shape}")
+
+        if 'text' not in df.columns:
+            print(f"ERROR: 'text' column not found in {file_path}")
+            return None
+
+        df['text'] = df['text'].fillna('').astype(str)
+
+        feature_cache_path = file_path.replace(".csv", "_features.csv")
+        features_df = extract_features(df, cache_path=feature_cache_path)
+        print(f'Saved features to {feature_cache_path}')
+        print(f"Features shape: {features_df.shape}")
+
+        return features_df
+
+    except Exception as e:
+        print(f"ERROR: Failed to process {file_path}")
+        print(f"ERROR: {str(e)}")
+        traceback.print_exc()
+        return None
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Pipeline to compute features and evaluate feature importance.")
     subparsers = parser.add_subparsers(dest="command")
 
     compute_parser = subparsers.add_parser("compute_features")
-    compute_parser.add_argument("folder_path", type=str, help="Path to the folder with CSV files.")
+    compute_parser.add_argument("folder_path", type=str, nargs='?', help="Path to the folder with CSV files (folder mode).")
+    compute_parser.add_argument("--file", type=str, help="Path to a single *_validation_data.csv file (single-file mode).")
 
     eval_parser = subparsers.add_parser("evaluate")
-    eval_parser.add_argument("folder_path", type=str, help="Path to the folder with CSV files.")
+    eval_parser.add_argument("folder_path", type=str, nargs='?', help="Path to the folder with CSV files (folder mode).")
     eval_parser.add_argument("label_source", type=str, choices=["labels", "bert_prediction"], help="Which label source to use.")
+    eval_parser.add_argument("--file", type=str, help="Path to a single *_validation_data.csv file (single-file mode).")
 
     args = parser.parse_args()
-    
+
     print(f"DEBUG: Parsed arguments - command: {args.command}")
 
     if args.command == "compute_features":
-        print(f"DEBUG: Running compute_features with folder_path: {args.folder_path}")
-        compute_features_for_all(args.folder_path)
+        if args.file:
+            print(f"DEBUG: Running compute_features (single-file mode) with file: {args.file}")
+            compute_features_for_single_file(args.file)
+        elif args.folder_path:
+            print(f"DEBUG: Running compute_features with folder_path: {args.folder_path}")
+            compute_features_for_all(args.folder_path)
+        else:
+            print("ERROR: Must specify either folder_path or --file")
+            compute_parser.print_help()
     elif args.command == "evaluate":
-        print(f"DEBUG: Running evaluate with folder_path: {args.folder_path}, label_source: {args.label_source}")
-        evaluate_all_datasets(args.folder_path, args.label_source)
-        evaluate_all_datasets_median_run(args.folder_path, args.label_source)
+        if args.file:
+            print(f"DEBUG: Running evaluate (single-file mode) with file: {args.file}, label_source: {args.label_source}")
+            evaluate_single_file(args.file, args.label_source)
+        elif args.folder_path:
+            print(f"DEBUG: Running evaluate with folder_path: {args.folder_path}, label_source: {args.label_source}")
+            evaluate_all_datasets(args.folder_path, args.label_source)
+            evaluate_all_datasets_median_run(args.folder_path, args.label_source)
+        else:
+            print("ERROR: Must specify either folder_path or --file")
+            eval_parser.print_help()
     else:
         print("ERROR: No command specified or invalid command")
         parser.print_help()
-    
+
     print("DEBUG: Script completed")
