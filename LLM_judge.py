@@ -41,10 +41,29 @@ import numpy as np
 import pandas as pd
 import csv
 import re
+import random
+import torch
 from tqdm import tqdm
 from sklearn.ensemble import RandomForestClassifier
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
+
+
+def set_seed(seed=42):
+    """Set all random seeds for reproducibility."""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+    os.environ['PYTHONHASHSEED'] = str(seed)
+
+
+# Set seed before loading embedding model
+set_seed(42)
 
 # Load the embedding model once
 embedding_model = SentenceTransformer("/scratch/nicpag/all-MiniLM-L6-v2-local")
@@ -560,7 +579,13 @@ def process_json_file(json_path, force_reprocess=False, include_advanced=True):
                 continue
 
             responses = [r["response"] if isinstance(r, dict) else r for r in candidates_raw]
-            unique_responses = list(set(responses))
+            # Use deterministic deduplication preserving order (first occurrence)
+            seen = set()
+            unique_responses = []
+            for r in responses:
+                if r not in seen:
+                    seen.add(r)
+                    unique_responses.append(r)
             df_unique = pd.DataFrame({"response": unique_responses})
             
             # Use same feature set as training data
@@ -667,21 +692,32 @@ def main(input_folder, force_reprocess=False, include_advanced=True):
         force_reprocess: If True, reprocess all files even if already done
         include_advanced: If True, use advanced linguistic features for classification
     """
-    json_files = [
+    # Ensure reproducibility
+    set_seed(42)
+
+    json_files = sorted([
         os.path.join(root, file)
         for root, _, files in os.walk(input_folder)
         for file in files if file.endswith("random_response.json")
-    ]
+    ])
 
     for json_path in tqdm(json_files, desc="Processing JSON files"):
         process_json_file(json_path, force_reprocess=force_reprocess, include_advanced=include_advanced)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Select most human-like AI response per file")
-    parser.add_argument("input_folder", help="Path to folder containing JSON files")
+    parser.add_argument("input_folder", nargs="?", default=None, help="Path to folder containing JSON files")
+    parser.add_argument("--input-file", help="Path to a single *_random_response.json file to process")
     parser.add_argument("--include-advanced", action="store_true",
                        help="Include advanced linguistic features (slower but potentially more accurate)")
-    parser.add_argument("--force-reprocess", action="store_true", 
+    parser.add_argument("--force-reprocess", action="store_true",
                        help="Force reprocessing of all entries, even if already processed")
     args = parser.parse_args()
-    main(args.input_folder, force_reprocess=args.force_reprocess, include_advanced=args.include_advanced)
+
+    if args.input_file:
+        set_seed(42)
+        process_json_file(args.input_file, force_reprocess=args.force_reprocess, include_advanced=args.include_advanced)
+    elif args.input_folder:
+        main(args.input_folder, force_reprocess=args.force_reprocess, include_advanced=args.include_advanced)
+    else:
+        parser.error("Either input_folder or --input-file must be provided")

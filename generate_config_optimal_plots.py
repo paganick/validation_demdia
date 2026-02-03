@@ -32,8 +32,8 @@ from plotting_utils import (
 )
 
 # === Configuration ===
-DATASETS = ['results/results_bluesky', 'results/results_twitter', 'results/results_reddit']
-OUTPUT_DIR = "configuration_optimization_figures"
+DATASETS = ['results_validation/results_bluesky', 'results_validation/results_twitter', 'results_validation/results_reddit']
+OUTPUT_DIR = "configuration_optimization_figures_validation"
 PRESENTATION_MODE = False
 SAVE_FORMAT = 'png'
 
@@ -64,7 +64,7 @@ def load_configuration_data(folder_paths):
         
         for filepath in json_files:
             try:
-                model, ft, context, style, oppu, persona = parse_filename(str(filepath))
+                model, ft, context, style, persona = parse_filename(str(filepath))
                 
                 if model is None:
                     continue
@@ -104,12 +104,11 @@ def load_configuration_data(folder_paths):
                         "style": style,
                         "context": context,
                         "ft": ft,
-                        "oppu": oppu,
-                        "persona": persona,
+                                                "persona": persona,
                         "accuracy_mean": np.mean(accuracies),
                         "accuracy_std": np.std(accuracies, ddof=1),
-                        "label": make_label(model, ft, context, style, oppu, persona),
-                        "short_label": make_label(model, ft, context, style, oppu, persona, False),
+                        "label": make_label(model, ft, context, style, persona),
+                        "short_label": make_label(model, ft, context, style, persona, False),
                         "response_type": response_type,
                         "n_measurements": len(accuracies)
                     })
@@ -147,7 +146,7 @@ def load_cosine_similarities_by_response_type(folder_paths):
                     file_path = Path(dirpath) / fname
                     
                     try:
-                        model, ft, context, style, oppu, persona = parse_filename(fname)
+                        model, ft, context, style, persona = parse_filename(fname)
                         
                         if model is None:
                             continue
@@ -165,24 +164,29 @@ def load_cosine_similarities_by_response_type(folder_paths):
                         
                         with open(file_path, "r", encoding="utf-8") as f:
                             data = json.load(f)
-                            
+
                             for entry in data:
                                 all_valid_responses = entry.get("all_valid_responses", [])
-                                
+
                                 if not all_valid_responses:
                                     continue
-                                
+
                                 random_response = entry.get("response", "").strip().lower()
                                 ml_response = entry.get("ML_best_response", "").strip().lower()
                                 cosine_response = entry.get("cosine_best_response", "").strip().lower()
-                                
+
+                                # Track if we've found each response type to avoid duplicates
+                                found_random = False
+                                found_ml = False
+                                found_cosine = False
+
                                 for valid_resp in all_valid_responses:
                                     resp_text = valid_resp.get("response", "").strip().lower()
                                     similarity = valid_resp.get("cosine_similarity", None)
-                                    
+
                                     if similarity is None:
                                         continue
-                                    
+
                                     base_data = {
                                         "dataset": dataset_name,
                                         "model": model,
@@ -190,19 +194,26 @@ def load_cosine_similarities_by_response_type(folder_paths):
                                         "style": style,
                                         "context": context,
                                         "ft": ft,
-                                        "oppu": oppu,
                                         "config_label": config_label,
                                         "similarity": similarity
                                     }
-                                    
-                                    if resp_text == random_response:
+
+                                    # Only take the FIRST match for each response type
+                                    if not found_random and resp_text == random_response:
                                         rows_random.append(base_data.copy())
-                                    
-                                    if resp_text == ml_response:
+                                        found_random = True
+
+                                    if not found_ml and resp_text == ml_response:
                                         rows_ml.append(base_data.copy())
-                                    
-                                    if resp_text == cosine_response:
+                                        found_ml = True
+
+                                    if not found_cosine and resp_text == cosine_response:
                                         rows_cosine.append(base_data.copy())
+                                        found_cosine = True
+
+                                    # Early exit if all found
+                                    if found_random and found_ml and found_cosine:
+                                        break
                         
                         files_found += 1
                                     
@@ -254,8 +265,8 @@ def save_best_configurations(df, response_type="random", metric="accuracy"):
         sota_group = group[(group['persona'] == 1) & 
                            (group['style'] == 0) & 
                            (group['context'] == 0) & 
-                           (group['ft'] == 0) &
-                           (group['oppu'] == 0)]
+                           (group['ft'] == 0)
+                           ]
         
         if not sota_group.empty:
             sota_row = sota_group.iloc[0]
@@ -278,8 +289,7 @@ def save_best_configurations(df, response_type="random", metric="accuracy"):
             'has_style': best_row['style'],
             'has_context': best_row['context'],
             'has_finetuning': best_row['ft'],
-            'has_oppu': best_row['oppu'],
-            'sota_accuracy': sota_acc,
+                        'sota_accuracy': sota_acc,
             'sota_std': sota_std,
             'improvement_over_sota': improvement_over_sota,
             'n_measurements': best_row['n_measurements']
@@ -326,8 +336,8 @@ def plot_sota_vs_best_performance(df, response_type="random", metric="accuracy")
         sota_group = group[(group['persona'] == 1) & 
                            (group['style'] == 0) & 
                            (group['context'] == 0) & 
-                           (group['ft'] == 0) &
-                           (group['oppu'] == 0)]
+                           (group['ft'] == 0)
+                           ]
         
         if not sota_group.empty:
             sota_row = sota_group.iloc[0]
@@ -464,7 +474,7 @@ def plot_intervention_steps_aggregated(df, response_type="random", metric="accur
         print(f"No data available for {response_type}")
         return
     
-    agg_data = subset.groupby(['model', 'style', 'context', 'ft', 'oppu', 'persona', 
+    agg_data = subset.groupby(['model', 'style', 'context', 'ft', 'persona',
                                'response_type', 'short_label']).agg({
         'accuracy_mean': 'mean',
         'accuracy_std': 'mean'
@@ -562,7 +572,7 @@ def analyze_response_overlap(folder_paths):
         
         for filepath in csv_files:
             try:
-                model, ft, context, style, oppu, persona = parse_filename(str(filepath))
+                model, ft, context, style, persona = parse_filename(str(filepath))
                 
                 if model is None:
                     continue
@@ -693,8 +703,7 @@ def plot_configuration_consistency_with_baseline(df, metric="accuracy"):
             'style': best_row['style'],
             'context': best_row['context'],
             'ft': best_row['ft'],
-            'oppu': best_row['oppu'],
-            'short_label': best_row['short_label']
+                        'short_label': best_row['short_label']
         }
     
     response_types = ['random', 'cosine_optimal', 'ML_optimal']
@@ -716,8 +725,7 @@ def plot_configuration_consistency_with_baseline(df, metric="accuracy"):
                 (rt_subset['persona'] == 1) &
                 (rt_subset['style'] == 0) &
                 (rt_subset['context'] == 0) &
-                (rt_subset['ft'] == 0) &
-                (rt_subset['oppu'] == 0)
+                (rt_subset['ft'] == 0)
             ]
             
             if not baseline.empty:
@@ -734,8 +742,7 @@ def plot_configuration_consistency_with_baseline(df, metric="accuracy"):
                 (rt_subset['persona'] == best_config['persona']) &
                 (rt_subset['style'] == best_config['style']) &
                 (rt_subset['context'] == best_config['context']) &
-                (rt_subset['ft'] == best_config['ft']) &
-                (rt_subset['oppu'] == best_config['oppu'])
+                (rt_subset['ft'] == best_config['ft'])
             ]
             
             if not matching.empty:
@@ -887,8 +894,8 @@ def plot_cosine_similarity_boxplot(similarity_data, df_best_configs):
     df_sota = df_random[(df_random['persona'] == 1) & 
                         (df_random['style'] == 0) & 
                         (df_random['context'] == 0) & 
-                        (df_random['ft'] == 0) &
-                        (df_random['oppu'] == 0)].copy()
+                        (df_random['ft'] == 0)
+                        ].copy()
     df_sota['type'] = 'SOTA (BL+PE)'
     
     # Best config data
@@ -900,8 +907,7 @@ def plot_cosine_similarity_boxplot(similarity_data, df_best_configs):
             (df_random['persona'] == int(config_row['has_persona'])) &
             (df_random['style'] == int(config_row['has_style'])) &
             (df_random['context'] == int(config_row['has_context'])) &
-            (df_random['ft'] == int(config_row['has_finetuning'])) &
-            (df_random['oppu'] == int(config_row['has_oppu']))
+            (df_random['ft'] == int(config_row['has_finetuning']))
         ].copy()
         
         if len(df_filtered) > 0:
@@ -1020,8 +1026,8 @@ def plot_cosine_similarity_boxplot_all_methods(similarity_data, df_best_configs)
     df_baseline = df_random[(df_random['persona'] == 1) & 
                             (df_random['style'] == 0) & 
                             (df_random['context'] == 0) & 
-                            (df_random['ft'] == 0) &
-                            (df_random['oppu'] == 0)].copy()
+                            (df_random['ft'] == 0)
+                            ].copy()
     df_baseline['type'] = 'Baseline (BL+PE)'
     
     # Best configs for each response type
@@ -1043,8 +1049,7 @@ def plot_cosine_similarity_boxplot_all_methods(similarity_data, df_best_configs)
                 (df_source['persona'] == int(config_row['has_persona'])) &
                 (df_source['style'] == int(config_row['has_style'])) &
                 (df_source['context'] == int(config_row['has_context'])) &
-                (df_source['ft'] == int(config_row['has_finetuning'])) &
-                (df_source['oppu'] == int(config_row['has_oppu']))
+                (df_source['ft'] == int(config_row['has_finetuning']))
             ].copy()
             
             if len(df_filtered) > 0:
@@ -1186,8 +1191,7 @@ def load_empath_feature_data(folder_paths, df_best_configs, response_type='rando
                 'ft': int(config_row['has_finetuning']),
                 'context': int(config_row['has_context']),
                 'style': int(config_row['has_style']),
-                'oppu': int(config_row['has_oppu']),
-                'persona': int(config_row['has_persona'])
+                                'persona': int(config_row['has_persona'])
             }
             
             # Search for matching empath files
@@ -1203,14 +1207,14 @@ def load_empath_feature_data(folder_paths, df_best_configs, response_type='rando
                     filepath = os.path.join(root, file)
                     
                     try:
-                        file_model, file_ft, file_context, file_style, file_oppu, file_persona = parse_filename(file)
+                        file_model, file_ft, file_context, file_style, file_persona = parse_filename(file)
                         
                         # Check if this file matches the optimal configuration
                         if (file_model == model and
                             file_ft == expected_config['ft'] and
                             file_context == expected_config['context'] and
                             file_style == expected_config['style'] and
-                            file_oppu == expected_config['oppu'] and
+
                             file_persona == expected_config['persona']):
                             
                             # Load and process the file
@@ -1272,8 +1276,7 @@ def plot_empath_feature_frequency(folder_paths, df_best_configs, response_type='
                 'ft': int(config_row['has_finetuning']),
                 'context': int(config_row['has_context']),
                 'style': int(config_row['has_style']),
-                'oppu': int(config_row['has_oppu']),
-                'persona': int(config_row['has_persona'])
+                                'persona': int(config_row['has_persona'])
             }
             
             # Search for matching empath files
@@ -1289,14 +1292,14 @@ def plot_empath_feature_frequency(folder_paths, df_best_configs, response_type='
                     filepath = os.path.join(root, file)
                     
                     try:
-                        file_model, file_ft, file_context, file_style, file_oppu, file_persona = parse_filename(file)
+                        file_model, file_ft, file_context, file_style, file_persona = parse_filename(file)
                         
                         # Check if this file matches the optimal configuration
                         if (file_model == model and
                             file_ft == expected_config['ft'] and
                             file_context == expected_config['context'] and
                             file_style == expected_config['style'] and
-                            file_oppu == expected_config['oppu'] and
+
                             file_persona == expected_config['persona']):
                             
                             # Load and process the file
@@ -1446,8 +1449,7 @@ def load_feature_importance_data(folder_paths, df_best_configs, response_type='r
                 'ft': int(config_row['has_finetuning']),
                 'context': int(config_row['has_context']),
                 'style': int(config_row['has_style']),
-                'oppu': int(config_row['has_oppu']),
-                'persona': int(config_row['has_persona'])
+                                'persona': int(config_row['has_persona'])
             }
             
             # Search for matching feature importance files
@@ -1463,14 +1465,14 @@ def load_feature_importance_data(folder_paths, df_best_configs, response_type='r
                     filepath = os.path.join(root, file)
                     
                     try:
-                        file_model, file_ft, file_context, file_style, file_oppu, file_persona = parse_filename(file)
+                        file_model, file_ft, file_context, file_style, file_persona = parse_filename(file)
                         
                         # Check if this file matches the optimal configuration
                         if (file_model == model and
                             file_ft == expected_config['ft'] and
                             file_context == expected_config['context'] and
                             file_style == expected_config['style'] and
-                            file_oppu == expected_config['oppu'] and
+
                             file_persona == expected_config['persona']):
                             
                             # Load and process the file
@@ -1482,10 +1484,9 @@ def load_feature_importance_data(folder_paths, df_best_configs, response_type='r
                             df['ft'] = file_ft
                             df['context'] = file_context
                             df['style'] = file_style
-                            df['oppu'] = file_oppu
                             df['persona'] = file_persona
-                            df['config_label'] = make_label(model, file_ft, file_context, 
-                                                            file_style, file_oppu, file_persona)
+                            df['config_label'] = make_label(model, file_ft, file_context,
+                                                            file_style, file_persona)
                             
                             all_data.append(df)
                             processed_files.append((dataset_name, model, config_row['best_config_short']))

@@ -28,8 +28,8 @@ from plotting_utils import (
 )
 
 # === Configuration ===
-DATASETS = ['results/results_bluesky', 'results/results_twitter', 'results/results_reddit']
-OUTPUT_DIR = "SOTA_figures"
+DATASETS = ['results_validation/results_bluesky', 'results_validation/results_twitter', 'results_validation/results_reddit']
+OUTPUT_DIR = "SOTA_figures_validation"
 PRESENTATION_MODE = False
 SAVE_FORMAT = 'png'
 
@@ -65,7 +65,7 @@ def generate_best_model_performance(response_type="random", metric="accuracy"):
         for filepath in json_files:
             try:
                 # Parse filename
-                model, ft, context, style, oppu, persona = parse_filename(str(filepath))
+                model, ft, context, style, persona = parse_filename(str(filepath))
                 if model is None or "random_validation" not in str(filepath):
                     continue
                 
@@ -201,7 +201,7 @@ def generate_first_response_similarity():
         
         # Find optimal response files
         response_files = list(dataset_path.rglob("*_optimal_response.json"))
-        filtered_files = [f for f in response_files if '__noft__ctx0__style0__no_OPPU__optimal_response.json' in str(f)]
+        filtered_files = [f for f in response_files if '__noft__ctx0__style0__optimal_response.json' in str(f)]
         
         print(f"  Found {len(filtered_files)} matching files")
         
@@ -322,11 +322,7 @@ def generate_ml_explainability_heatmap():
                 filename = os.path.basename(file_path)
                 config_part = filename.split('___random')[0] if '___random' in filename else filename.split('__random')[0]
                 
-                # Add dummy persona field if missing
-                if len(config_part.split('__')) == 5:
-                    config_part += "__persona"
-                
-                model, _, _, _, _, _ = parse_filename(config_part)
+                model, _, _, _, _ = parse_filename(config_part)
                 
                 if model is None:
                     continue
@@ -500,7 +496,7 @@ def generate_aggregated_feature_frequency():
                     continue
                 
                 try:
-                    model, _, _, _, _, _ = parse_filename(file)
+                    model, _, _, _, _ = parse_filename(file)
                     df = pd.read_csv(filepath)
                     sig_features = df[df["adjusted_p_value"] < 0.05]["feature"].tolist()
                     
