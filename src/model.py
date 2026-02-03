@@ -1,4 +1,5 @@
 import os
+import time
 import pandas as pd
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -7,13 +8,85 @@ from transformers import TrainingArguments, Trainer
 from datasets import Dataset
 from transformers import BitsAndBytesConfig
 import numpy as np
+from contextlib import contextmanager
+
+
+@contextmanager
+def finetuning_lock(lock_path, timeout=7200):
+    """
+    File-based lock for fine-tuning operations to prevent race conditions.
+    Uses timeout of 2 hours (7200s) to allow long fine-tuning to complete.
+    """
+    lock_file = lock_path + ".finetuning.lock"
+    lock_dir = os.path.dirname(lock_file)
+    if lock_dir and not os.path.exists(lock_dir):
+        os.makedirs(lock_dir, exist_ok=True)
+
+    try:
+        # Try to acquire exclusive lock
+        lock_fd = os.open(lock_file, os.O_CREAT | os.O_EXCL | os.O_RDWR)
+        try:
+            os.write(lock_fd, f"{os.getpid()}:{time.time()}".encode())
+            yield True
+        finally:
+            os.close(lock_fd)
+            try:
+                os.unlink(lock_file)
+            except FileNotFoundError:
+                pass
+
+    except FileExistsError:
+        # Lock exists - wait with timeout
+        print(f"🔒 Fine-tuning lock exists. Waiting up to {timeout}s for it to be released...")
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            # Check if lock is stale (older than timeout)
+            try:
+                with open(lock_file, 'r') as f:
+                    content = f.read()
+                    if ':' in content:
+                        _, lock_time = content.split(':')
+                        if time.time() - float(lock_time) > timeout:
+                            print(f"⚠️ Stale lock detected, removing...")
+                            os.unlink(lock_file)
+            except (FileNotFoundError, ValueError, PermissionError):
+                pass
+
+            # Try to acquire lock
+            try:
+                lock_fd = os.open(lock_file, os.O_CREAT | os.O_EXCL | os.O_RDWR)
+                try:
+                    os.write(lock_fd, f"{os.getpid()}:{time.time()}".encode())
+                    yield True
+                    return
+                finally:
+                    os.close(lock_fd)
+                    try:
+                        os.unlink(lock_file)
+                    except FileNotFoundError:
+                        pass
+            except FileExistsError:
+                time.sleep(30)  # Wait 30s before retrying
+
+        print(f"⏰ Could not acquire fine-tuning lock within {timeout}s")
+        yield False
 
 class Model:
-    def __init__(self, config, finetuning_filepath):
+    def __init__(self, config, dataset, finetuning_filepath, users=None):
         self.model_name = config["model"]
-        self.fine_tuned_dir = f"{config['finetuning_dir']}{config['model']}_finetuned_{os.path.splitext(finetuning_filepath)[0]}"
+        self.dataset = dataset
         self.finetuning_filepath = finetuning_filepath
         self.finetuned = config["finetuned"]
+        self.users = users  # List of usernames to filter training data (None = use all)
+
+        # Build fine-tuned directory path
+        base_dir = f"{config['finetuning_dir']}{config['model']}_finetuned_{os.path.splitext(finetuning_filepath)[0]}"
+        if users is not None:
+            # Add suffix to indicate user-filtered fine-tuning
+            self.fine_tuned_dir = f"{base_dir}_userfiltered"
+        else:
+            self.fine_tuned_dir = base_dir
+
         self.model = None
         self.tokenizer = None
         self.load()
@@ -21,20 +94,58 @@ class Model:
     def load(self):
         if not self.finetuned:
             print(f"Loading base model: {self.model_name}")
-            
-            # REMOVE 8-bit quantization to avoid the hang
-            self.model = AutoModelForCausalLM.from_pretrained(
-                self.model_name,
-                device_map="auto",
-                torch_dtype=torch.float16,
-                low_cpu_mem_usage=True
-            )
-            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+
+            # Check if this is an Apertus model for minimal adjustments
+            is_apertus = "apertus" in self.model_name.lower() or "swiss-ai" in self.model_name.lower()
+            # Check if this is a Gemma model (needs trust_remote_code and bfloat16)
+            is_gemma = "gemma" in self.model_name.lower()
+
+            # Apertus needs bfloat16 and trust_remote_code
+            if is_apertus:
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.model_name,
+                    device_map="auto",
+                    torch_dtype=torch.bfloat16,
+                    low_cpu_mem_usage=True,
+                    trust_remote_code=True
+                )
+                self.tokenizer = AutoTokenizer.from_pretrained(
+                    self.model_name,
+                    use_fast=True,
+                    trust_remote_code=True
+                )
+            # Gemma models need trust_remote_code and bfloat16 to avoid numerical issues
+            elif is_gemma:
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.model_name,
+                    device_map="auto",
+                    torch_dtype=torch.bfloat16,
+                    low_cpu_mem_usage=True,
+                    trust_remote_code=True
+                )
+                self.tokenizer = AutoTokenizer.from_pretrained(
+                    self.model_name,
+                    use_fast=True,
+                    trust_remote_code=True
+                )
+            else:
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.model_name,
+                    device_map="auto",
+                    torch_dtype=torch.float16,
+                    low_cpu_mem_usage=True
+                )
+                self.tokenizer = AutoTokenizer.from_pretrained(
+                    self.model_name,
+                    use_fast=False,
+                    legacy=True
+                )
+
             print("✅ Base model loaded")
             
         elif os.path.exists(self.fine_tuned_dir):
             print(f"Loading fine-tuned model from {self.fine_tuned_dir}")
-            
+
             self.model = AutoModelForCausalLM.from_pretrained(
                 self.fine_tuned_dir,
                 device_map="auto",
@@ -44,10 +155,29 @@ class Model:
             self.tokenizer = AutoTokenizer.from_pretrained(self.fine_tuned_dir)
             self._configure_generation()
             print("✅ Fine-tuned model loaded")
-            
+
         else:
-            print(f"Fine-tuning and saving model to {self.fine_tuned_dir}")
-            self.finetune_model()
+            # Use file lock to prevent race conditions when multiple jobs
+            # try to fine-tune the same model simultaneously
+            with finetuning_lock(self.fine_tuned_dir) as lock_acquired:
+                if not lock_acquired:
+                    raise RuntimeError(f"Could not acquire fine-tuning lock for {self.fine_tuned_dir}")
+
+                # Re-check if model exists (another job might have finished while waiting)
+                if os.path.exists(self.fine_tuned_dir):
+                    print(f"🔄 Fine-tuned model appeared while waiting. Loading from {self.fine_tuned_dir}")
+                    self.model = AutoModelForCausalLM.from_pretrained(
+                        self.fine_tuned_dir,
+                        device_map="auto",
+                        torch_dtype=torch.float16,
+                        low_cpu_mem_usage=True
+                    )
+                    self.tokenizer = AutoTokenizer.from_pretrained(self.fine_tuned_dir)
+                    self._configure_generation()
+                    print("✅ Fine-tuned model loaded")
+                else:
+                    print(f"Fine-tuning and saving model to {self.fine_tuned_dir}")
+                    self.finetune_model()
             
         self.tokenizer.pad_token = self.tokenizer.eos_token
 
@@ -63,7 +193,7 @@ class Model:
             self.model.generation_config.eos_token_id = self.tokenizer.eos_token_id
 
     def finetune_model(self):
-        checkpoint_dir = self.fine_tuned_dir.replace("_finetuned", "_checkpoints")       
+        checkpoint_dir = self.fine_tuned_dir.replace("_finetuned", "_checkpoints")
 
         bnb_config = BitsAndBytesConfig(
             load_in_8bit=True,
@@ -72,27 +202,34 @@ class Model:
 
         # Check if this is an Apertus model for minimal adjustments
         is_apertus = "apertus" in self.model_name.lower() or "swiss-ai" in self.model_name.lower()
+        # Check if this is a Gemma model (needs trust_remote_code and bfloat16)
+        is_gemma = "gemma" in self.model_name.lower()
 
-        # MINIMAL CHANGE 1: Apertus needs trust_remote_code, others use original settings
-        if is_apertus:
+        # Model-specific tokenizer loading
+        if is_apertus or is_gemma:
             tokenizer = AutoTokenizer.from_pretrained(
-                self.model_name, 
+                self.model_name,
                 use_fast=True,
                 trust_remote_code=True
             )
         else:
             tokenizer = AutoTokenizer.from_pretrained(
-                self.model_name, 
-                use_fast=False, 
+                self.model_name,
+                use_fast=False,
                 legacy=True
             )
-        
+
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
 
         # Load and prepare data
         df = pd.read_pickle(self.finetuning_filepath)
         df_train = df[df['training'] == 1].reset_index(drop=True)
+
+        # Filter to only include users we're testing (if user list provided)
+        if self.users is not None:
+            df_train = df_train[df_train['username'].isin(self.users)].reset_index(drop=True)
+            print(f"📋 Filtered training data to {len(self.users)} target users")
         
         # Shuffle the data to prevent overfitting to order
         df_train = df_train.sample(frac=1, random_state=42).reset_index(drop=True)
@@ -107,8 +244,18 @@ class Model:
 
         def format_conversation(examples):
             # Improved prompt format with clear separation
-            prompt = f"You are @{examples['username']}. Respond to the following social media messge:"
-            context = f"Social media message: {examples['reply_to']}"
+            if self.dataset == 'twitter':
+                prompt = f"You are @{examples['username']}. Respond to the following tweet:"
+                context = f"Tweet: {examples['reply_to']}"
+            elif self.dataset == 'reddit':
+                prompt = f"You are u/{examples['username']}. Respond to the following Reddit post:"
+                context = f"Reddit post: {examples['reply_to']}"
+            elif self.dataset == 'bluesky':
+                prompt = f"You are @{examples['username']}. Respond to the following Bluesky post:"
+                context = f"Bluesky post: {examples['reply_to']}"
+            else:
+               raise ValueError("You must provide either a valid dataset ('twitter' or 'reddit' or 'bluesky') using --dataset")
+
             response = examples['message']
             
             # Use clear separators and end token
@@ -166,18 +313,25 @@ class Model:
         tokenized_train_dataset = train_dataset.map(preprocess_function, batched=False)
         tokenized_val_dataset = val_dataset.map(preprocess_function, batched=False)
         
-        # MINIMAL CHANGE 2: Apertus needs different model loading to avoid dtype issues
+        # Model-specific loading to avoid dtype issues
         if is_apertus:
             model = AutoModelForCausalLM.from_pretrained(
-                self.model_name, 
-                torch_dtype=torch.float32,  # Use float32 for Apertus
+                self.model_name,
+                torch_dtype=torch.bfloat16,  # Use bfloat16 for Apertus
+                device_map="auto",
+                trust_remote_code=True
+            )
+        elif is_gemma:
+            model = AutoModelForCausalLM.from_pretrained(
+                self.model_name,
+                torch_dtype=torch.bfloat16,  # Gemma needs bfloat16
                 device_map="auto",
                 trust_remote_code=True
             )
         else:
             model = AutoModelForCausalLM.from_pretrained(
-                self.model_name, 
-                quantization_config=bnb_config,  
+                self.model_name,
+                quantization_config=bnb_config,
                 torch_dtype=torch.float16,
                 device_map="auto"
             )
@@ -194,14 +348,24 @@ class Model:
 
         model = get_peft_model(model, peft_config)
         
-        # MINIMAL CHANGE 3: Ensure consistent dtype for Apertus
+        # Ensure consistent dtype for specific models
         if is_apertus:
-            model = model.float()  # Convert everything to float32 for Apertus
+            model = model.bfloat16()  # Convert everything to bfloat16 for Apertus
 
         model.gradient_checkpointing_enable()
         model.enable_input_require_grads()
 
-        # MINIMAL CHANGE 4: Disable mixed precision for Apertus only
+        # Model-specific precision settings
+        if is_apertus:
+            use_fp16 = False
+            use_bf16 = True  # Apertus uses bfloat16 like Gemma
+        elif is_gemma:
+            use_fp16 = False
+            use_bf16 = True  # Gemma works better with bfloat16
+        else:
+            use_fp16 = True
+            use_bf16 = False
+
         training_args = TrainingArguments(
             output_dir=checkpoint_dir,
             per_device_train_batch_size=2,  # Smaller batch size
@@ -212,7 +376,8 @@ class Model:
             lr_scheduler_type="cosine",
             warmup_steps=50,
             weight_decay=0.01,  # Add weight decay for regularization
-            fp16=False if is_apertus else True,  # Disable fp16 only for Apertus
+            fp16=use_fp16,
+            bf16=use_bf16,
             optim="adamw_torch",
             save_steps=200,
             save_total_limit=3,

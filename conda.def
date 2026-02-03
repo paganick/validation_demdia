@@ -1,12 +1,53 @@
 Bootstrap: docker
 From: continuumio/miniconda3
 
-%files
-    env.yml /env.yml
-
 %post
-    conda env create -f /env.yml
+    # Create conda environment with Python 3.10
+    conda create -n venv python=3.10 -y
+
+    # Activate environment for installation
+    . /opt/conda/etc/profile.d/conda.sh
+    conda activate venv
+
+    # Install conda packages from conda-forge
+    conda install -c conda-forge -y \
+        transformers>=4.30.0 \
+        datasets>=2.0.0 \
+        accelerate>=0.20.0 \
+        sentence-transformers>=2.0.0 \
+        sentencepiece>=0.1.99 \
+        numpy>=1.24.0 \
+        pandas>=2.0.0 \
+        scipy>=1.10.0 \
+        scikit-learn>=1.2.0 \
+        pyarrow>=10.0.0 \
+        nltk>=3.8 \
+        matplotlib>=3.7.0 \
+        seaborn>=0.12.0 \
+        statsmodels>=0.14.0 \
+        tqdm>=4.65.0 \
+        pyyaml>=6.0 \
+        requests>=2.28.0 \
+        joblib>=1.2.0
+
+    # Install PyTorch with CUDA 12.8 support via pip
+    pip install torch>=2.10.0 triton>=3.0.0
+
+    # Install additional pip packages
+    pip install \
+        empath>=0.89 \
+        rank-bm25>=0.2.2 \
+        textblob>=0.15.3 \
+        langdetect>=1.0.9 \
+        peft>=0.4.0 \
+        bitsandbytes>=0.40.0 \
+        adjusttext>=0.7.3 \
+        emoji>=2.0.0 \
+        sympy>=1.0
+
+    # Cleanup
     conda clean -afy
+    pip cache purge
 
 %environment
     export PATH=/opt/conda/envs/venv/bin:$PATH

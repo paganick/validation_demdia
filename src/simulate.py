@@ -4,10 +4,51 @@ import os
 import json
 import pandas as pd
 import torch
+import random
+import numpy as np
 from contextlib import contextmanager
 
-from .model import Model 
-from .agent import Agent 
+from .model import Model
+from .agent import Agent
+
+
+def set_seed(seed: int):
+    """
+    Set all random seeds for full reproducibility.
+    Based on the comprehensive seed setting from utils.py Validator class.
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+    # CUDA determinism settings
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+    # Python hash seed
+    os.environ['PYTHONHASHSEED'] = str(seed)
+
+    # Enable full CUDA determinism
+    os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':4096:8'
+
+    # Note: torch.use_deterministic_algorithms(True) can cause issues with some operations
+    # We'll try to enable it but catch any errors
+    try:
+        torch.use_deterministic_algorithms(True)
+    except Exception as e:
+        print(f"⚠️ Could not enable full deterministic algorithms: {e}")
+        print("   Some operations may still be non-deterministic")
+
+    # Set transformers seed if available
+    try:
+        from transformers import set_seed as transformers_set_seed
+        transformers_set_seed(seed)
+    except ImportError:
+        pass
+
+    print(f"🎲 Random seed set to {seed} for reproducibility") 
 
 @contextmanager
 def file_lock(file_path, timeout=5):
@@ -61,30 +102,47 @@ def file_lock(file_path, timeout=5):
         yield None
 
 
-def run_simulation_random_response(config, data_file, n_users=1000, n_responses_per_user=1, output_path=None):
+def run_simulation_random_response(config, dataset, data_file, n_users=1000, n_responses_per_user=1, output_path=None, seed=42):
     """
     Version with file locking held during the entire simulation run.
+
+    Args:
+        config: Model configuration dictionary
+        dataset: Dataset name ('twitter', 'reddit', 'bluesky')
+        data_file: Path to the data pickle file
+        n_users: Number of users to sample
+        n_responses_per_user: Number of responses to generate per user
+        output_path: Path to save results
+        seed: Random seed for reproducibility (default: 42)
     """
+    # Set seed at the very beginning for full reproducibility
+    set_seed(seed)
+
     if output_path:
         with file_lock(output_path) as lock_acquired:
             if not lock_acquired:
                 print(f"🚫 Skipping {output_path} - another process is working on it")
                 return []
-            
+
             # All reading/writing MUST happen under the lock
-            return _run_simulation_with_lock(config, data_file, n_users, n_responses_per_user, output_path)
+            return _run_simulation_with_lock(config, dataset, data_file, n_users, n_responses_per_user, output_path, seed)
     else:
-        return _run_simulation_with_lock(config, data_file, n_users, n_responses_per_user, output_path)
+        return _run_simulation_with_lock(config, dataset, data_file, n_users, n_responses_per_user, output_path, seed)
 
 
 
-def _run_simulation_with_lock(config, data_file, n_users, n_responses_per_user, output_path):
+def _run_simulation_with_lock(config, dataset, data_file, n_users, n_responses_per_user, output_path, seed=42):
     """
     Internal function that runs the actual simulation logic.
     This is separated so the lock context manager can wrap the entire operation.
+
+    Args:
+        seed: Random seed for reproducibility (passed through from run_simulation_random_response)
     """
-    
+
     print(f"🚀 [DEBUG] Starting simulation with config: {config}")
+    print(f"🎲 [DEBUG] Using seed: {seed}")
+    print(f"📁 [DEBUG] Dataset: {dataset}")
     print(f"📁 [DEBUG] Data file: {data_file}")
     print(f"📊 [DEBUG] Target: {n_users} users, {n_responses_per_user} responses each")
     print(f"💾 [DEBUG] Output path: {output_path}")
@@ -101,7 +159,7 @@ def _run_simulation_with_lock(config, data_file, n_users, n_responses_per_user, 
                 results.extend(existing_results)
                 existing_predictions = {
                     (row["user"], row["original_message"], row["reply_to"], row["model"], row["fine_tuned"],
-                    row["retrieve_context"], row["OPPU"], row["n_style_examples"], row.get("with_persona", True))
+                    row["retrieve_context"], row["n_style_examples"], row.get("persona", True))
                     for row in existing_results
                 }
                 print(f"📚 [DEBUG] Loaded {len(existing_results)} existing results")
@@ -133,7 +191,7 @@ def _run_simulation_with_lock(config, data_file, n_users, n_responses_per_user, 
     print(f"✅ [DEBUG] {len(eligible_users)} users have >= {n_responses_per_user} responses")
 
     # Sample n_users from the eligible users
-    sampled_users = pd.Series(eligible_users).sample(n=min(n_users, len(eligible_users)), random_state=42)
+    sampled_users = pd.Series(eligible_users).sample(n=min(n_users, len(eligible_users)), random_state=seed)
     print(f"🎲 [DEBUG] Sampled {len(sampled_users)} users for processing")
 
     # For each sampled user, take m rows
@@ -141,7 +199,7 @@ def _run_simulation_with_lock(config, data_file, n_users, n_responses_per_user, 
         df_filtered[df_filtered["username"].isin(sampled_users)]
         .reset_index(drop=True)  # Make sure 'username' is only a column
         .groupby("username", group_keys=False)
-        .apply(lambda x: x.sample(n=n_responses_per_user, random_state=42))
+        .apply(lambda x: x.sample(n=n_responses_per_user, random_state=seed))
         .reset_index(drop=True)
     )
     print(f"🎯 [DEBUG] Final test set: {len(df_test)} rows")
@@ -156,7 +214,7 @@ def _run_simulation_with_lock(config, data_file, n_users, n_responses_per_user, 
         print(f"\n👤 [DEBUG] Processing user {user_idx}/{total_users}: {username} ({len(user_df)} samples)")
         
         try:
-            agent = Agent(username, data_file)
+            agent = Agent(username, dataset, data_file)
             print(f"🤖 [DEBUG] Created agent for user {username}")
         except Exception as e:
             print(f"❌ [DEBUG] Failed to create agent for {username}: {e}")
@@ -174,9 +232,8 @@ def _run_simulation_with_lock(config, data_file, n_users, n_responses_per_user, 
                 config["model"],
                 config["finetuned"],
                 config["retrieve_context"],
-                config["OPPU"],
                 config["n_style_examples"],
-                config["with_persona"],
+                config["persona"],
             )
 
             if prediction_key in existing_predictions:
@@ -189,7 +246,8 @@ def _run_simulation_with_lock(config, data_file, n_users, n_responses_per_user, 
             if not model_loaded:
                 print(f"🧠 [DEBUG] Loading model with config: {config}")
                 try:
-                    model = Model(config, finetuning_filepath=data_file)
+                    # Pass sampled users to enable user-filtered fine-tuning
+                    model = Model(config, dataset, finetuning_filepath=data_file, users=list(sampled_users))
                     model_loaded = True
                     print(f"✅ [DEBUG] Model loaded successfully")
                 except Exception as e:
@@ -197,16 +255,19 @@ def _run_simulation_with_lock(config, data_file, n_users, n_responses_per_user, 
                     return results
 
             # Generate responses (returns a list of valid responses)
-            print(f"🎯 [DEBUG] Generating response with {config['n_style_examples']} style examples, with_persona={config['with_persona']}...")
+            # Use a unique seed per user+sample combination for reproducibility
+            sample_seed = seed + user_idx * 1000 + i
+            print(f"🎯 [DEBUG] Generating response with {config['n_style_examples']} style examples, persona={config['persona']}, seed={sample_seed}...")
             try:
                 responses = agent.generate_response(
                     llm=model,
                     n_examples=config["n_style_examples"],
                     retrieve_context_bool=config["retrieve_context"],
-                    personalized_bool=config["OPPU"],
-                    with_persona=config["with_persona"],
+                    with_persona=config["persona"],
+                    instruction_tuned=config["instruction_tuned"],
                     conversation_history=[reply_to],
-                    n_candidates=20
+                    n_candidates=20,
+                    seed=sample_seed
                 )
                 print(f"📝 [DEBUG] Generated {len(responses) if responses else 0} valid responses")
                 # Clear CUDA cache after generation
@@ -228,9 +289,8 @@ def _run_simulation_with_lock(config, data_file, n_users, n_responses_per_user, 
                 "model": config["model"],
                 "fine_tuned": config["finetuned"],
                 "retrieve_context": config["retrieve_context"],
-                "OPPU": config["OPPU"],
                 "n_style_examples": config["n_style_examples"],
-                "with_persona": config["with_persona"],
+                "persona": config["persona"],
                 "reply_to": reply_to,
                 "original_message": original_message,
                 "response": responses[0],

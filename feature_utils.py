@@ -1097,8 +1097,8 @@ def evaluate_all_datasets_median_run(folder_path, label_source):
                     
                     # Parse filename for metadata
                     try:
-                        model, ft, context, style, oppu = parse_filename(filename)
-                        print(f"DEBUG: Parsed filename - model: {model}, ft: {ft}, context: {context}, style: {style}, oppu: {oppu}")
+                        model, ft, context, style, persona = parse_filename(filename)
+                        print(f"DEBUG: Parsed filename - model: {model}, ft: {ft}, context: {context}, style: {style}, persona: {persona}")
                         if 'random' in filename:
                             source_type = 'random'
                         else:
@@ -1109,13 +1109,13 @@ def evaluate_all_datasets_median_run(folder_path, label_source):
                             'ft': ft,
                             'context': context,
                             'style': style,
-                            'oppu': oppu,
+                            'persona': persona,
                             'auc': auc,
                             'label_source': label_source,
                             'source_type': source_type,
                             'validation_size': len(results_df)
                         })
-                        
+
                         # Collect agreement statistics with metadata
                         for _, row in agreement_stats.iterrows():
                             agreement_summary.append({
@@ -1123,7 +1123,7 @@ def evaluate_all_datasets_median_run(folder_path, label_source):
                                 'ft': ft,
                                 'context': context,
                                 'style': style,
-                                'oppu': oppu,
+                                'persona': persona,
                                 'label_source': label_source,
                                 'source_type': source_type,
                                 'metric': row['metric'],
