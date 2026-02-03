@@ -44,18 +44,18 @@ def parse_filename(filename):
     Extract model configuration from standardized filename.
 
     Parses filenames following the convention:
-    {model}__{ft|noft}__{ctx0|ctx1}__style{N}__{OPPU|noOPPU}__*
+    {model}__{ft|noft}__{ctx0|ctx1}__style{N}__*
 
     Args:
         filename: Filename to parse (can be full path, will extract basename)
 
     Returns:
-        tuple: (model, ft, context, style, oppu)
+        tuple: (model, ft, context, style, persona)
             - model (str): Model name (e.g., "llama3.1_8b")
             - ft (int): 1 if fine-tuned, 0 otherwise
             - context (int): 1 if context retrieval enabled, 0 otherwise
             - style (int): Number of style examples (0, 1, 3, 5)
-            - oppu (int): 1 if OPPU personalization enabled, 0 otherwise
+            - persona (int): 0 if no_persona, 1 otherwise
     """
     base = os.path.basename(filename)
     parts = base.split("__")
@@ -63,8 +63,11 @@ def parse_filename(filename):
     ft = 1 if parts[1] == "ft" else 0
     context = 1 if parts[2] == "ctx1" else 0
     style = int(parts[3].replace("style", ""))
-    oppu = 1 if parts[4].startswith("OPPU") else 0
-    return model, ft, context, style, oppu
+    if len(parts) > 4:
+        persona = 0 if parts[4].startswith("no_persona") else 1
+    else:
+        persona = 1
+    return model, ft, context, style, persona
 
 def count_significant_features(filepath):
     """
@@ -173,8 +176,8 @@ def main():
         for file in files:
             full_path = os.path.join(subdir, file)
             if file.endswith("_significant_features.csv"):
-                model, ft, context, style, oppu = parse_filename(file)
-                key = (model, ft, context, style, oppu)
+                model, ft, context, style, persona = parse_filename(file)
+                key = (model, ft, context, style, persona)
 
                 count = count_significant_features(full_path)
                 if key not in records:
@@ -182,8 +185,8 @@ def main():
                 records[key]['significant_feature_count'] = count
 
             elif file.endswith("_confusion_matrix.csv"):
-                model, ft, context, style, oppu = parse_filename(file)
-                key = (model, ft, context, style, oppu)
+                model, ft, context, style, persona = parse_filename(file)
+                key = (model, ft, context, style, persona)
 
                 confusion = read_confusion_matrix(full_path)
                 if key not in records:
@@ -191,8 +194,8 @@ def main():
                 records[key].update(confusion)
 
             elif file.endswith("aggregate_stylistic_metrics.csv"):
-                model, ft, context, style, oppu = parse_filename(file)
-                key = (model, ft, context, style, oppu)
+                model, ft, context, style, persona = parse_filename(file)
+                key = (model, ft, context, style, persona)
 
                 stylistic_metrics = read_aggregate_stylistic_metrics(full_path)
                 if key not in records:
@@ -202,13 +205,13 @@ def main():
     # Convert to DataFrame
     rows = []
     for key, metrics in records.items():
-        model, ft, context, style, oppu = key
+        model, ft, context, style, persona = key
         row = {
             "model": model,
             "finetuning": ft,
             "context": context,
             "style": style,
-            "OPPU": oppu,
+            "persona": persona,
             "significant_feature_count": metrics.get("significant_feature_count", 0),
             "0-0": metrics.get("0-0"),
             "1-0": metrics.get("1-0"),

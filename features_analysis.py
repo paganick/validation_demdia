@@ -352,8 +352,8 @@ def evaluate_all_datasets(folder_path, label_source):
                     print(f"DEBUG: Source type: {source_type}")
 
                     try:
-                        model, ft, context, style, oppu = parse_filename(filename)
-                        print(f"DEBUG: Parsed filename - model: {model}, ft: {ft}, context: {context}, style: {style}, oppu: {oppu}")
+                        model, ft, context, style, persona = parse_filename(filename)
+                        print(f"DEBUG: Parsed filename - model: {model}, ft: {ft}, context: {context}, style: {style}, persona: {persona}")
                     except Exception as parse_error:
                         print(f"ERROR: Could not parse filename {filename}: {parse_error}")
                         print("STOPPING EXECUTION due to filename parsing error.")
@@ -372,7 +372,7 @@ def evaluate_all_datasets(folder_path, label_source):
                         'ft': ft,
                         'context': context,
                         'style': style,
-                        'oppu': oppu,
+                        'persona': persona,
                         'auc': auc,
                         'label_source': label_source,
                         'source_type': source_type
@@ -385,7 +385,7 @@ def evaluate_all_datasets(folder_path, label_source):
                         'ft': ft,
                         'context': context,
                         'style': style,
-                        'oppu': oppu,
+                        'persona': persona,
                         'label_source': label_source,
                         'source_type': source_type
                     })
@@ -529,10 +529,10 @@ def evaluate_single_file(file_path, label_source):
 
         # Parse filename for metadata
         try:
-            model, ft, context, style, oppu = parse_filename(filename)
+            model, ft, context, style, persona = parse_filename(filename)
         except Exception as parse_error:
             print(f"WARNING: Could not parse filename {filename}: {parse_error}")
-            model, ft, context, style, oppu = "unknown", "unknown", "unknown", "unknown", "unknown"
+            model, ft, context, style, persona = "unknown", "unknown", "unknown", "unknown", "unknown"
 
         # Evaluate features
         print("DEBUG: Starting feature evaluation...")
@@ -548,7 +548,7 @@ def evaluate_single_file(file_path, label_source):
             'ft': ft,
             'context': context,
             'style': style,
-            'oppu': oppu,
+            'persona': persona,
             'label_source': label_source,
             'source_type': source_type,
             'auc': auc

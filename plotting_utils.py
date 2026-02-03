@@ -62,7 +62,7 @@ def get_dataset_color(dataset_path):
 # === Filename Parsing ===
 def parse_filename(filename):
     """
-    Extracts model, finetuning, context, style, and OPPU info from a filename.
+    Extracts model, finetuning, context, style, and persona info from a filename.
     Converts them into booleans or integers for clean tabular use.
     Handles cases where persona field might be empty.
     """
@@ -72,31 +72,30 @@ def parse_filename(filename):
         base = base.split('___')[0]
     elif '__random' in base:
         base = base.split('__random')[0]
-    
+
     parts = base.split("__")
-    
+
     # Handle different numbers of parts (sometimes persona is missing)
-    if len(parts) < 5:
+    if len(parts) < 4:
         print(f"Warning: filename has only {len(parts)} parts: {parts}")
-        return None, None, None, None, None, None
-    
+        return None, None, None, None, None
+
     model = parts[0]
     ft = 1 if parts[1] == "ft" else 0
     context = 1 if parts[2] == "ctx1" else 0
     style = int(parts[3].replace("style", ""))
-    oppu = 1 if parts[4].startswith("OPPU") and not parts[4].startswith("no_OPPU") else 0
-    
-    # Handle persona - if there's no 6th part or it's empty, assume persona is on
-    if len(parts) > 5:
-        persona = 0 if parts[5].startswith("no_persona") else 1
+
+    # Handle persona - if there's no 5th part or it's empty, assume persona is on
+    if len(parts) > 4:
+        persona = 0 if parts[4].startswith("no_persona") else 1
     else:
         # Default to persona on if field is missing
         persona = 1
-    
-    return model, ft, context, style, oppu, persona
+
+    return model, ft, context, style, persona
 
 # === Label Generation ===
-def make_label(model, ft, context, style, oppu, persona, with_model=True):
+def make_label(model, ft, context, style, persona, with_model=True):
     """Create a label string from configuration parameters."""
     if with_model:
         label = model
@@ -115,18 +114,16 @@ def make_label(model, ft, context, style, oppu, persona, with_model=True):
 # === Marker Selection ===
 def get_marker(row):
     """Get marker style based on row configuration."""
-    if row['style'] == 0 and row['context'] == 0 and row['ft'] == 0 and row['oppu'] == 0 and row['persona'] == 0:
+    if row['style'] == 0 and row['context'] == 0 and row['ft'] == 0 and row['persona'] == 0:
         return 'p'  # upside-down triangle
-    elif row['style'] == 0 and row['context'] == 0 and row['ft'] == 0 and row['oppu'] == 0:
+    elif row['style'] == 0 and row['context'] == 0 and row['ft'] == 0:
         return '^'  # triangle
-    elif row['context'] == 0 and row['ft'] == 0 and row['oppu'] == 0:
+    elif row['context'] == 0 and row['ft'] == 0:
         return 's'  # square
-    elif row['ft'] == 0 and row['oppu'] == 0:
+    elif row['ft'] == 0:
         return 'd'  # pentagon
-    elif row['oppu'] == 0:
-        return 'o'  # circle
     else:
-        return 'x'  # fallback marker for other cases if any
+        return 'o'  # circle
 
 # === Model Ordering ===
 def get_ordered_models(model_names):
@@ -299,7 +296,7 @@ def filter_for_baseline_persona(filepath: str) -> bool:
         return False
     
     if '__noft__ctx0__style0__' in filename:
-        if '__no_OPPU___' in filename or '__OPPU0__persona__' in filename:
+        if '__no_persona' not in filename:
             return True
     
     return False
@@ -314,7 +311,7 @@ def load_uncertainty_data(folder_path):
 
     for filepath in json_files:
         try:
-            model, ft, context, style, oppu, persona = parse_filename(str(filepath))
+            model, ft, context, style, persona = parse_filename(str(filepath))
 
             # Only load random validation files if present
             if "random_validation" not in str(filepath):
@@ -341,7 +338,6 @@ def load_uncertainty_data(folder_path):
                     "ft": ft,
                     "context": context,
                     "style": style,
-                    "oppu": oppu,
                     "persona": persona,
                     "accuracy_mean": np.mean(accuracies),
                     "accuracy_std": np.std(accuracies, ddof=1) if len(accuracies) > 1 else 0.0,
