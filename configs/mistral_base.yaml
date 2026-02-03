@@ -1,5 +1,0 @@
-OPPU: false
-context_retrieval: false
-finetuned: false
-model: mistralai/Mistral-7B-v0.1
-n_style_examples: 0
