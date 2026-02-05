@@ -102,14 +102,16 @@ def file_lock(file_path, timeout=5):
         yield None
 
 
-def run_simulation_random_response(config, dataset, data_file, n_users=1000, n_responses_per_user=1, output_path=None, seed=42):
+def run_simulation_random_response(config, dataset, posts_file, personas_file=None, n_users=1000, n_responses_per_user=1, output_path=None, seed=42):
     """
     Version with file locking held during the entire simulation run.
 
     Args:
         config: Model configuration dictionary
         dataset: Dataset name ('twitter', 'reddit', 'bluesky')
-        data_file: Path to the data pickle file
+        posts_file: Path to posts pickle file (contains username, message, reply_to, training)
+        personas_file: Path to personas pickle file (contains username, persona).
+                      If None, assumes posts_file contains persona column (old format).
         n_users: Number of users to sample
         n_responses_per_user: Number of responses to generate per user
         output_path: Path to save results
@@ -125,25 +127,28 @@ def run_simulation_random_response(config, dataset, data_file, n_users=1000, n_r
                 return []
 
             # All reading/writing MUST happen under the lock
-            return _run_simulation_with_lock(config, dataset, data_file, n_users, n_responses_per_user, output_path, seed)
+            return _run_simulation_with_lock(config, dataset, posts_file, personas_file, n_users, n_responses_per_user, output_path, seed)
     else:
-        return _run_simulation_with_lock(config, dataset, data_file, n_users, n_responses_per_user, output_path, seed)
+        return _run_simulation_with_lock(config, dataset, posts_file, personas_file, n_users, n_responses_per_user, output_path, seed)
 
 
 
-def _run_simulation_with_lock(config, dataset, data_file, n_users, n_responses_per_user, output_path, seed=42):
+def _run_simulation_with_lock(config, dataset, posts_file, personas_file, n_users, n_responses_per_user, output_path, seed=42):
     """
     Internal function that runs the actual simulation logic.
     This is separated so the lock context manager can wrap the entire operation.
 
     Args:
+        posts_file: Path to posts pickle file
+        personas_file: Path to personas pickle file (None for old single-file format)
         seed: Random seed for reproducibility (passed through from run_simulation_random_response)
     """
 
     print(f"🚀 [DEBUG] Starting simulation with config: {config}")
     print(f"🎲 [DEBUG] Using seed: {seed}")
     print(f"📁 [DEBUG] Dataset: {dataset}")
-    print(f"📁 [DEBUG] Data file: {data_file}")
+    print(f"📁 [DEBUG] Posts file: {posts_file}")
+    print(f"📁 [DEBUG] Personas file: {personas_file}")
     print(f"📊 [DEBUG] Target: {n_users} users, {n_responses_per_user} responses each")
     print(f"💾 [DEBUG] Output path: {output_path}")
     
@@ -174,9 +179,15 @@ def _run_simulation_with_lock(config, dataset, data_file, n_users, n_responses_p
             print(f"📁 [DEBUG] Creating output directory: {output_dir}")
             os.makedirs(output_dir, exist_ok=True)
         
-    print(f"📖 [DEBUG] Loading data from pickle file...")
-    df = pd.read_pickle(data_file)
-    print(f"📊 [DEBUG] Loaded {len(df)} total rows from pickle")
+    print(f"📖 [DEBUG] Loading data from pickle files...")
+    df = pd.read_pickle(posts_file)
+    print(f"📊 [DEBUG] Loaded {len(df)} total rows from posts file")
+
+    # Load personas if separate file provided
+    df_personas = None
+    if personas_file is not None:
+        df_personas = pd.read_pickle(personas_file)
+        print(f"📊 [DEBUG] Loaded {len(df_personas)} personas from personas file")
     
     # Filter the DataFrame to only include rows where training == 0
     df_filtered = df[df["training"] == 0]
@@ -214,7 +225,7 @@ def _run_simulation_with_lock(config, dataset, data_file, n_users, n_responses_p
         print(f"\n👤 [DEBUG] Processing user {user_idx}/{total_users}: {username} ({len(user_df)} samples)")
         
         try:
-            agent = Agent(username, dataset, data_file)
+            agent = Agent(username, dataset, posts_file, personas_file)
             print(f"🤖 [DEBUG] Created agent for user {username}")
         except Exception as e:
             print(f"❌ [DEBUG] Failed to create agent for {username}: {e}")
@@ -223,7 +234,13 @@ def _run_simulation_with_lock(config, dataset, data_file, n_users, n_responses_p
         for i, row in enumerate(user_df.itertuples(index=False), start=1):
             reply_to = row.reply_to
             original_message = row.message
-            persona = row.persona
+
+            # Get persona from separate file or from row (old format)
+            if df_personas is not None:
+                user_persona = df_personas[df_personas['username'] == username]
+                persona = user_persona['persona'].iloc[0] if not user_persona.empty else None
+            else:
+                persona = row.persona if hasattr(row, 'persona') else None
 
             prediction_key = (
                 username,
@@ -247,7 +264,7 @@ def _run_simulation_with_lock(config, dataset, data_file, n_users, n_responses_p
                 print(f"🧠 [DEBUG] Loading model with config: {config}")
                 try:
                     # Pass sampled users to enable user-filtered fine-tuning
-                    model = Model(config, dataset, finetuning_filepath=data_file, users=list(sampled_users))
+                    model = Model(config, dataset, posts_file=posts_file, users=list(sampled_users))
                     model_loaded = True
                     print(f"✅ [DEBUG] Model loaded successfully")
                 except Exception as e:

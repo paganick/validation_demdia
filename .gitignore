@@ -3,9 +3,12 @@ results_replica/*
 configs/*
 configs_llama70B/*
 logs/*
-data/*
+data_backup_*/
 
 BERT_models/*
+
+# Keep username mapping secure (allows de-anonymization)
+username_mapping_*.json
 
 check_run.py
 copy_data.py

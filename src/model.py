@@ -72,15 +72,24 @@ def finetuning_lock(lock_path, timeout=7200):
         yield False
 
 class Model:
-    def __init__(self, config, dataset, finetuning_filepath, users=None):
+    def __init__(self, config, dataset, posts_file, users=None):
+        """Initialize the model.
+
+        Args:
+            config: Model configuration dictionary
+            dataset: Dataset name ('twitter', 'reddit', 'bluesky')
+            posts_file: Path to posts pickle file for fine-tuning
+                       (contains username, message, reply_to, training columns)
+            users: List of usernames to filter training data (None = use all)
+        """
         self.model_name = config["model"]
         self.dataset = dataset
-        self.finetuning_filepath = finetuning_filepath
+        self.posts_file = posts_file
         self.finetuned = config["finetuned"]
         self.users = users  # List of usernames to filter training data (None = use all)
 
         # Build fine-tuned directory path
-        base_dir = f"{config['finetuning_dir']}{config['model']}_finetuned_{os.path.splitext(finetuning_filepath)[0]}"
+        base_dir = f"{config['finetuning_dir']}{config['model']}_finetuned_{os.path.splitext(posts_file)[0]}"
         if users is not None:
             # Add suffix to indicate user-filtered fine-tuning
             self.fine_tuned_dir = f"{base_dir}_userfiltered"
@@ -146,13 +155,32 @@ class Model:
         elif os.path.exists(self.fine_tuned_dir):
             print(f"Loading fine-tuned model from {self.fine_tuned_dir}")
 
-            self.model = AutoModelForCausalLM.from_pretrained(
-                self.fine_tuned_dir,
-                device_map="auto",
-                torch_dtype=torch.float16,
-                low_cpu_mem_usage=True
-            )
-            self.tokenizer = AutoTokenizer.from_pretrained(self.fine_tuned_dir)
+            # Use correct dtype based on model type (must match fine-tuning dtype)
+            is_apertus = "apertus" in self.model_name.lower() or "swiss-ai" in self.model_name.lower()
+            is_gemma = "gemma" in self.model_name.lower()
+
+            if is_apertus or is_gemma:
+                # Apertus and Gemma are fine-tuned with bfloat16
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.fine_tuned_dir,
+                    device_map="auto",
+                    torch_dtype=torch.bfloat16,
+                    low_cpu_mem_usage=True,
+                    trust_remote_code=True
+                )
+                self.tokenizer = AutoTokenizer.from_pretrained(
+                    self.fine_tuned_dir,
+                    use_fast=True,
+                    trust_remote_code=True
+                )
+            else:
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.fine_tuned_dir,
+                    device_map="auto",
+                    torch_dtype=torch.float16,
+                    low_cpu_mem_usage=True
+                )
+                self.tokenizer = AutoTokenizer.from_pretrained(self.fine_tuned_dir)
             self._configure_generation()
             print("✅ Fine-tuned model loaded")
 
@@ -166,13 +194,31 @@ class Model:
                 # Re-check if model exists (another job might have finished while waiting)
                 if os.path.exists(self.fine_tuned_dir):
                     print(f"🔄 Fine-tuned model appeared while waiting. Loading from {self.fine_tuned_dir}")
-                    self.model = AutoModelForCausalLM.from_pretrained(
-                        self.fine_tuned_dir,
-                        device_map="auto",
-                        torch_dtype=torch.float16,
-                        low_cpu_mem_usage=True
-                    )
-                    self.tokenizer = AutoTokenizer.from_pretrained(self.fine_tuned_dir)
+                    # Use correct dtype based on model type (must match fine-tuning dtype)
+                    is_apertus = "apertus" in self.model_name.lower() or "swiss-ai" in self.model_name.lower()
+                    is_gemma = "gemma" in self.model_name.lower()
+
+                    if is_apertus or is_gemma:
+                        self.model = AutoModelForCausalLM.from_pretrained(
+                            self.fine_tuned_dir,
+                            device_map="auto",
+                            torch_dtype=torch.bfloat16,
+                            low_cpu_mem_usage=True,
+                            trust_remote_code=True
+                        )
+                        self.tokenizer = AutoTokenizer.from_pretrained(
+                            self.fine_tuned_dir,
+                            use_fast=True,
+                            trust_remote_code=True
+                        )
+                    else:
+                        self.model = AutoModelForCausalLM.from_pretrained(
+                            self.fine_tuned_dir,
+                            device_map="auto",
+                            torch_dtype=torch.float16,
+                            low_cpu_mem_usage=True
+                        )
+                        self.tokenizer = AutoTokenizer.from_pretrained(self.fine_tuned_dir)
                     self._configure_generation()
                     print("✅ Fine-tuned model loaded")
                 else:
@@ -223,14 +269,27 @@ class Model:
             tokenizer.pad_token = tokenizer.eos_token
 
         # Load and prepare data
-        df = pd.read_pickle(self.finetuning_filepath)
+        df = pd.read_pickle(self.posts_file)
         df_train = df[df['training'] == 1].reset_index(drop=True)
 
         # Filter to only include users we're testing (if user list provided)
         if self.users is not None:
             df_train = df_train[df_train['username'].isin(self.users)].reset_index(drop=True)
             print(f"📋 Filtered training data to {len(self.users)} target users")
-        
+
+        # Limit to at most 200 training rows per user (reproducible)
+        max_rows_per_user = 200
+        # Sort for deterministic ordering before sampling
+        df_train = df_train.sort_values(['username', 'message']).reset_index(drop=True)
+        # Sample up to max_rows_per_user per user
+        sampled_dfs = []
+        for username in sorted(df_train['username'].unique()):
+            user_df = df_train[df_train['username'] == username]
+            n_sample = min(len(user_df), max_rows_per_user)
+            sampled_dfs.append(user_df.sample(n=n_sample, random_state=42))
+        df_train = pd.concat(sampled_dfs, ignore_index=True)
+        print(f"📋 Limited to max {max_rows_per_user} rows per user: {len(df_train)} total rows")
+
         # Shuffle the data to prevent overfitting to order
         df_train = df_train.sample(frac=1, random_state=42).reset_index(drop=True)
         
@@ -315,9 +374,10 @@ class Model:
         
         # Model-specific loading to avoid dtype issues
         if is_apertus:
+            # Apertus: use float32 for fine-tuning (more stable, like old version)
             model = AutoModelForCausalLM.from_pretrained(
                 self.model_name,
-                torch_dtype=torch.bfloat16,  # Use bfloat16 for Apertus
+                torch_dtype=torch.float32,
                 device_map="auto",
                 trust_remote_code=True
             )

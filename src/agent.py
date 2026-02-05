@@ -13,36 +13,86 @@ from .model_utils import *
 from .model import Model
 
 class Agent:
-    def __init__(self, username: str, dataset: str, data_file: str):
-        """Initialize an agent with a username and load all past text examples."""
+    def __init__(self, username: str, dataset: str, posts_file: str, personas_file: str = None):
+        """Initialize an agent with a username and load all past text examples.
+
+        Args:
+            username: The user's username
+            dataset: Dataset name ('twitter', 'reddit', 'bluesky')
+            posts_file: Path to posts pickle file (contains username, message, reply_to, training)
+            personas_file: Path to personas pickle file (contains username, persona).
+                          If None, assumes posts_file contains persona column (old format).
+        """
         self.username = username
         self.dataset = dataset
-        self.data_file = data_file
+        self.posts_file = posts_file
+        self.personas_file = personas_file
         self.examples = self.load_persona_examples()
         self.create_user_history()
 
     def load_persona_examples(self):
-        """Reads a file and stores all examples of text by the agent."""
+        """Reads posts and persona files and stores all examples of text by the agent.
+
+        Supports two data formats:
+        1. New format: Separate posts_file and personas_file
+           - posts_file: username, message, reply_to, training
+           - personas_file: username, persona (one row per user, already in third person)
+        2. Old format: Single file with all columns (personas_file is None)
+           - Contains: username, persona, persona_third_person, message, reply_to, training
+        """
+        # Load posts data
         try:
-            df = pd.read_pickle(self.data_file)
+            df_posts = pd.read_pickle(self.posts_file)
         except Exception as e:
-            print(f"Error loading data from {self.data_file}: {e}")
+            print(f"Error loading posts data from {self.posts_file}: {e}")
             return []
-        
-        self.df_user = df[(df['username'] == self.username) & (df['training'] == 1)]
 
-        self.persona = self.df_user['persona'].iloc[0] if not self.df_user.empty else None
-
-        # Load third-person persona if available (for non-instruction-tuned prompts)
-        if not self.df_user.empty and 'persona_third_person' in df.columns:
-            self.persona_third_person = self.df_user['persona_third_person'].iloc[0]
-        else:
-            self.persona_third_person = None
+        # Filter to user's training posts
+        self.df_user = df_posts[(df_posts['username'] == self.username) & (df_posts['training'] == 1)]
 
         if self.df_user.empty:
             print(f"No training examples found for @{self.username}.")
+            self.persona = None
+            self.persona_third_person = None
             return []
-        
+
+        # Load persona data
+        if self.personas_file is not None:
+            # New format: separate personas file (Llama-generated)
+            # After transformation, this file has the same format as old personas.pkl:
+            # - 'persona': second person (for instruction-tuned prompts)
+            # - 'persona_third_person': third person (for non-instruction-tuned prompts)
+            try:
+                df_personas = pd.read_pickle(self.personas_file)
+                user_persona = df_personas[df_personas['username'] == self.username]
+                if not user_persona.empty:
+                    # Load second person persona (for instruction-tuned prompts)
+                    self.persona = user_persona['persona'].iloc[0]
+
+                    # Load third person persona if available (for non-instruction-tuned prompts)
+                    if 'persona_third_person' in df_personas.columns:
+                        self.persona_third_person = user_persona['persona_third_person'].iloc[0]
+                    else:
+                        # Fallback: use persona as-is (before transformation was run)
+                        self.persona_third_person = self.persona
+                else:
+                    print(f"No persona found for @{self.username} in {self.personas_file}.")
+                    self.persona = None
+                    self.persona_third_person = None
+            except Exception as e:
+                print(f"Error loading personas data from {self.personas_file}: {e}")
+                self.persona = None
+                self.persona_third_person = None
+        else:
+            # Old format: persona in the same file as posts
+            self.persona = self.df_user['persona'].iloc[0] if 'persona' in df_posts.columns else None
+
+            # Load third-person persona if available (for non-instruction-tuned prompts)
+            if 'persona_third_person' in df_posts.columns:
+                self.persona_third_person = self.df_user['persona_third_person'].iloc[0]
+            else:
+                self.persona_third_person = None
+
         return self.df_user['message'].dropna().tolist()
 
     def sample_examples(self, num_samples=10, seed=None):
@@ -266,15 +316,16 @@ class Agent:
         valid_responses = []
         attempts = 0
 
-        # Create a generator for reproducible sampling if seed is provided
-        generator = None
-        if seed is not None:
-            generator = torch.Generator(device=device)
-            generator.manual_seed(seed)
-
         while len(valid_responses) < n_candidates and attempts < max_total_attempts:
             remaining_needed = n_candidates - len(valid_responses)
             inputs = tokenizer(prompt, return_tensors="pt").to(device)
+
+            # Set seed for reproducibility before each generation attempt
+            if seed is not None:
+                attempt_seed = seed + attempts
+                torch.manual_seed(attempt_seed)
+                if torch.cuda.is_available():
+                    torch.cuda.manual_seed(attempt_seed)
 
             # Build generate kwargs
             generate_kwargs = {
@@ -289,11 +340,6 @@ class Agent:
                 "repetition_penalty": 1.0,
                 "pad_token_id": tokenizer.pad_token_id,
             }
-
-            # Add generator for reproducibility if available
-            if generator is not None:
-                # Increment seed for each attempt to get different but reproducible results
-                generator.manual_seed(seed + attempts)
 
             outputs = model.generate(
                 inputs.input_ids,
