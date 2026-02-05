@@ -18,6 +18,8 @@ def main():
     parser.add_argument('--n_responses_per_user', type=int, default=20)
     parser.add_argument('--filter_keywords', nargs='*', default=[],
                         help="List of keywords to filter config filenames (e.g. --filter_keywords deepseek withcontext)")
+    parser.add_argument('--use_llama_personas', action='store_true',
+                        help="Use llama-generated personas (new two-file format: personas_llama.pkl + posts_llama.pkl)")
 
     args = parser.parse_args()
     
@@ -41,16 +43,24 @@ def main():
     else:
         raise ValueError("You must provide either --config or --config_dir")
 
-    if (args.dataset == 'twitter'):
-        data_file = 'data/twitter/personas.pkl'
-    elif (args.dataset == 'reddit'):
-        data_file = 'data/reddit/personas.pkl'
-    elif (args.dataset == 'bluesky'):
-        data_file = 'data/bluesky/personas.pkl'  
-    else:
-       raise ValueError("You must provide either a valid dataset ('twitter' or 'reddit' or 'bluesky') using --dataset")
+    if args.dataset not in ['twitter', 'reddit', 'bluesky']:
+        raise ValueError("You must provide a valid dataset ('twitter', 'reddit', or 'bluesky') using --dataset")
 
     dataset = args.dataset
+
+    # Set up data file paths based on format (llama or old)
+    if args.use_llama_personas:
+        # New format: separate posts and personas files
+        posts_file = f'data/{args.dataset}/posts_llama.pkl'
+        personas_file = f'data/{args.dataset}/personas_llama.pkl'
+        print(f"📁 Using llama personas format:")
+        print(f"   Posts: {posts_file}")
+        print(f"   Personas: {personas_file}")
+    else:
+        # Old format: single file with all data
+        posts_file = f'data/{args.dataset}/personas.pkl'
+        personas_file = None
+        print(f"📁 Using old personas format: {posts_file}")
 
     for cfg_path in config_paths:
         config = load_config(cfg_path)
@@ -83,10 +93,13 @@ def main():
         print(output_path)
 
         print(f"[RUNNING] Config: {cfg_path}")
-       
-        results = run_simulation_random_response(config, dataset, data_file, n_users=args.n_users, 
-                                             n_responses_per_user= args.n_responses_per_user, 
-                                             output_path=output_path)
+
+        results = run_simulation_random_response(
+            config, dataset, posts_file, personas_file,
+            n_users=args.n_users,
+            n_responses_per_user=args.n_responses_per_user,
+            output_path=output_path
+        )
     
 
 if __name__ == "__main__":
