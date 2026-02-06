@@ -40,3 +40,5 @@ __pycache__/
 *.txt
 *.slurm
 environment.yml
+# Backup files (non-anonymized)
+data/*/posts_backup_nonanon.pkl
