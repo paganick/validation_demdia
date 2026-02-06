@@ -102,7 +102,7 @@ def file_lock(file_path, timeout=5):
         yield None
 
 
-def run_simulation_random_response(config, dataset, posts_file, personas_file=None, n_users=1000, n_responses_per_user=1, output_path=None, seed=42):
+def run_simulation_random_response(config, dataset, posts_file, personas_file=None, n_users=1000, n_responses_per_user=1, output_path=None, seed=42, batch_users=None):
     """
     Version with file locking held during the entire simulation run.
 
@@ -111,11 +111,11 @@ def run_simulation_random_response(config, dataset, posts_file, personas_file=No
         dataset: Dataset name ('twitter', 'reddit', 'bluesky')
         posts_file: Path to posts pickle file (contains username, message, reply_to, training)
         personas_file: Path to personas pickle file (contains username, persona).
-                      If None, assumes posts_file contains persona column (old format).
-        n_users: Number of users to sample
+        n_users: Number of users to sample (ignored if batch_users is provided)
         n_responses_per_user: Number of responses to generate per user
         output_path: Path to save results
         seed: Random seed for reproducibility (default: 42)
+        batch_users: List of usernames to process (if None, sample n_users randomly)
     """
     # Set seed at the very beginning for full reproducibility
     set_seed(seed)
@@ -127,21 +127,22 @@ def run_simulation_random_response(config, dataset, posts_file, personas_file=No
                 return []
 
             # All reading/writing MUST happen under the lock
-            return _run_simulation_with_lock(config, dataset, posts_file, personas_file, n_users, n_responses_per_user, output_path, seed)
+            return _run_simulation_with_lock(config, dataset, posts_file, personas_file, n_users, n_responses_per_user, output_path, seed, batch_users)
     else:
-        return _run_simulation_with_lock(config, dataset, posts_file, personas_file, n_users, n_responses_per_user, output_path, seed)
+        return _run_simulation_with_lock(config, dataset, posts_file, personas_file, n_users, n_responses_per_user, output_path, seed, batch_users)
 
 
 
-def _run_simulation_with_lock(config, dataset, posts_file, personas_file, n_users, n_responses_per_user, output_path, seed=42):
+def _run_simulation_with_lock(config, dataset, posts_file, personas_file, n_users, n_responses_per_user, output_path, seed=42, batch_users=None):
     """
     Internal function that runs the actual simulation logic.
     This is separated so the lock context manager can wrap the entire operation.
 
     Args:
         posts_file: Path to posts pickle file
-        personas_file: Path to personas pickle file (None for old single-file format)
-        seed: Random seed for reproducibility (passed through from run_simulation_random_response)
+        personas_file: Path to personas pickle file
+        seed: Random seed for reproducibility
+        batch_users: List of usernames to process (if None, sample n_users randomly)
     """
 
     print(f"🚀 [DEBUG] Starting simulation with config: {config}")
@@ -149,7 +150,10 @@ def _run_simulation_with_lock(config, dataset, posts_file, personas_file, n_user
     print(f"📁 [DEBUG] Dataset: {dataset}")
     print(f"📁 [DEBUG] Posts file: {posts_file}")
     print(f"📁 [DEBUG] Personas file: {personas_file}")
-    print(f"📊 [DEBUG] Target: {n_users} users, {n_responses_per_user} responses each")
+    if batch_users:
+        print(f"📦 [DEBUG] Processing batch of {len(batch_users)} specific users")
+    else:
+        print(f"📊 [DEBUG] Target: {n_users} users, {n_responses_per_user} responses each")
     print(f"💾 [DEBUG] Output path: {output_path}")
     
     results = []
@@ -201,9 +205,15 @@ def _run_simulation_with_lock(config, dataset, posts_file, personas_file, n_user
     eligible_users = user_counts[user_counts >= n_responses_per_user].index
     print(f"✅ [DEBUG] {len(eligible_users)} users have >= {n_responses_per_user} responses")
 
-    # Sample n_users from the eligible users
-    sampled_users = pd.Series(eligible_users).sample(n=min(n_users, len(eligible_users)), random_state=seed)
-    print(f"🎲 [DEBUG] Sampled {len(sampled_users)} users for processing")
+    # Determine which users to process
+    if batch_users is not None:
+        # Use specific batch users (filter to eligible only)
+        sampled_users = pd.Series([u for u in batch_users if u in eligible_users])
+        print(f"📦 [DEBUG] Using {len(sampled_users)} users from batch (filtered to eligible)")
+    else:
+        # Sample n_users from the eligible users
+        sampled_users = pd.Series(eligible_users).sample(n=min(n_users, len(eligible_users)), random_state=seed)
+        print(f"🎲 [DEBUG] Sampled {len(sampled_users)} users for processing")
 
     # For each sampled user, take m rows
     df_test = (
