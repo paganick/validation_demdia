@@ -1,4 +1,5 @@
 import fcntl
+import signal
 import time
 import os
 import json
@@ -10,6 +11,26 @@ from contextlib import contextmanager
 
 from .model import Model
 from .agent import Agent
+
+
+# ---------------------------------------------------------------------------
+# SIGTERM handling: ensure lock files are cleaned up when SLURM kills the job
+# ---------------------------------------------------------------------------
+_active_lock_files = set()
+
+
+def _sigterm_handler(signum, frame):
+    """Handle SIGTERM by cleaning up lock files, then re-raising as SystemExit."""
+    for lock_file in list(_active_lock_files):
+        try:
+            os.unlink(lock_file)
+            print(f"🧹 Cleaned up lock file on SIGTERM: {lock_file}")
+        except FileNotFoundError:
+            pass
+    raise SystemExit(f"Terminated by signal {signum}")
+
+
+signal.signal(signal.SIGTERM, _sigterm_handler)
 
 
 def set_seed(seed: int):
@@ -63,40 +84,33 @@ def file_lock(file_path, timeout=5):
     if lock_dir and not os.path.exists(lock_dir):
         os.makedirs(lock_dir, exist_ok=True)
     
-    try:
-        # Try to acquire lock (works on both Windows and Unix)
+    def _acquire_and_yield(lock_file):
         lock_fd = os.open(lock_file, os.O_CREAT | os.O_EXCL | os.O_RDWR)
+        _active_lock_files.add(lock_file)
         try:
             # Write PID to lock file for debugging
             os.write(lock_fd, str(os.getpid()).encode())
             yield True
         finally:
             os.close(lock_fd)
+            _active_lock_files.discard(lock_file)
             try:
                 os.unlink(lock_file)
             except FileNotFoundError:
                 pass
-                
+
+    try:
+        yield from _acquire_and_yield(lock_file)
     except FileExistsError:
         # Lock file exists, wait with timeout
         start_time = time.time()
         while time.time() - start_time < timeout:
             try:
-                # Try to acquire lock again
-                lock_fd = os.open(lock_file, os.O_CREAT | os.O_EXCL | os.O_RDWR)
-                try:
-                    os.write(lock_fd, str(os.getpid()).encode())
-                    yield True
-                    return
-                finally:
-                    os.close(lock_fd)
-                    try:
-                        os.unlink(lock_file)
-                    except FileNotFoundError:
-                        pass
+                yield from _acquire_and_yield(lock_file)
+                return
             except FileExistsError:
                 time.sleep(0.1)  # Wait a bit before retrying
-                
+
         # Timeout reached
         print(f"⏰ Could not acquire lock for {file_path} within {timeout}s - skipping")
         yield None
