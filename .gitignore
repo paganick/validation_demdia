@@ -29,6 +29,9 @@ transform_personas_llm.py
 transform_personas.py
 
 
+# Large binary/container files
+*.sif
+
 # Byte-compiled / cache files
 __pycache__/
 *.py[cod]
