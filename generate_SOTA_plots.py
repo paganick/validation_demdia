@@ -9,6 +9,8 @@ Generates:
 """
 
 import os
+import sys
+import argparse
 import json
 import numpy as np
 import pandas as pd
@@ -28,16 +30,11 @@ from plotting_utils import (
 )
 
 # === Configuration ===
-DATASETS = ['results_validation/results_bluesky', 'results_validation/results_twitter', 'results_validation/results_reddit']
-OUTPUT_DIR = "SOTA_figures_validation"
+DATASETS = ['results_cleaned_20260309_095640/bluesky']
+OUTPUT_DIR = "results_revision/SOTA_figures"
 PRESENTATION_MODE = False
 SAVE_FORMAT = 'png'
-
-# Create output directory
-Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
-
-# Normalize dataset names for consistent matching
-NORMALIZED_DATASETS = [normalize_dataset_name(d) for d in DATASETS]
+NORMALIZED_DATASETS = []  # populated in main()
 
 # === Figure 1: Best Model Performance by Dataset ===
 def generate_best_model_performance(response_type="random", metric="accuracy"):
@@ -593,6 +590,26 @@ def generate_aggregated_feature_frequency():
 # === Main Execution ===
 def main():
     """Main function to generate all 4 required figures."""
+    global DATASETS, NORMALIZED_DATASETS, OUTPUT_DIR
+
+    parser = argparse.ArgumentParser(description="Generate SOTA figures from results folder.")
+    parser.add_argument("results_folder", nargs="?", default=None,
+                        help="Base results folder (e.g. results_2026_03_17). "
+                             "Platform subfolders (bluesky, reddit, twitter) are detected automatically.")
+    args = parser.parse_args()
+
+    if args.results_folder is not None:
+        base = Path(args.results_folder)
+        found = sorted([str(p) for p in base.iterdir() if p.is_dir() and not p.name.endswith('_figures')])
+        if not found:
+            print(f"Error: no subdirectories found in {base}", file=sys.stderr)
+            sys.exit(1)
+        DATASETS = found
+        NORMALIZED_DATASETS = [normalize_dataset_name(d) for d in DATASETS]
+        OUTPUT_DIR = str(base / "SOTA_figures")
+
+    Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
+
     print("=" * 60)
     print("Unified Figure Generation Script")
     print("=" * 60)
