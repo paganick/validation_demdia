@@ -14,6 +14,8 @@ Also saves best configuration details to CSV.
 """
 
 import os
+import sys
+import argparse
 import json
 import numpy as np
 import pandas as pd
@@ -32,16 +34,11 @@ from plotting_utils import (
 )
 
 # === Configuration ===
-DATASETS = ['results_validation/results_bluesky', 'results_validation/results_twitter', 'results_validation/results_reddit']
-OUTPUT_DIR = "configuration_optimization_figures_validation"
+DATASETS = ['results_cleaned_20260309_095640/bluesky']
+OUTPUT_DIR = "results_revision/configuration_optimization_figures"
 PRESENTATION_MODE = False
 SAVE_FORMAT = 'png'
-
-# Create output directory
-Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
-
-# Normalize dataset names
-NORMALIZED_DATASETS = [normalize_dataset_name(d) for d in DATASETS]
+NORMALIZED_DATASETS = []  # populated in main()
 
 # === Data Loading ===
 def load_configuration_data(folder_paths):
@@ -688,13 +685,13 @@ def plot_response_overlap_summary(df_overlap):
 def plot_configuration_consistency_with_baseline(df, metric="accuracy"):
     """Compare baseline and best config across response types."""
     print(f"\n=== Generating Figure 4: Configuration Consistency ===")
-    
+
     mean_col = f"{metric}_mean"
     std_col = f"{metric}_std"
-    
+
     random_subset = df[df["response_type"] == "random"].copy()
     best_configs_map = {}
-    
+
     for (model, dataset), group in random_subset.groupby(['model', 'dataset']):
         best_idx = group[mean_col].idxmin()
         best_row = group.loc[best_idx]
@@ -1203,12 +1200,12 @@ def load_empath_feature_data(folder_paths, df_best_configs, response_type='rando
                     # Match only relevant response type
                     if response_type == "random" and "random_validation" not in file:
                         continue
-                    
+
                     filepath = os.path.join(root, file)
-                    
+
                     try:
                         file_model, file_ft, file_context, file_style, file_persona = parse_filename(file)
-                        
+
                         # Check if this file matches the optimal configuration
                         if (file_model == model and
                             file_ft == expected_config['ft'] and
@@ -1216,11 +1213,11 @@ def load_empath_feature_data(folder_paths, df_best_configs, response_type='rando
                             file_style == expected_config['style'] and
 
                             file_persona == expected_config['persona']):
-                            
+
                             # Load and process the file
                             df = pd.read_csv(filepath)
                             sig_features = df[df["adjusted_p_value"] < 0.05]["feature"].tolist()
-                            
+
                             # Count each significant feature by model
                             for feature in sig_features:
                                 clean_feature = feature.replace("_", " ")
@@ -1229,12 +1226,12 @@ def load_empath_feature_data(folder_paths, df_best_configs, response_type='rando
                                 if model not in feature_model_counts[clean_feature]:
                                     feature_model_counts[clean_feature][model] = 0
                                 feature_model_counts[clean_feature][model] += 1
-                            
+
                             print(f"  Loaded: {model} - {config_row['best_config_short']}")
-                            
+
                     except Exception as e:
                         continue
-    
+
     if not feature_model_counts:
         print("  No Empath feature data found!")
         return None
@@ -1284,7 +1281,7 @@ def plot_empath_feature_frequency(folder_paths, df_best_configs, response_type='
                 for file in files:
                     if not file.endswith("empath_significant_features.csv"):
                         continue
-                    
+
                     # Match only relevant response type
                     if response_type == "random" and "random_validation" not in file:
                         continue
@@ -1457,7 +1454,7 @@ def load_feature_importance_data(folder_paths, df_best_configs, response_type='r
                 for file in files:
                     if not file.endswith("feature_correlation_stats.csv"):
                         continue
-                    
+
                     # Match only relevant response type
                     if response_type == "random" and "random_validation" not in file:
                         continue
@@ -1699,6 +1696,26 @@ def plot_feature_importance_heatmap(df, max_features=10):
 # === Main Execution ===
 def main():
     """Main function to generate configuration optimization figures."""
+    global DATASETS, NORMALIZED_DATASETS, OUTPUT_DIR
+
+    parser = argparse.ArgumentParser(description="Generate configuration optimization figures from results folder.")
+    parser.add_argument("results_folder", nargs="?", default=None,
+                        help="Base results folder (e.g. results_2026_03_17). "
+                             "Platform subfolders (bluesky, reddit, twitter) are detected automatically.")
+    args = parser.parse_args()
+
+    if args.results_folder is not None:
+        base = Path(args.results_folder)
+        found = sorted([str(p) for p in base.iterdir() if p.is_dir() and not p.name.endswith('_figures')])
+        if not found:
+            print(f"Error: no subdirectories found in {base}", file=sys.stderr)
+            sys.exit(1)
+        DATASETS = found
+        NORMALIZED_DATASETS = [normalize_dataset_name(d) for d in DATASETS]
+        OUTPUT_DIR = str(base / "configuration_optimization_figures")
+
+    Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
+
     print("=" * 60)
     print("Configuration Optimization Analysis")
     print("=" * 60)
@@ -1717,36 +1734,36 @@ def main():
     
     # Save best configurations
     df_best_configs = save_best_configurations(df, response_type="random", metric="accuracy")
-    
+
     if df_best_configs is None:
         print("Could not determine best configurations!")
         return
-    
+
     # Generate accuracy-based figures
     plot_sota_vs_best_performance(df, response_type="random", metric="accuracy")
     plot_intervention_steps_aggregated(df, response_type="random", metric="accuracy")
-    
+
     # Analyze and plot response overlap
     df_overlap = analyze_response_overlap(DATASETS)
     if df_overlap is not None:
         plot_response_overlap_summary(df_overlap)
-    
+
     # Plot configuration consistency
     plot_configuration_consistency_with_baseline(df, metric="accuracy")
-    
+
     # Load cosine similarity data
     similarity_data = load_cosine_similarities_by_response_type(DATASETS)
-    
+
     # Generate cosine similarity figures
     if similarity_data['random'] is not None and not similarity_data['random'].empty:
         plot_cosine_similarity_boxplot(similarity_data, df_best_configs)
         plot_cosine_similarity_boxplot_all_methods(similarity_data, df_best_configs)
-    
+
     # Generate Empath feature frequency plot
     feature_model_counts = load_empath_feature_data(DATASETS, df_best_configs, response_type='random')
     if feature_model_counts:
         plot_empath_feature_frequency(DATASETS, df_best_configs, top_n=20)
-    
+
     # Generate feature importance heatmap
     df_importance = load_feature_importance_data(DATASETS, df_best_configs, response_type='random')
     if df_importance is not None:

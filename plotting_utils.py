@@ -39,7 +39,10 @@ DATASET_PALETTE = {
     'Twitter/X': '#000000',         # Black for Twitter/X
     'Twitter': '#000000',                 # Black for Twitter/X
     'X': '#000000',                 # Black for Twitter/X
-    'Reddit': '#FF4500'              # Reddit orange
+    'Reddit': '#FF4500',             # Reddit orange
+    'bluesky': '#1E88E5',           # lowercase platform names (e.g. results_cleaned_.../bluesky)
+    'twitter': '#000000',
+    'reddit': '#FF4500',
 }
 
 # === Dataset Name Normalization ===
