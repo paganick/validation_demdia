@@ -88,8 +88,10 @@ class Validator:
             random_seeds = [42, 123, 456][:n_runs]
         
         print(f"Running {n_runs} training runs with seeds: {random_seeds}")
-        
-        os.makedirs("./BERT_models", exist_ok=True)
+
+        scratch_dir = os.environ.get("SCRATCH", f"/scratch/{os.environ.get('USER', 'nicpag')}")
+        bert_models_dir = os.path.join(scratch_dir, "BERT_models")
+        os.makedirs(bert_models_dir, exist_ok=True)
         
         # Check dataset characteristics
         dataset_size = len(df)
@@ -139,7 +141,7 @@ class Validator:
             slurm_task_id = os.environ.get('SLURM_ARRAY_TASK_ID', '')
             slurm_suffix = f"_job{slurm_job_id}_task{slurm_task_id}" if slurm_job_id else ""
 
-            output_dir = f"./BERT_models/run_{run_idx}_{timestamp}_{pid}_{unique_id}{slurm_suffix}"
+            output_dir = os.path.join(bert_models_dir, f"run_{run_idx}_{timestamp}_{pid}_{unique_id}{slurm_suffix}")
 
             print(f"Output directory: {output_dir}")       
 
