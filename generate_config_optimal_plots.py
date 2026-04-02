@@ -1745,7 +1745,102 @@ def plot_feature_importance_heatmap(df, max_features=10):
         
         print(f"  Saved to: {output_path}")
 
-# === Figure 9: Raw Feature Bias — best-config (AI vs Human) ===
+# === Figure 9: Feature Importance by Model (heatmap, averaged across platforms) ===
+def generate_feature_importance_by_model_best_config(df_best_configs):
+    """
+    Heatmap: rows = models, columns = features sorted by mean importance.
+    Values averaged across platforms for each model's best configuration.
+    Highlights per-model outliers.
+    """
+    print(f"\n=== Generating Figure 9: Feature Importance by Model (heatmap) ===")
+
+    rows = []
+    for dataset in DATASETS:
+        pname = normalize_dataset_name(dataset)
+        pdata_configs = df_best_configs[df_best_configs['dataset'] == pname]
+        if pdata_configs.empty:
+            continue
+
+        for _, cfg_row in pdata_configs.iterrows():
+            model = cfg_row['model']
+            expected = {
+                'ft':      int(cfg_row['has_finetuning']),
+                'context': int(cfg_row['has_context']),
+                'style':   int(cfg_row['has_style']),
+                'persona': int(cfg_row['has_persona']),
+            }
+            pattern = str(Path(dataset) / '**' / '*feature_correlation_stats.csv')
+            for fpath in glob.glob(pattern, recursive=True):
+                if 'random_validation' not in fpath:
+                    continue
+                try:
+                    fmodel, fft, fctx, fstyle, fpersona = parse_filename(fpath)
+                    if (fmodel == model
+                            and fft      == expected['ft']
+                            and fctx     == expected['context']
+                            and fstyle   == expected['style']
+                            and fpersona == expected['persona']):
+                        df_imp = pd.read_csv(fpath)
+                        if 'feature' in df_imp.columns and 'importance' in df_imp.columns:
+                            df_imp['model']    = model
+                            df_imp['platform'] = pname
+                            rows.append(df_imp[['model', 'platform', 'feature', 'importance']])
+                except Exception:
+                    continue
+
+    if not rows:
+        print("  No data found.")
+        return
+
+    combined = pd.concat(rows, ignore_index=True)
+    pivot = (combined.groupby(['model', 'feature'])['importance']
+                     .mean()
+                     .unstack(fill_value=0))
+
+    feat_order  = pivot.mean(axis=0).sort_values(ascending=False).index.tolist()
+    model_order = get_ordered_models(pivot.index.tolist())
+    pivot = pivot.loc[model_order, feat_order]
+
+    stats_path = os.path.join(OUTPUT_DIR, 'config_feature_importance_by_model.csv')
+    pivot.reset_index().to_csv(stats_path, index=False)
+    print(f"  Stats saved to: {stats_path}")
+
+    feat_labels = [f.replace('_', ' ') for f in feat_order]
+
+    with with_plot_style(PRESENTATION_MODE):
+        fig, ax = plt.subplots(figsize=(max(14, len(feat_order) * 0.7), len(model_order) * 0.7 + 1.5))
+
+        im = ax.imshow(pivot.values, aspect='auto', cmap='YlOrRd',
+                       vmin=0, vmax=pivot.values.max())
+
+        ax.set_xticks(range(len(feat_order)))
+        ax.set_xticklabels(feat_labels, rotation=45, ha='right', fontsize=10)
+        ax.set_yticks(range(len(model_order)))
+        ax.set_yticklabels(model_order, fontsize=11)
+
+        for tick, model in zip(ax.get_yticklabels(), model_order):
+            tick.set_color(MODEL_PALETTE.get(model, '#000000'))
+
+        for r, model in enumerate(model_order):
+            for c, feat in enumerate(feat_order):
+                val = pivot.loc[model, feat]
+                text_color = 'white' if val > pivot.values.max() * 0.65 else 'black'
+                ax.text(c, r, f'{val:.3f}', ha='center', va='center',
+                        fontsize=7, color=text_color)
+
+        cbar = fig.colorbar(im, ax=ax, pad=0.01, fraction=0.02)
+        cbar.set_label('Mean RF Importance\n(avg across platforms)', fontsize=10)
+        ax.set_title('Feature Importance by Model (best config, averaged across platforms)',
+                     fontsize=13, pad=10)
+        plt.tight_layout()
+
+        output_path = os.path.join(OUTPUT_DIR, f'config_feature_importance_by_model.{SAVE_FORMAT}')
+        fig.savefig(output_path, dpi=300, bbox_inches='tight', transparent=PRESENTATION_MODE)
+        plt.close(fig)
+        print(f"  Saved to: {output_path}")
+
+
+# === Figure 11: Raw Feature Bias — best-config (AI vs Human) ===
 def generate_feature_bias_best_config(df_best_configs, top_n: int = 5):
     """
     3 rows (platforms) × top_n columns (features).
@@ -1918,7 +2013,7 @@ def generate_feature_bias_best_config(df_best_configs, top_n: int = 5):
         print(f"  Saved to: {output_path}")
 
 
-# === Figure 10: Feature Bias (best-config AI − human median) ===
+# === Figure 12: Feature Bias (best-config AI − human median) ===
 def generate_feature_bias_diff_best_config(df_best_configs, top_n: int = 5):
     """
     Same layout as generate_feature_bias_diff() in generate_SOTA_plots.py but uses
@@ -2179,6 +2274,9 @@ def main():
     df_importance = load_feature_importance_data(DATASETS, df_best_configs, response_type='random')
     if df_importance is not None:
         plot_feature_importance_heatmap(df_importance, max_features=10)
+
+    # Generate feature importance by model heatmap (best-config)
+    generate_feature_importance_by_model_best_config(df_best_configs)
 
     # Generate feature bias plots (best-config)
     generate_feature_bias_best_config(df_best_configs, top_n=5)
