@@ -116,7 +116,7 @@ def file_lock(file_path, timeout=5):
         yield None
 
 
-def run_simulation_random_response(config, dataset, posts_file, personas_file=None, n_users=1000, n_responses_per_user=1, output_path=None, seed=42, batch_users=None):
+def run_simulation_random_response(config, dataset, posts_file, personas_file=None, n_users=1000, n_responses_per_user=1, output_path=None, seed=42, batch_users=None, fill_incomplete=False):
     """
     Version with file locking held during the entire simulation run.
 
@@ -141,13 +141,13 @@ def run_simulation_random_response(config, dataset, posts_file, personas_file=No
                 return []
 
             # All reading/writing MUST happen under the lock
-            return _run_simulation_with_lock(config, dataset, posts_file, personas_file, n_users, n_responses_per_user, output_path, seed, batch_users)
+            return _run_simulation_with_lock(config, dataset, posts_file, personas_file, n_users, n_responses_per_user, output_path, seed, batch_users, fill_incomplete)
     else:
-        return _run_simulation_with_lock(config, dataset, posts_file, personas_file, n_users, n_responses_per_user, output_path, seed, batch_users)
+        return _run_simulation_with_lock(config, dataset, posts_file, personas_file, n_users, n_responses_per_user, output_path, seed, batch_users, fill_incomplete)
 
 
 
-def _run_simulation_with_lock(config, dataset, posts_file, personas_file, n_users, n_responses_per_user, output_path, seed=42, batch_users=None):
+def _run_simulation_with_lock(config, dataset, posts_file, personas_file, n_users, n_responses_per_user, output_path, seed=42, batch_users=None, fill_incomplete=False):
     """
     Internal function that runs the actual simulation logic.
     This is separated so the lock context manager can wrap the entire operation.
@@ -173,22 +173,56 @@ def _run_simulation_with_lock(config, dataset, posts_file, personas_file, n_user
     results = []
     existing_predictions = set()
 
+    # Number of valid candidate responses expected per sample.
+    # Entries with fewer than this are treated as incomplete and regenerated.
+    _N_CANDIDATES = 20
+
     # Return cached results if already exists
     if output_path and os.path.exists(output_path):
         print(f"[CACHE] Loading cached results from {output_path}")
         try:
             with open(output_path, encoding="utf-8") as f:
                 existing_results = json.load(f)
-                results.extend(existing_results)
-                existing_predictions = {
-                    (row["user"], row["original_message"], row["reply_to"], row["model"], row["fine_tuned"],
-                    row["retrieve_context"], row["n_style_examples"], row.get("persona", True))
-                    for row in existing_results
-                }
-                print(f"📚 [DEBUG] Loaded {len(existing_results)} existing results")
-                print(f"🔍 [DEBUG] Created {len(existing_predictions)} prediction keys for deduplication")
+
+            def _pred_key(row):
+                return (row["user"], row["original_message"], row["reply_to"], row["model"],
+                        row["fine_tuned"], row["retrieve_context"], row["n_style_examples"],
+                        row.get("persona", True))
+
+            # fill_incomplete=True: drop entries with < _N_CANDIDATES valid responses
+            # so they get regenerated (used for deliberate fill-in runs).
+            # fill_incomplete=False (default): treat every existing entry as done —
+            # a sample is only re-attempted if it has no entry at all.
+            if fill_incomplete:
+                complete_results = [
+                    row for row in existing_results
+                    if len(row.get("all_valid_responses", [])) >= _N_CANDIDATES
+                ]
+                partial_results = [
+                    row for row in existing_results
+                    if len(row.get("all_valid_responses", [])) < _N_CANDIDATES
+                ]
+                if partial_results:
+                    print(f"⚠️  [DEBUG] Dropping {len(partial_results)} partial entries "
+                          f"(<{_N_CANDIDATES} valid responses) — will regenerate")
+            else:
+                complete_results = existing_results
+                partial_results = []
+
+            results.extend(complete_results)
+            existing_predictions = {_pred_key(row) for row in complete_results}
+            print(f"📚 [DEBUG] Loaded {len(existing_results)} existing results "
+                  f"({len(complete_results)} complete, {len(partial_results)} partial dropped)")
+            print(f"🔍 [DEBUG] Created {len(existing_predictions)} prediction keys for deduplication")
         except json.JSONDecodeError:
             print(f"[WARNING] Cache file {output_path} is empty or invalid JSON. Starting fresh.")
+
+    # Build set of users that already have all required responses — skip them entirely.
+    from collections import Counter as _Counter
+    _user_entry_counts = _Counter(r.get("user", "") for r in results)
+    completed_users = {u for u, cnt in _user_entry_counts.items() if cnt >= n_responses_per_user}
+    if completed_users:
+        print(f"✅ [DEBUG] {len(completed_users)} users already have {n_responses_per_user} entries — will skip", flush=True)
 
     # Ensure output directory exists before saving
     if output_path:
@@ -247,7 +281,11 @@ def _run_simulation_with_lock(config, dataset, posts_file, personas_file, n_user
     
     for user_idx, (username, user_df) in enumerate(df_test.groupby("username"), 1):
         print(f"\n👤 [DEBUG] Processing user {user_idx}/{total_users}: {username} ({len(user_df)} samples)")
-        
+
+        if username in completed_users:
+            print(f"⏭️  [DEBUG] Skipping {username}: already has {_user_entry_counts[username]}/{n_responses_per_user} entries", flush=True)
+            continue
+
         try:
             agent = Agent(username, dataset, posts_file, personas_file)
             print(f"🤖 [DEBUG] Created agent for user {username}")
@@ -295,12 +333,12 @@ def _run_simulation_with_lock(config, dataset, posts_file, personas_file, n_user
                     print(f"❌ [DEBUG] Failed to load model: {e}")
                     return results
 
-            # Generate responses (returns a list of valid responses)
+            # Generate responses (returns valid responses + all rejected ones)
             # Use a unique seed per user+sample combination for reproducibility
             sample_seed = seed + user_idx * 1000 + i
             print(f"🎯 [DEBUG] Generating response with {config['n_style_examples']} style examples, persona={config['persona']}, seed={sample_seed}...")
             try:
-                responses = agent.generate_response(
+                responses, rejected = agent.generate_response(
                     llm=model,
                     n_examples=config["n_style_examples"],
                     retrieve_context_bool=config["retrieve_context"],
@@ -310,10 +348,24 @@ def _run_simulation_with_lock(config, dataset, posts_file, personas_file, n_user
                     n_candidates=20,
                     seed=sample_seed
                 )
-                print(f"📝 [DEBUG] Generated {len(responses) if responses else 0} valid responses")
+                print(f"📝 [DEBUG] Generated {len(responses) if responses else 0} valid responses, {len(rejected)} rejected")
                 # Clear CUDA cache after generation
                 torch.cuda.empty_cache()
-                
+
+                # Append rejected responses to sidecar JSONL (one line per sample)
+                if rejected and output_path:
+                    rejected_path = output_path.replace(".json", ".rejected.jsonl")
+                    rejected_record = {
+                        "user": username,
+                        "reply_to": reply_to,
+                        "original_message": original_message,
+                        "sample_seed": sample_seed,
+                        "n_valid": len(responses),
+                        "rejected": rejected,
+                    }
+                    with open(rejected_path, "a", encoding="utf-8") as rf:
+                        rf.write(json.dumps(rejected_record, ensure_ascii=False) + "\n")
+
             except Exception as e:
                 print(f"❌ [DEBUG] Error generating response for {username}: {e}")
                 torch.cuda.empty_cache()  # Also clear on error
