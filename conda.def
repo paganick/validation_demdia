@@ -1,6 +1,11 @@
 Bootstrap: docker
 From: continuumio/miniconda3
 
+%setup
+    mkdir -p "${SINGULARITY_ROOTFS}/apps"
+    mkdir -p "${SINGULARITY_ROOTFS}/scratch"
+    mkdir -p "${SINGULARITY_ROOTFS}/shares"
+
 %post
     # Create conda environment with Python 3.10
     conda create -n venv python=3.10 -y
