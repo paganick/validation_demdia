@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """
-Unified script to generate 4 specific figures from research data.
+Unified script to generate figures from research data.
 Generates:
 1. Best model performance by dataset (accuracy)
-2. First response similarity by dataset
-3. ML explainability heatmap
-4. Aggregated feature frequency by model
+2. First response similarity by dataset (one boxplot per platform)
+3. Cosine similarity by model and platform (3 rows × N models)
+4. ML explainability heatmap
+5. Aggregated feature frequency by model
+6. Raw feature bias: AI vs human distributions (top 5 features per platform)
+7. Feature bias as AI − human median (top 5 features per platform)
 """
 
 import os
@@ -19,8 +22,19 @@ import seaborn as sns
 from pathlib import Path
 import glob
 from matplotlib.patches import Patch, Rectangle
+import matplotlib.patches as mpatches
 import warnings
 warnings.filterwarnings('ignore')
+
+def _save_stats(df, groupby_cols, value_cols, output_path):
+    """Save summary statistics (count, mean, std, median, Q1, Q3) for a figure's data."""
+    if isinstance(value_cols, str):
+        value_cols = [value_cols]
+    agg = df.groupby(groupby_cols)[value_cols].describe(percentiles=[.25, .5, .75])
+    agg.columns = ['_'.join(c).strip('_') for c in agg.columns]
+    agg = agg.reset_index()
+    agg.to_csv(output_path, index=False)
+    print(f"  Stats saved to: {output_path}")
 
 # Import custom utilities
 from plotting_utils import (
@@ -28,6 +42,9 @@ from plotting_utils import (
     get_ordered_models, format_dataset_name, with_plot_style,
     filter_for_baseline_persona, normalize_dataset_name, get_dataset_color
 )
+
+HUMAN_COLOR = '#888888'
+HUMAN_LABEL = 'Human'
 
 # === Configuration ===
 DATASETS = ['results_cleaned_20260309_095640/bluesky']
@@ -174,6 +191,9 @@ def generate_best_model_performance(response_type="random", metric="accuracy"):
         ax.grid(True, alpha=0.3, axis='y')
         ax.set_axisbelow(True)
         
+        stats_path = os.path.join(OUTPUT_DIR, f'SOTA_accuracy_stats.csv')
+        best_performances.to_csv(stats_path, index=False)
+        print(f"  Stats saved to: {stats_path}")
         plt.tight_layout()
         output_path = os.path.join(OUTPUT_DIR, f'SOTA_accuracy.{SAVE_FORMAT}')
         fig.savefig(output_path, dpi=600, bbox_inches='tight', transparent=PRESENTATION_MODE)
@@ -286,13 +306,140 @@ def generate_first_response_similarity():
         ax.set_ylabel("Cosine Similarity", fontsize=20)
         ax.grid(True, alpha=0.3, axis='y')
         
+        stats_path = os.path.join(OUTPUT_DIR, f'SOTA_cosine_similarity_stats.csv')
+        _save_stats(df, ['dataset'], 'similarity', stats_path)
         plt.tight_layout()
         output_path = os.path.join(OUTPUT_DIR, f'SOTA_cosine_similarity.{SAVE_FORMAT}')
         plt.savefig(output_path, dpi=600, bbox_inches="tight", transparent=PRESENTATION_MODE)
         plt.close()
         print(f"  Saved to: {output_path}")
 
-# === Figure 3: ML Explainability Heatmap ===
+# === Figure 3: Cosine Similarity by Model and Platform ===
+def generate_cosine_similarity_by_model():
+    """
+    3-row figure (one per platform). Each row shows one boxplot per LLM,
+    colored by model name. A single shared x-axis label appears at the bottom.
+    """
+    print("\n=== Generating Figure 3: Cosine Similarity by Model and Platform ===")
+
+    rows = []
+
+    for dataset in DATASETS:
+        dataset_path = Path(dataset)
+        if not dataset_path.exists():
+            print(f"Warning: {dataset_path} does not exist, skipping...")
+            continue
+
+        print(f"Processing {dataset}...")
+
+        response_files = list(dataset_path.rglob("*_optimal_response.json"))
+        filtered_files = [f for f in response_files
+                          if '__noft__ctx0__style0__optimal_response.json' in str(f)]
+
+        print(f"  Found {len(filtered_files)} matching files")
+
+        for file_path in filtered_files:
+            try:
+                model = os.path.basename(str(file_path)).split('__')[0]
+
+                with open(file_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+
+                entries = data if isinstance(data, list) else [data]
+
+                for entry in entries:
+                    if not isinstance(entry, dict):
+                        continue
+                    for key in ['all_valid_responses', 'valid_responses', 'responses']:
+                        if key in entry and entry[key]:
+                            first = entry[key][0]
+                            if isinstance(first, dict):
+                                sim = first.get("cosine_similarity") or first.get("similarity")
+                                if sim is not None:
+                                    rows.append({
+                                        "dataset": normalize_dataset_name(dataset),
+                                        "model": model,
+                                        "similarity": sim,
+                                    })
+                            break
+
+            except Exception as e:
+                print(f"  Error processing {file_path.name}: {e}")
+
+    if not rows:
+        print("No data found for cosine similarity by model plot!")
+        return
+
+    df = pd.DataFrame(rows)
+    datasets = NORMALIZED_DATASETS
+    model_order = get_ordered_models(df['model'].unique())
+
+    with with_plot_style(PRESENTATION_MODE):
+        fig, axes = plt.subplots(
+            len(datasets), 1,
+            figsize=(14, 5 * len(datasets)),
+            sharex=True,
+        )
+        if len(datasets) == 1:
+            axes = [axes]
+
+        for row_idx, (ax, dataset) in enumerate(zip(axes, datasets)):
+            plot_data = [
+                df[(df['dataset'] == dataset) & (df['model'] == m)]['similarity'].values
+                for m in model_order
+            ]
+            colors = [MODEL_PALETTE.get(m, '#888888') for m in model_order]
+
+            bp = ax.boxplot(
+                plot_data,
+                positions=range(len(model_order)),
+                widths=0.55,
+                patch_artist=True,
+                showfliers=True,
+                medianprops=dict(color='black', linewidth=2),
+                flierprops=dict(marker='o', markersize=3, alpha=0.4),
+            )
+
+            for patch, color in zip(bp['boxes'], colors):
+                patch.set_facecolor(color)
+                patch.set_alpha(0.75)
+
+            for i, color in enumerate(colors):
+                for j in [i * 2, i * 2 + 1]:
+                    bp['whiskers'][j].set_color(color)
+                    bp['caps'][j].set_color(color)
+
+            ax.axhline(y=0, color='gray', linestyle='--', linewidth=1, alpha=0.5)
+            ax.set_ylim([-1, 1])
+            ax.set_ylabel("Cosine Similarity", fontsize=14)
+            ax.tick_params(axis='y', labelsize=13)
+            ax.grid(True, alpha=0.3, axis='y')
+
+            # Platform label on the right
+            dataset_color = get_dataset_color(dataset)
+            ax.set_title(format_dataset_name(dataset), fontsize=15, loc='right',
+                         color=dataset_color, pad=6)
+
+            # x-tick labels only on the bottom row
+            ax.set_xticks(range(len(model_order)))
+            if row_idx == len(datasets) - 1:
+                ax.set_xticklabels(model_order, rotation=45, ha='right', fontsize=13)
+                for tick, model in zip(ax.get_xticklabels(), model_order):
+                    tick.set_color(MODEL_PALETTE.get(model, '#000000'))
+            else:
+                ax.set_xticklabels([])
+
+        stats_path = os.path.join(OUTPUT_DIR, f'SOTA_cosine_similarity_by_model_stats.csv')
+        _save_stats(df, ['dataset', 'model'], 'similarity', stats_path)
+        plt.tight_layout()
+        output_path = os.path.join(OUTPUT_DIR, f'SOTA_cosine_similarity_by_model.{SAVE_FORMAT}')
+        fig.savefig(output_path, dpi=600, bbox_inches='tight', transparent=PRESENTATION_MODE)
+        plt.close(fig)
+        print(f"  Saved to: {output_path}")
+
+
+# === Figure 4: ML Explainability Heatmap ===
+
 def generate_ml_explainability_heatmap():
     """Generate ML explainability feature importance heatmap."""
     print("\n=== Generating Figure 3: ML Explainability Heatmap ===")
@@ -455,12 +602,17 @@ def generate_ml_explainability_heatmap():
             dataset_name = format_dataset_name(dataset)
             ax.set_title(dataset_name, fontsize=14, pad=10, color=get_dataset_color(dataset))
         
+        stats_path = os.path.join(OUTPUT_DIR, f'SOTA_ML_stats.csv')
+        ml_stats = combined_df.groupby(['dataset', 'model', 'feature'])['importance'].mean().reset_index()
+        ml_stats = ml_stats.rename(columns={'importance': 'mean_importance'})
+        ml_stats.to_csv(stats_path, index=False)
+        print(f"  Stats saved to: {stats_path}")
         # Add colorbar
         fig.subplots_adjust(right=0.92)
         cbar_ax = fig.add_axes([0.93, 0.15, 0.02, 0.7])
         cbar = fig.colorbar(im, cax=cbar_ax)
         cbar.set_label('Feature Importance', fontsize=12)
-        
+
         output_path = os.path.join(OUTPUT_DIR, f'SOTA_ML.{SAVE_FORMAT}')
         plt.savefig(output_path, dpi=600, bbox_inches='tight', transparent=PRESENTATION_MODE)
         plt.close()
@@ -579,15 +731,265 @@ def generate_aggregated_feature_frequency():
         fig.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 0.1), 
                   ncol=min(len(ordered_models), 3), fontsize=10)
         
+        empath_rows = []
+        for data_item in all_data:
+            for feat, model_counts in data_item['model_counts'].items():
+                for mdl, cnt in model_counts.items():
+                    empath_rows.append({'dataset': data_item['dataset'], 'feature': feat, 'model': mdl, 'count': cnt})
+        if empath_rows:
+            stats_path = os.path.join(OUTPUT_DIR, f'SOTA_empath_stats.csv')
+            pd.DataFrame(empath_rows).to_csv(stats_path, index=False)
+            print(f"  Stats saved to: {stats_path}")
         plt.tight_layout()
         plt.subplots_adjust(top=0.85, bottom=0.2)
-        
+
         output_path = os.path.join(OUTPUT_DIR, f'SOTA_empath.{SAVE_FORMAT}')
         plt.savefig(output_path, dpi=600, transparent=PRESENTATION_MODE, bbox_inches='tight')
         plt.close()
         print(f"  Saved to: {output_path}")
 
 # === Main Execution ===
+# === Feature bias helpers ===
+
+def _get_top_features(dataset_path: Path, top_n: int = 5) -> list:
+    """Return top-N features ranked by mean RF importance across SOTA-config models."""
+    files = glob.glob(str(dataset_path / '**' / '*feature_correlation_stats.csv'), recursive=True)
+    files = [f for f in files if filter_for_baseline_persona(f)]
+    dfs = []
+    for fpath in files:
+        try:
+            df = pd.read_csv(fpath)
+            if 'feature' in df.columns and 'importance' in df.columns:
+                dfs.append(df[['feature', 'importance']])
+        except Exception:
+            continue
+    if not dfs:
+        return []
+    combined = pd.concat(dfs, ignore_index=True)
+    return (combined.groupby('feature')['importance']
+                    .mean()
+                    .sort_values(ascending=False)
+                    .head(top_n)
+                    .index.tolist())
+
+
+def _load_feature_distributions(dataset_path: Path) -> dict:
+    """Load raw feature values + label (0=AI, 1=human) for each SOTA-config model."""
+    label_files = glob.glob(str(dataset_path / '**' / '*_random_validation_data.csv'), recursive=True)
+    label_files = [f for f in label_files if filter_for_baseline_persona(f) and '_features' not in f]
+    model_data = {}
+    for lpath in label_files:
+        try:
+            model, ft, context, style, persona = parse_filename(lpath)
+            if model is None:
+                continue
+            feat_path = lpath.replace('_random_validation_data.csv', '_random_validation_data_features.csv')
+            if not os.path.exists(feat_path):
+                continue
+            labels_df = pd.read_csv(lpath)
+            feats_df  = pd.read_csv(feat_path)
+            if len(labels_df) != len(feats_df):
+                continue
+            feats_df['label'] = labels_df['labels'].values
+            model_data[model] = feats_df
+        except Exception:
+            continue
+    return model_data
+
+
+# === Figure 6: Raw Feature Bias (AI vs Human) ===
+def generate_feature_bias(top_n: int = 5):
+    """
+    3 rows (platforms) × top_n columns (features).
+    Each subplot: one boxplot per model (MODEL_PALETTE) + one Human boxplot (gray).
+    """
+    print(f"\n=== Generating Figure 6: Raw Feature Bias (AI vs Human) ===")
+
+    platform_features = {}
+    platform_data     = {}
+
+    for dataset in DATASETS:
+        pname = normalize_dataset_name(dataset)
+        top_feats  = _get_top_features(Path(dataset), top_n)
+        model_data = _load_feature_distributions(Path(dataset))
+        if not top_feats or not model_data:
+            print(f"  Skipping {pname}: missing data")
+            continue
+        print(f"  {pname}: top features = {top_feats}")
+        platform_features[pname] = top_feats
+        platform_data[pname]     = model_data
+
+    if not platform_data:
+        print("  No data found.")
+        return
+
+    pnames      = list(platform_data.keys())
+    model_order = get_ordered_models({m for pd_ in platform_data.values() for m in pd_})
+    x_labels    = model_order + [HUMAN_LABEL]
+    x_positions = list(range(len(x_labels)))
+    n_rows, n_cols = len(pnames), top_n
+
+    with with_plot_style(PRESENTATION_MODE):
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(3.5 * n_cols, 4 * n_rows), sharey=False)
+        if n_rows == 1: axes = axes[np.newaxis, :]
+        if n_cols == 1: axes = axes[:, np.newaxis]
+
+        for row_idx, pname in enumerate(pnames):
+            pdata    = platform_data[pname]
+            features = platform_features[pname]
+            pcolor   = get_dataset_color(pname)
+            first_df = next(iter(pdata.values()), None)
+
+            for col_idx in range(n_cols):
+                ax = axes[row_idx, col_idx]
+                if col_idx >= len(features):
+                    ax.set_visible(False)
+                    continue
+                feat = features[col_idx]
+
+                box_data, box_colors = [], []
+                for model in model_order:
+                    df = pdata.get(model)
+                    vals = df.loc[df['label'] == 0, feat].dropna().values if (df is not None and feat in df.columns) else np.array([])
+                    box_data.append(vals)
+                    box_colors.append(MODEL_PALETTE.get(model, '#888888'))
+
+                human_vals = first_df.loc[first_df['label'] == 1, feat].dropna().values if (first_df is not None and feat in first_df.columns) else np.array([])
+                box_data.append(human_vals)
+                box_colors.append(HUMAN_COLOR)
+
+                bp = ax.boxplot(box_data, positions=x_positions, widths=0.55, patch_artist=True,
+                                showfliers=False, medianprops=dict(color='black', linewidth=1.5))
+                for patch, color in zip(bp['boxes'], box_colors):
+                    patch.set_facecolor(color); patch.set_alpha(0.75)
+                for i, color in enumerate(box_colors):
+                    bp['whiskers'][i*2].set_color(color);   bp['whiskers'][i*2+1].set_color(color)
+                    bp['caps'][i*2].set_color(color);       bp['caps'][i*2+1].set_color(color)
+
+                ax.set_title(feat.replace('_', ' '), fontsize=12, pad=4)
+                if col_idx == 0:
+                    ax.set_ylabel(format_dataset_name(pname), fontsize=13, color=pcolor, labelpad=6)
+                ax.tick_params(axis='y', labelsize=10)
+                ax.grid(True, alpha=0.3, axis='y')
+                ax.set_xticks(x_positions)
+                if row_idx == n_rows - 1:
+                    ax.set_xticklabels(x_labels, rotation=45, ha='right', fontsize=10)
+                    for tick, lbl in zip(ax.get_xticklabels(), x_labels):
+                        tick.set_color(HUMAN_COLOR if lbl == HUMAN_LABEL else MODEL_PALETTE.get(lbl, '#000000'))
+                else:
+                    ax.set_xticklabels([])
+
+        legend_handles = [mpatches.Patch(facecolor=MODEL_PALETTE.get(m, '#888888'), alpha=0.75, label=m) for m in model_order]
+        legend_handles.append(mpatches.Patch(facecolor=HUMAN_COLOR, alpha=0.75, label=HUMAN_LABEL))
+        fig.legend(handles=legend_handles, loc='lower center', bbox_to_anchor=(0.5, -0.02),
+                   ncol=min(len(legend_handles), 5), fontsize=11, frameon=True)
+        plt.tight_layout()
+        plt.subplots_adjust(bottom=0.18)
+        output_path = os.path.join(OUTPUT_DIR, f'SOTA_feature_bias.{SAVE_FORMAT}')
+        fig.savefig(output_path, dpi=300, bbox_inches='tight', transparent=PRESENTATION_MODE)
+        plt.close(fig)
+        print(f"  Saved to: {output_path}")
+
+
+# === Figure 7: Feature Bias — AI deviation from human median ===
+def generate_feature_bias_diff(top_n: int = 5):
+    """
+    3 rows (platforms) × top_n columns (features).
+    Each value is AI_feature - human_median; dashed line at 0 = no bias.
+    """
+    print(f"\n=== Generating Figure 7: Feature Bias (AI − human median) ===")
+
+    platform_features = {}
+    platform_data     = {}
+
+    for dataset in DATASETS:
+        pname = normalize_dataset_name(dataset)
+        top_feats  = _get_top_features(Path(dataset), top_n)
+        model_data = _load_feature_distributions(Path(dataset))
+        if not top_feats or not model_data:
+            continue
+        platform_features[pname] = top_feats
+        platform_data[pname]     = model_data
+
+    if not platform_data:
+        print("  No data found.")
+        return
+
+    pnames      = list(platform_data.keys())
+    model_order = get_ordered_models({m for pd_ in platform_data.values() for m in pd_})
+    x_positions = list(range(len(model_order)))
+    n_rows, n_cols = len(pnames), top_n
+
+    with with_plot_style(PRESENTATION_MODE):
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(3.5 * n_cols, 4 * n_rows), sharey=False)
+        if n_rows == 1: axes = axes[np.newaxis, :]
+        if n_cols == 1: axes = axes[:, np.newaxis]
+
+        for row_idx, pname in enumerate(pnames):
+            pdata    = platform_data[pname]
+            features = platform_features[pname]
+            pcolor   = get_dataset_color(pname)
+            first_df = next(iter(pdata.values()), None)
+
+            human_medians = {}
+            if first_df is not None:
+                for feat in features:
+                    if feat in first_df.columns:
+                        hv = first_df.loc[first_df['label'] == 1, feat].dropna()
+                        human_medians[feat] = float(hv.median()) if len(hv) else 0.0
+
+            for col_idx in range(n_cols):
+                ax = axes[row_idx, col_idx]
+                if col_idx >= len(features):
+                    ax.set_visible(False)
+                    continue
+                feat         = features[col_idx]
+                human_median = human_medians.get(feat, 0.0)
+
+                box_data, box_colors = [], []
+                for model in model_order:
+                    df = pdata.get(model)
+                    if df is not None and feat in df.columns:
+                        diff = df.loc[df['label'] == 0, feat].dropna().values - human_median
+                    else:
+                        diff = np.array([])
+                    box_data.append(diff)
+                    box_colors.append(MODEL_PALETTE.get(model, '#888888'))
+
+                bp = ax.boxplot(box_data, positions=x_positions, widths=0.55, patch_artist=True,
+                                showfliers=False, medianprops=dict(color='black', linewidth=1.5))
+                for patch, color in zip(bp['boxes'], box_colors):
+                    patch.set_facecolor(color); patch.set_alpha(0.75)
+                for i, color in enumerate(box_colors):
+                    bp['whiskers'][i*2].set_color(color);   bp['whiskers'][i*2+1].set_color(color)
+                    bp['caps'][i*2].set_color(color);       bp['caps'][i*2+1].set_color(color)
+
+                ax.axhline(0, color='black', linestyle='--', linewidth=1, alpha=0.6)
+                ax.set_title(feat.replace('_', ' '), fontsize=12, pad=4)
+                if col_idx == 0:
+                    ax.set_ylabel(f"{format_dataset_name(pname)}\nAI − human median",
+                                  fontsize=12, color=pcolor, labelpad=6)
+                ax.tick_params(axis='y', labelsize=10)
+                ax.grid(True, alpha=0.3, axis='y')
+                ax.set_xticks(x_positions)
+                if row_idx == n_rows - 1:
+                    ax.set_xticklabels(model_order, rotation=45, ha='right', fontsize=10)
+                    for tick, lbl in zip(ax.get_xticklabels(), model_order):
+                        tick.set_color(MODEL_PALETTE.get(lbl, '#000000'))
+                else:
+                    ax.set_xticklabels([])
+
+        legend_handles = [mpatches.Patch(facecolor=MODEL_PALETTE.get(m, '#888888'), alpha=0.75, label=m) for m in model_order]
+        fig.legend(handles=legend_handles, loc='lower center', bbox_to_anchor=(0.5, -0.02),
+                   ncol=min(len(legend_handles), 5), fontsize=11, frameon=True)
+        plt.tight_layout()
+        plt.subplots_adjust(bottom=0.18)
+        output_path = os.path.join(OUTPUT_DIR, f'SOTA_feature_bias_diff.{SAVE_FORMAT}')
+        fig.savefig(output_path, dpi=300, bbox_inches='tight', transparent=PRESENTATION_MODE)
+        plt.close(fig)
+        print(f"  Saved to: {output_path}")
+
+
 def main():
     """Main function to generate all 4 required figures."""
     global DATASETS, NORMALIZED_DATASETS, OUTPUT_DIR
@@ -617,11 +1019,14 @@ def main():
     print(f"Datasets: {DATASETS}")
     print("Configuration filter: baseline + persona only (no ft, no style, no context)")
     
-    # Generate all 4 figures
+    # Generate all figures
     generate_best_model_performance()
     generate_first_response_similarity()
+    generate_cosine_similarity_by_model()
     generate_ml_explainability_heatmap()
     generate_aggregated_feature_frequency()
+    generate_feature_bias()
+    generate_feature_bias_diff()
     
     print("\n" + "=" * 60)
     print("All figures generated successfully!")
