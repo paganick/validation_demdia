@@ -314,11 +314,30 @@ class Agent:
             return True
 
         valid_responses = []
+        rejected_responses = []  # all generated texts that failed is_valid_response()
         attempts = 0
+
+        # Diagnostics showed that instruction-tuned models (Qwen, Gemma) very
+        # consistently prepend a format header line before the actual response:
+        #   Case 1 — standalone header:  "[Response]\n<actual text>"
+        #   Case 2 — inline header:      "[Reply] @user <actual text>"
+        # Both cases are fixable by stripping the tag. Applied only when
+        # instruction_tuned=True to preserve reproducibility for all other configs.
+        _strip_headers = instruction_tuned
+        _header_tags = frozenset(
+            ["[response]", "[reply]", "response:", "[my reply]", "[my response]",
+             "**response:**", "**reply:**"]
+        )
+
+        print(f"🔬 [DEBUG] Prompt length (chars): {len(prompt)}", flush=True)
+        print(f"🔬 [DEBUG] Prompt preview (first 200 chars): {prompt[:200]!r}", flush=True)
 
         while len(valid_responses) < n_candidates and attempts < max_total_attempts:
             remaining_needed = n_candidates - len(valid_responses)
+            print(f"🔬 [DEBUG] Attempt {attempts+1}/{max_total_attempts}: tokenizing prompt...", flush=True)
             inputs = tokenizer(prompt, return_tensors="pt").to(device)
+            input_len = inputs.input_ids.shape[-1]
+            print(f"🔬 [DEBUG] Tokenized: {input_len} tokens, device={inputs.input_ids.device}", flush=True)
 
             # Set seed for reproducibility before each generation attempt
             if seed is not None:
@@ -341,20 +360,56 @@ class Agent:
                 "pad_token_id": tokenizer.pad_token_id,
             }
 
+            print(f"🔬 [DEBUG] Calling model.generate(): num_return_sequences={remaining_needed}, max_new_tokens=300", flush=True)
             outputs = model.generate(
                 inputs.input_ids,
                 **generate_kwargs,
             )
+            print(f"🔬 [DEBUG] model.generate() returned: {len(outputs)} sequences, each length {outputs.shape[-1]}", flush=True)
 
-            for output in outputs:
+            n_valid_before = len(valid_responses)
+            for i, output in enumerate(outputs):
                 response = tokenizer.decode(output, skip_special_tokens=True)
-                response = response[len(prompt):].strip().split("\n")[0]
-                if is_valid_response(response, prompt):
+                raw_after_prompt = response[len(prompt):].strip()
+                if i == 0:  # Only print full raw for first sequence to avoid spam
+                    print(f"🔬 [DEBUG]   seq 0 RAW (first 300 chars): {raw_after_prompt[:300]!r}", flush=True)
+                if _strip_headers:
+                    lines = raw_after_prompt.split("\n")
+                    # Case 1: first non-empty line is a standalone tag → skip to next line
+                    for line_idx, line in enumerate(lines):
+                        stripped = line.strip()
+                        if not stripped:
+                            continue
+                        if stripped.lower() in _header_tags:
+                            # standalone tag — use the rest
+                            raw_after_prompt = "\n".join(lines[line_idx + 1:])
+                        else:
+                            # Case 2: inline tag prefix like "[Reply] @user ..."
+                            for tag in _header_tags:
+                                if stripped.lower().startswith(tag + " ") or stripped.lower().startswith(tag + "\t"):
+                                    raw_after_prompt = stripped[len(tag):].strip()
+                                    break
+                            else:
+                                raw_after_prompt = "\n".join(lines[line_idx:])
+                        break
+                original_raw = raw_after_prompt  # full output before split, for rejected logging
+                response = raw_after_prompt.split("\n")[0]
+                valid = is_valid_response(response, prompt)
+                print(f"🔬 [DEBUG]   seq {i}: valid={valid}, len={len(response)}, preview={response[:80]!r}", flush=True)
+                if valid:
                     valid_responses.append(response)
+                else:
+                    rejected_responses.append({
+                        "attempt": attempts,
+                        "seq_idx": i,
+                        "raw": original_raw,
+                        "first_line": response,
+                    })
+            print(f"🔬 [DEBUG] Attempt {attempts+1} done: {len(valid_responses)-n_valid_before} new valid (total {len(valid_responses)}/{n_candidates})", flush=True)
 
             attempts += 1
             
 
         # Sort and return top n_candidates valid responses
         #valid_responses_sorted = sorted(valid_responses, key=score_response)
-        return valid_responses[:n_candidates]
+        return valid_responses[:n_candidates], rejected_responses

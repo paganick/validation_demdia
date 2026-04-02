@@ -39,6 +39,8 @@ def main():
                         help="User batch index (0-indexed). If set, only process users in this batch.")
     parser.add_argument('--batch_file', type=str, default="user_batches.json",
                         help="Path to batch assignments file (default: user_batches.json)")
+    parser.add_argument('--fill_incomplete', action='store_true', default=False,
+                        help="Re-attempt samples with fewer than 20 valid responses (default: skip any sample already in the file)")
 
     args = parser.parse_args()
 
@@ -122,7 +124,8 @@ def main():
             n_users=n_users,
             n_responses_per_user=args.n_responses_per_user,
             output_path=output_path,
-            batch_users=batch_users
+            batch_users=batch_users,
+            fill_incomplete=args.fill_incomplete,
         )
 
 
