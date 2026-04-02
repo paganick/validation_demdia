@@ -64,6 +64,77 @@ def find_row_mismatch(input_df, cache_df, input_col='length', cache_col='word_co
     print("DEBUG: No mismatch found - all values match!")
     return None
 
+def get_responses_features_path(validation_data_path):
+    """Find the *_responses_features.csv produced by LLM_judge for a given *_validation_data.csv."""
+    for suffix in ['_cosine_validation_data.csv', '_ml_validation_data.csv', '_random_validation_data.csv']:
+        if validation_data_path.endswith(suffix):
+            return validation_data_path[:-len(suffix)] + 'responses_features.csv'
+    return None
+
+
+def build_features_from_responses_cache(validation_df, responses_features_path):
+    """
+    Build a feature DataFrame for validation data by looking up pre-computed features
+    from the LLM_judge *_responses_features.csv cache (keyed on response text).
+    Avoids re-running expensive toxicity/sentiment/perplexity computation.
+
+    Returns a features DataFrame ready to save as *_validation_data_features.csv,
+    or None if coverage is insufficient (< 99% of texts found).
+    """
+    rf = pd.read_csv(responses_features_path, engine='python')
+    rf = rf.drop_duplicates(subset=['response'], keep='first')
+
+    merged = validation_df[['text']].merge(
+        rf.rename(columns={'response': 'text'}),
+        on='text',
+        how='left'
+    )
+
+    coverage = merged['word_count'].notna().sum()
+    n_missing = len(validation_df) - coverage
+    if n_missing > 0:
+        print(f"DEBUG: {n_missing}/{len(validation_df)} texts not in responses cache (likely real human posts) — computing features for those rows only")
+
+    rename_map = {
+        'link_count': 'links_count',
+        'mention_count': 'mentions_count',
+        'emoji_count': 'emojis_count',
+        'hashtag_count': 'hashtags_count',
+        'hedge_word_count': 'hedge_words',
+        'transition_word_count': 'transition_words',
+        'superlative_count': 'superlatives',
+    }
+    merged = merged.rename(columns=rename_map)
+
+    if 'uppercase_count' in merged.columns and 'char_count' in merged.columns:
+        merged['uppercase_ratio'] = merged['uppercase_count'] / merged['char_count'].replace(0, float('nan'))
+        merged['uppercase_ratio'] = merged['uppercase_ratio'].fillna(0)
+
+    merged['has_link'] = (merged['links_count'] > 0).astype(int)
+    merged['has_mention'] = (merged['mentions_count'] > 0).astype(int)
+    merged['has_emoji'] = (merged['emojis_count'] > 0).astype(int)
+    merged['has_question_mark'] = merged['text'].str.contains('?', regex=False).astype(int)
+    merged['has_exclamation_mark'] = merged['text'].str.contains('!', regex=False).astype(int)
+    merged['has_quotes'] = merged['text'].str.contains('"', regex=False).astype(int)
+
+    # For rows not found in the cache (human posts), compute features directly
+    missing_mask = merged['word_count'].isna()
+    if missing_mask.any():
+        missing_df = validation_df.loc[missing_mask.values].copy()
+        missing_features = extract_features(missing_df)  # no cache_path — just compute in memory
+        missing_features.index = merged.index[missing_mask]
+        merged.update(missing_features)
+        # Re-derive boolean features for those rows (extract_features may use different col names)
+        for col in ['has_question_mark', 'has_exclamation_mark', 'has_link', 'has_mention', 'has_emoji', 'has_quotes']:
+            if col in missing_features.columns:
+                merged.loc[missing_mask, col] = missing_features[col].values
+
+    drop_cols = ['text', 'label', 'uppercase_count', 'char_count', 'user', 'reply_to']
+    features_df = merged.drop(columns=[c for c in drop_cols if c in merged.columns])
+
+    return features_df
+
+
 def compute_features_for_all(folder_path):
     print(f"DEBUG: Starting compute_features_for_all with folder_path: {folder_path}")
     
@@ -104,7 +175,25 @@ def compute_features_for_all(folder_path):
 
                     feature_cache_path = full_path.replace(".csv", "_features.csv")
                     print(f"DEBUG: Feature cache path: {feature_cache_path}")
-                    
+
+                    if os.path.exists(feature_cache_path):
+                        print(f"SKIP: Feature cache already exists, skipping {full_path}")
+                        files_processed += 1
+                        continue
+
+                    # Fast path: look up pre-computed features from LLM_judge responses cache
+                    responses_features_path = get_responses_features_path(full_path)
+                    if responses_features_path and os.path.exists(responses_features_path):
+                        print(f"DEBUG: Found responses cache, building features via lookup")
+                        features_df = build_features_from_responses_cache(df, responses_features_path)
+                        if features_df is not None:
+                            features_df.to_csv(feature_cache_path, index=False)
+                            print(f'Saved features to {feature_cache_path} (from responses cache)')
+                            print(f"DEBUG: Features shape: {features_df.shape}")
+                            files_processed += 1
+                            continue
+                        print(f"DEBUG: Responses cache lookup failed, falling back to full extraction")
+
                     features_df = extract_features(df, cache_path=feature_cache_path)
                     print(f'Saved features to {feature_cache_path}')
                     print(f"DEBUG: Features shape: {features_df.shape}")
