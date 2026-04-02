@@ -1745,7 +1745,180 @@ def plot_feature_importance_heatmap(df, max_features=10):
         
         print(f"  Saved to: {output_path}")
 
-# === Figure 9: Feature Bias (best-config AI − human median) ===
+# === Figure 9: Raw Feature Bias — best-config (AI vs Human) ===
+def generate_feature_bias_best_config(df_best_configs, top_n: int = 5):
+    """
+    3 rows (platforms) × top_n columns (features).
+    Each subplot: one boxplot per model (MODEL_PALETTE) + one Human boxplot (gray),
+    plus a dashed horizontal line at the human median.
+    Uses best configuration per model/dataset instead of baseline+persona-only files.
+    """
+    print(f"\n=== Generating Figure 9: Raw Feature Bias (best-config, AI vs Human) ===")
+
+    platform_features: dict = {}
+    platform_data: dict = {}
+
+    for dataset in DATASETS:
+        pname = normalize_dataset_name(dataset)
+        pdata_configs = df_best_configs[df_best_configs['dataset'] == pname]
+        if pdata_configs.empty:
+            print(f"  Skipping {pname}: no best configs found")
+            continue
+
+        feat_importance_dfs = []
+        for _, cfg_row in pdata_configs.iterrows():
+            model = cfg_row['model']
+            expected = {
+                'ft':      int(cfg_row['has_finetuning']),
+                'context': int(cfg_row['has_context']),
+                'style':   int(cfg_row['has_style']),
+                'persona': int(cfg_row['has_persona']),
+            }
+            pattern = str(Path(dataset) / '**' / '*feature_correlation_stats.csv')
+            for fpath in glob.glob(pattern, recursive=True):
+                if 'random_validation' not in fpath:
+                    continue
+                try:
+                    fmodel, fft, fctx, fstyle, fpersona = parse_filename(fpath)
+                    if (fmodel == model
+                            and fft      == expected['ft']
+                            and fctx     == expected['context']
+                            and fstyle   == expected['style']
+                            and fpersona == expected['persona']):
+                        df_imp = pd.read_csv(fpath)
+                        if 'feature' in df_imp.columns and 'importance' in df_imp.columns:
+                            feat_importance_dfs.append(df_imp[['feature', 'importance']])
+                except Exception:
+                    continue
+
+        if not feat_importance_dfs:
+            print(f"  Skipping {pname}: no feature importance files matched best config")
+            continue
+
+        combined_imp = pd.concat(feat_importance_dfs, ignore_index=True)
+        top_feats = (combined_imp.groupby('feature')['importance']
+                                 .mean()
+                                 .sort_values(ascending=False)
+                                 .head(top_n)
+                                 .index.tolist())
+        print(f"  {pname}: top features = {top_feats}")
+
+        model_data = {}
+        for _, cfg_row in pdata_configs.iterrows():
+            model = cfg_row['model']
+            expected = {
+                'ft':      int(cfg_row['has_finetuning']),
+                'context': int(cfg_row['has_context']),
+                'style':   int(cfg_row['has_style']),
+                'persona': int(cfg_row['has_persona']),
+            }
+            pattern = str(Path(dataset) / '**' / '*_random_validation_data.csv')
+            for lpath in glob.glob(pattern, recursive=True):
+                if '_features' in lpath:
+                    continue
+                try:
+                    fmodel, fft, fctx, fstyle, fpersona = parse_filename(lpath)
+                    if (fmodel == model
+                            and fft      == expected['ft']
+                            and fctx     == expected['context']
+                            and fstyle   == expected['style']
+                            and fpersona == expected['persona']):
+                        feat_path = lpath.replace(
+                            '_random_validation_data.csv',
+                            '_random_validation_data_features.csv'
+                        )
+                        if not os.path.exists(feat_path):
+                            continue
+                        labels_df = pd.read_csv(lpath)
+                        feats_df  = pd.read_csv(feat_path)
+                        if len(labels_df) != len(feats_df):
+                            continue
+                        feats_df['label'] = labels_df['labels'].values
+                        model_data[model] = feats_df
+                        break
+                except Exception:
+                    continue
+
+        if model_data:
+            platform_features[pname] = top_feats
+            platform_data[pname]     = model_data
+
+    if not platform_data:
+        print("  No data found.")
+        return
+
+    pnames      = list(platform_data.keys())
+    model_order = get_ordered_models({m for pd_ in platform_data.values() for m in pd_})
+    x_labels    = model_order + [HUMAN_LABEL]
+    x_positions = list(range(len(x_labels)))
+    n_rows, n_cols = len(pnames), top_n
+
+    with with_plot_style(PRESENTATION_MODE):
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(3.5 * n_cols, 4 * n_rows), sharey=False)
+        if n_rows == 1: axes = axes[np.newaxis, :]
+        if n_cols == 1: axes = axes[:, np.newaxis]
+
+        for row_idx, pname in enumerate(pnames):
+            pdata    = platform_data[pname]
+            features = platform_features[pname]
+            pcolor   = get_dataset_color(pname)
+            first_df = next(iter(pdata.values()), None)
+
+            for col_idx in range(n_cols):
+                ax = axes[row_idx, col_idx]
+                if col_idx >= len(features):
+                    ax.set_visible(False)
+                    continue
+                feat = features[col_idx]
+
+                box_data, box_colors = [], []
+                for model in model_order:
+                    df = pdata.get(model)
+                    vals = df.loc[df['label'] == 0, feat].dropna().values if (df is not None and feat in df.columns) else np.array([])
+                    box_data.append(vals)
+                    box_colors.append(MODEL_PALETTE.get(model, '#888888'))
+
+                human_vals = first_df.loc[first_df['label'] == 1, feat].dropna().values if (first_df is not None and feat in first_df.columns) else np.array([])
+                human_median = float(np.median(human_vals)) if len(human_vals) else 0.0
+                box_data.append(human_vals)
+                box_colors.append(HUMAN_COLOR)
+
+                bp = ax.boxplot(box_data, positions=x_positions, widths=0.55, patch_artist=True,
+                                showfliers=False, medianprops=dict(color='black', linewidth=1.5))
+                for patch, color in zip(bp['boxes'], box_colors):
+                    patch.set_facecolor(color); patch.set_alpha(0.75)
+                for i, color in enumerate(box_colors):
+                    bp['whiskers'][i*2].set_color(color);   bp['whiskers'][i*2+1].set_color(color)
+                    bp['caps'][i*2].set_color(color);       bp['caps'][i*2+1].set_color(color)
+
+                ax.axhline(human_median, color=HUMAN_COLOR, linestyle='--', linewidth=1, alpha=0.8)
+                ax.set_title(feat.replace('_', ' '), fontsize=12, pad=4)
+                if col_idx == 0:
+                    ax.set_ylabel(format_dataset_name(pname), fontsize=13, color=pcolor, labelpad=6)
+                ax.tick_params(axis='y', labelsize=10)
+                ax.grid(True, alpha=0.3, axis='y')
+                ax.set_xticks(x_positions)
+                if row_idx == n_rows - 1:
+                    ax.set_xticklabels(x_labels, rotation=45, ha='right', fontsize=10)
+                    for tick, lbl in zip(ax.get_xticklabels(), x_labels):
+                        tick.set_color(HUMAN_COLOR if lbl == HUMAN_LABEL else MODEL_PALETTE.get(lbl, '#000000'))
+                else:
+                    ax.set_xticklabels([])
+
+        legend_handles = [Patch(facecolor=MODEL_PALETTE.get(m, '#888888'), alpha=0.75, label=m)
+                          for m in model_order]
+        legend_handles.append(Patch(facecolor=HUMAN_COLOR, alpha=0.75, label=HUMAN_LABEL))
+        fig.legend(handles=legend_handles, loc='lower center', bbox_to_anchor=(0.5, -0.02),
+                   ncol=min(len(legend_handles), 5), fontsize=11, frameon=True)
+        plt.tight_layout()
+        plt.subplots_adjust(bottom=0.18)
+        output_path = os.path.join(OUTPUT_DIR, f'config_feature_bias.{SAVE_FORMAT}')
+        fig.savefig(output_path, dpi=300, bbox_inches='tight', transparent=PRESENTATION_MODE)
+        plt.close(fig)
+        print(f"  Saved to: {output_path}")
+
+
+# === Figure 10: Feature Bias (best-config AI − human median) ===
 def generate_feature_bias_diff_best_config(df_best_configs, top_n: int = 5):
     """
     Same layout as generate_feature_bias_diff() in generate_SOTA_plots.py but uses
@@ -2007,7 +2180,8 @@ def main():
     if df_importance is not None:
         plot_feature_importance_heatmap(df_importance, max_features=10)
 
-    # Generate feature bias diff plot (best-config AI − human median)
+    # Generate feature bias plots (best-config)
+    generate_feature_bias_best_config(df_best_configs, top_n=5)
     generate_feature_bias_diff_best_config(df_best_configs, top_n=5)
 
     print("\n" + "=" * 60)

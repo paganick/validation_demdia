@@ -855,6 +855,7 @@ def generate_feature_bias(top_n: int = 5):
                     box_colors.append(MODEL_PALETTE.get(model, '#888888'))
 
                 human_vals = first_df.loc[first_df['label'] == 1, feat].dropna().values if (first_df is not None and feat in first_df.columns) else np.array([])
+                human_median = float(np.median(human_vals)) if len(human_vals) else 0.0
                 box_data.append(human_vals)
                 box_colors.append(HUMAN_COLOR)
 
@@ -866,6 +867,7 @@ def generate_feature_bias(top_n: int = 5):
                     bp['whiskers'][i*2].set_color(color);   bp['whiskers'][i*2+1].set_color(color)
                     bp['caps'][i*2].set_color(color);       bp['caps'][i*2+1].set_color(color)
 
+                ax.axhline(human_median, color=HUMAN_COLOR, linestyle='--', linewidth=1, alpha=0.8)
                 ax.set_title(feat.replace('_', ' '), fontsize=12, pad=4)
                 if col_idx == 0:
                     ax.set_ylabel(format_dataset_name(pname), fontsize=13, color=pcolor, labelpad=6)
