@@ -992,6 +992,95 @@ def generate_feature_bias_diff(top_n: int = 5):
         print(f"  Saved to: {output_path}")
 
 
+# === Figure 8: Feature Importance by Model (heatmap, aggregated across platforms) ===
+def generate_feature_importance_by_model():
+    """
+    Heatmap: rows = models, columns = features (sorted by mean importance).
+    Values are averaged across all SOTA-config files across all platforms.
+    Highlights per-model outliers (e.g. Qwen's emojis, Mistral-Instruct's mentions).
+    """
+    print(f"\n=== Generating Figure 8: Feature Importance by Model (heatmap) ===")
+
+    rows = []
+    for dataset in DATASETS:
+        dataset_path = Path(dataset)
+        files = glob.glob(str(dataset_path / '**' / '*feature_correlation_stats.csv'), recursive=True)
+        files = [f for f in files if filter_for_baseline_persona(f) and 'random_validation' in f]
+        for fpath in files:
+            try:
+                model, ft, context, style, persona = parse_filename(fpath)
+                if model is None:
+                    continue
+                df = pd.read_csv(fpath)
+                if 'feature' not in df.columns or 'importance' not in df.columns:
+                    continue
+                df['model'] = model
+                df['platform'] = normalize_dataset_name(str(dataset))
+                rows.append(df[['model', 'platform', 'feature', 'importance']])
+            except Exception:
+                continue
+
+    if not rows:
+        print("  No data found.")
+        return
+
+    combined = pd.concat(rows, ignore_index=True)
+
+    # Average across platforms per (model, feature)
+    pivot = (combined.groupby(['model', 'feature'])['importance']
+                     .mean()
+                     .unstack(fill_value=0))
+
+    # Sort features by mean importance across models (left = most important)
+    feat_order  = pivot.mean(axis=0).sort_values(ascending=False).index.tolist()
+    model_order = get_ordered_models(pivot.index.tolist())
+    pivot = pivot.loc[model_order, feat_order]
+
+    # Save stats CSV
+    stats_path = os.path.join(OUTPUT_DIR, 'SOTA_feature_importance_by_model.csv')
+    pivot.reset_index().to_csv(stats_path, index=False)
+    print(f"  Stats saved to: {stats_path}")
+
+    # Clean feature names for display
+    feat_labels  = [f.replace('_', ' ') for f in feat_order]
+
+    with with_plot_style(PRESENTATION_MODE):
+        fig, ax = plt.subplots(figsize=(max(14, len(feat_order) * 0.7), len(model_order) * 0.7 + 1.5))
+
+        im = ax.imshow(pivot.values, aspect='auto', cmap='YlOrRd',
+                       vmin=0, vmax=pivot.values.max())
+
+        # Axes ticks
+        ax.set_xticks(range(len(feat_order)))
+        ax.set_xticklabels(feat_labels, rotation=45, ha='right', fontsize=10)
+        ax.set_yticks(range(len(model_order)))
+        ax.set_yticklabels(model_order, fontsize=11)
+
+        # Colour model labels by MODEL_PALETTE
+        for tick, model in zip(ax.get_yticklabels(), model_order):
+            tick.set_color(MODEL_PALETTE.get(model, '#000000'))
+
+        # Annotate each cell with the importance value
+        for r, model in enumerate(model_order):
+            for c, feat in enumerate(feat_order):
+                val = pivot.loc[model, feat]
+                text_color = 'white' if val > pivot.values.max() * 0.65 else 'black'
+                ax.text(c, r, f'{val:.3f}', ha='center', va='center',
+                        fontsize=7, color=text_color)
+
+        cbar = fig.colorbar(im, ax=ax, pad=0.01, fraction=0.02)
+        cbar.set_label('Mean RF Importance\n(avg across platforms)', fontsize=10)
+
+        ax.set_title('Feature Importance by Model (SOTA config, averaged across platforms)',
+                     fontsize=13, pad=10)
+        plt.tight_layout()
+
+        output_path = os.path.join(OUTPUT_DIR, f'SOTA_feature_importance_by_model.{SAVE_FORMAT}')
+        fig.savefig(output_path, dpi=300, bbox_inches='tight', transparent=PRESENTATION_MODE)
+        plt.close(fig)
+        print(f"  Saved to: {output_path}")
+
+
 def main():
     """Main function to generate all 4 required figures."""
     global DATASETS, NORMALIZED_DATASETS, OUTPUT_DIR
@@ -1029,6 +1118,7 @@ def main():
     generate_aggregated_feature_frequency()
     generate_feature_bias()
     generate_feature_bias_diff()
+    generate_feature_importance_by_model()
     
     print("\n" + "=" * 60)
     print("All figures generated successfully!")
