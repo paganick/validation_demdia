@@ -29,6 +29,14 @@ transform_personas_llm.py
 transform_personas.py
 analyze_pipeline_status.py
 join_complete_batches.py
+pipeline_ops/
+resubmit/
+
+# Editor swap files
+*.sw[mnop]
+
+# Claude Code session files
+.claude/
 
 
 # Large binary/container files
