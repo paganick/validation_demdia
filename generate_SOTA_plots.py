@@ -992,6 +992,108 @@ def generate_feature_bias_diff(top_n: int = 5):
         print(f"  Saved to: {output_path}")
 
 
+# === Figure 9: Cosine Similarity Baselines ===
+def generate_cosine_baselines(baselines_csv: str = None):
+    """
+    Boxplots showing five cosine similarity distributions per platform:
+      1. human_vs_ai   — AI response vs human ground truth  (the main metric)
+      2. intra_ai      — pairs of AI candidates for the same prompt
+      3. intra_human   — pairs of messages from the same user
+      4. random_human  — random cross-user human pairs  (variability ceiling)
+      5. random_ai     — random cross-context AI pairs   (variability ceiling)
+
+    Reads cosine_baselines/cosine_baselines_all.csv produced by
+    compute_cosine_baselines.py.
+    """
+    print(f"\n=== Generating Figure 9: Cosine Similarity Baselines ===")
+
+    if baselines_csv is None:
+        # Try default location relative to OUTPUT_DIR's parent
+        default = os.path.join(os.path.dirname(OUTPUT_DIR), "cosine_baselines", "cosine_baselines_all.csv")
+        if not os.path.exists(default):
+            print(f"  Baselines CSV not found at {default}, skipping.")
+            return
+        baselines_csv = default
+
+    df = pd.read_csv(baselines_csv)
+
+    DIST_ORDER  = ["intra_human", "random_human", "human_vs_ai", "intra_ai", "random_ai"]
+    DIST_LABELS = {
+        "human_vs_ai":   "Human\nvs AI",
+        "intra_ai":      "Intra-AI\n(same prompt)",
+        "intra_human":   "Intra-human\n(same user)",
+        "random_human":  "Random\nhuman pairs",
+        "random_ai":     "Random\nAI pairs",
+    }
+    DIST_COLORS = {
+        "human_vs_ai":   "#4C72B0",
+        "intra_ai":      "#DD8452",
+        "intra_human":   "#55A868",
+        "random_human":  "#8172B3",
+        "random_ai":     "#C44E52",
+    }
+
+    platforms   = NORMALIZED_DATASETS if NORMALIZED_DATASETS else sorted(df["platform"].unique())
+    n_platforms = len(platforms)
+    x_pos       = list(range(len(DIST_ORDER)))
+
+    # Save stats CSV
+    stats_path = os.path.join(OUTPUT_DIR, "SOTA_cosine_baselines_stats.csv")
+    df.groupby(["platform", "distribution"])["similarity"].describe().reset_index().to_csv(
+        stats_path, index=False)
+    print(f"  Stats saved to: {stats_path}")
+
+    with with_plot_style(PRESENTATION_MODE):
+        fig, axes = plt.subplots(1, n_platforms,
+                                 figsize=(4.5 * n_platforms, 5),
+                                 sharey=True)
+        if n_platforms == 1:
+            axes = [axes]
+
+        for ax, pname in zip(axes, platforms):
+            pdata = df[df["platform"] == pname]
+            pcolor = get_dataset_color(pname)
+
+            box_data   = []
+            box_colors = []
+            for dist in DIST_ORDER:
+                vals = pdata.loc[pdata["distribution"] == dist, "similarity"].dropna().values
+                box_data.append(vals)
+                box_colors.append(DIST_COLORS[dist])
+
+            bp = ax.boxplot(box_data, positions=x_pos, widths=0.55, patch_artist=True,
+                            showfliers=False,
+                            medianprops=dict(color="black", linewidth=1.8))
+            for patch, color in zip(bp["boxes"], box_colors):
+                patch.set_facecolor(color)
+                patch.set_alpha(0.75)
+            for i, color in enumerate(box_colors):
+                bp["whiskers"][i*2].set_color(color);   bp["whiskers"][i*2+1].set_color(color)
+                bp["caps"][i*2].set_color(color);       bp["caps"][i*2+1].set_color(color)
+
+            ax.set_title(format_dataset_name(pname), fontsize=13, color=pcolor, pad=6)
+            ax.set_xticks(x_pos)
+            ax.set_xticklabels([DIST_LABELS[d] for d in DIST_ORDER],
+                               fontsize=9.5, rotation=30, ha="right")
+            ax.grid(True, axis="y", alpha=0.3)
+            ax.tick_params(axis="y", labelsize=10)
+            if ax is axes[0]:
+                ax.set_ylabel("Cosine similarity", fontsize=12)
+
+        legend_handles = [Patch(facecolor=DIST_COLORS[d], alpha=0.75, label=DIST_LABELS[d].replace("\n", " "))
+                          for d in DIST_ORDER]
+        fig.legend(handles=legend_handles, loc="lower center",
+                   bbox_to_anchor=(0.5, -0.12), ncol=len(DIST_ORDER),
+                   fontsize=10, frameon=True)
+        plt.suptitle("Cosine Similarity: Human-vs-AI vs Baseline Distributions",
+                     fontsize=13, y=1.01)
+        plt.tight_layout()
+        output_path = os.path.join(OUTPUT_DIR, f"SOTA_cosine_baselines.{SAVE_FORMAT}")
+        fig.savefig(output_path, dpi=300, bbox_inches="tight", transparent=PRESENTATION_MODE)
+        plt.close(fig)
+        print(f"  Saved to: {output_path}")
+
+
 # === Figure 8: Feature Importance by Model (heatmap, aggregated across platforms) ===
 def generate_feature_importance_by_model():
     """
@@ -1119,6 +1221,7 @@ def main():
     generate_feature_bias()
     generate_feature_bias_diff()
     generate_feature_importance_by_model()
+    generate_cosine_baselines()
     
     print("\n" + "=" * 60)
     print("All figures generated successfully!")
