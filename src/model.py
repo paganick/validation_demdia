@@ -91,8 +91,12 @@ class Model:
         # Build fine-tuned directory path
         base_dir = f"{config['finetuning_dir']}{config['model']}_finetuned_{os.path.splitext(posts_file)[0]}"
         if users is not None:
-            # Add suffix to indicate user-filtered fine-tuning
-            self.fine_tuned_dir = f"{base_dir}_userfiltered"
+            # Include a hash of the user list so each batch gets its own model.
+            # Without this, all batches would share a single directory and the
+            # model would be trained on whichever batch ran first.
+            import hashlib
+            user_hash = hashlib.md5(",".join(sorted(users)).encode()).hexdigest()[:8]
+            self.fine_tuned_dir = f"{base_dir}_userfiltered_{user_hash}"
         else:
             self.fine_tuned_dir = base_dir
 
@@ -151,7 +155,7 @@ class Model:
                 )
 
             print("✅ Base model loaded")
-            
+
         elif os.path.exists(self.fine_tuned_dir):
             print(f"Loading fine-tuned model from {self.fine_tuned_dir}")
 

@@ -27,6 +27,8 @@ generate_model_configs.py
 test_reproducibility.py
 transform_personas_llm.py
 transform_personas.py
+analyze_pipeline_status.py
+join_complete_batches.py
 
 
 # Large binary/container files
