@@ -89,21 +89,59 @@ conda activate shap_env
 
 ### Step 1: Generate AI Responses
 
-Generate responses for N users across all model configurations:
+Simulations must be run **in batches** to ensure reproducibility. Users are split into
+fixed batches of ≤ 60 (stored in `user_batches.json`), and each batch is processed
+independently. This is required for fine-tuned configurations, where each batch trains
+a LoRA model on its own users — running without batches would mix users across
+fine-tuning runs and produce non-reproducible results.
+
+| Platform | Total users | Batches |
+|----------|-------------|---------|
+| Twitter  | 279         | 5       |
+| Reddit   | 492         | 9       |
+| Bluesky  | 60          | 1       |
+
+**Setup:**
+
+```bash
+# (Optional) Regenerate batch assignments if personas change
+python prepare_user_batches.py
+```
+
+**Run each batch** (one process per platform × config × batch, parallelise as your
+cluster allows):
 
 ```bash
 python run_simulation.py \
-    --config_dir=configs \
-    --n_users=250 \
+    --config_file=configs/<model>.yaml \
+    --dataset=<platform> \
+    --user_batch=<N> \
     --output_dir=results
 ```
+
+Depending on model size and available GPU memory, runs may time out before completing
+all users. Re-running the same command is safe — already-complete users are skipped
+automatically. Repeat as needed until all batches are fully populated.
+
+**After all batches are complete, merge into per-config files:**
+
+```bash
+python merge_batch_results.py --results_dir results/ --delete_batches
+```
+
+This produces `results/{platform}/{config}__random_response.json`.
+
+**Fine-tuning coordination:** when multiple batches run in parallel, the first job that
+needs a fine-tuned model trains it; the others wait via file lock and load it once
+training finishes. Each batch trains on its own users and saves to a separate directory.
 
 **Input:**
 - Config YAMLs in `configs/` (one per model/configuration)
 - User datasets: `bluesky_data/personas.pkl`, Twitter data, Reddit data
+- Batch assignments: `user_batches.json`
 
 **Output:**
-- `results/{platform}/{config}__random_response.json`
+- `results/{platform}/{config}__random_response.json` (after merging)
 
 ### Step 2: Select Best Responses
 
