@@ -3,32 +3,21 @@ Convert *_optimal_response.json files (output of LLM_judge.py) to CSV.
 
 This script is the final step of the simulation pipeline:
 
-    run_simulation.py          → results/          (*_batch*.json)
-    join_complete_batches.py   → results_joined/   (*_random_response.json)
-    LLM_judge.py               → results_joined/   (*_optimal_response.json)
-    optimal_responses_to_csv.py → results_joined/  (*_optimal_response.csv)  ← this script
+    run_simulation.py           → results/          (*_batch*.json)
+    merge_batch_results.py      → results/          (*_random_response.json)
+    response_cleaning.py        → results_cleaned/  (*_random_response.json)
+    LLM_judge.py                → results_cleaned/  (*_optimal_response.json)
+    optimal_responses_to_csv.py → results_cleaned/  (*_optimal_response.csv)  ← this script
 
 For each *_optimal_response.json found in the input tree it writes a sibling
 *_optimal_response.csv with one row per response.
 
-Response cleaning
------------------
-LLM outputs often contain generation artifacts such as user-handle prefixes
-(@User_XXXX:), prompt-template labels ([Output], [Conversation], …) and
-bare Reddit-style attribution (User_XXXX: …).  By default (--clean-level 2)
-these are removed; see response_cleaning.md for full documentation.
-
-  --clean-level 0   No cleaning — raw responses written as-is.
-  --clean-level 1   Discard-only — responses that consist entirely of bracket
-                    tags (e.g. "[Conversation]", "[deleted]") are replaced
-                    with an empty string; content is otherwise untouched.
-  --clean-level 2   Full cleaning (default) — levels-1 discard + prefix
-                    stripping (Rules A–E in response_cleaning.md).
+Responses are written as-is — cleaning is performed upstream by response_cleaning.py
+before the LLM judge selects the best responses. Applying cleaning here would modify
+the already-selected optimal responses, which is undesirable.
 
 Usage:
     python optimal_responses_to_csv.py /path/to/results/
-    python optimal_responses_to_csv.py /path/to/results/ --clean-level 1
-    python optimal_responses_to_csv.py /path/to/results/ --clean-level 0
     python optimal_responses_to_csv.py --input-file single_file.json
 
 CSV columns:
@@ -50,8 +39,6 @@ import json
 import csv
 import argparse
 
-from response_cleaning import clean_response
-
 
 # ---------------------------------------------------------------------------
 # Argument parsing
@@ -59,15 +46,6 @@ from response_cleaning import clean_response
 
 parser = argparse.ArgumentParser(
     description='Convert *_optimal_response.json files to CSV (last pipeline step).',
-    formatter_class=argparse.RawDescriptionHelpFormatter,
-    epilog="""
-Cleaning levels
-  0  No cleaning — raw responses written as-is.
-  1  Discard-only — bracket-tag-only responses (e.g. "[Conversation]") → ''.
-  2  Full cleaning (default) — discard + strip @handle / [tag] prefixes.
-
-See response_cleaning.md for full documentation.
-""",
 )
 parser.add_argument(
     'input_folder', nargs='?', default=None, type=str,
@@ -77,17 +55,10 @@ parser.add_argument(
     '--input-file', type=str,
     help='Path to a single *_optimal_response.json file.'
 )
-parser.add_argument(
-    '--clean-level', type=int, choices=[0, 1, 2], default=2,
-    metavar='{0,1,2}',
-    help='Response cleaning level (0=none, 1=discard-only, 2=full; default: 2).'
-)
 args = parser.parse_args()
 
 if not args.input_folder and not args.input_file:
     parser.error('Either input_folder or --input-file must be provided.')
-
-CLEAN_LEVEL = args.clean_level
 
 # ---------------------------------------------------------------------------
 # CSV field definitions
@@ -134,9 +105,9 @@ def convert_json_to_csv(json_path: str) -> None:
             'pesonalized':          entry.get('OPPU', False),
             'original_message':     entry.get('original_message', ''),
             'reply_to':             entry.get('reply_to', ''),
-            'response':             clean_response(entry.get('response', ''),             CLEAN_LEVEL),
-            'ML_best_response':     clean_response(entry.get('ML_best_response', ''),     CLEAN_LEVEL),
-            'cosine_best_response': clean_response(entry.get('cosine_best_response', ''), CLEAN_LEVEL),
+            'response':             entry.get('response', ''),
+            'ML_best_response':     entry.get('ML_best_response', ''),
+            'cosine_best_response': entry.get('cosine_best_response', ''),
         })
 
     with open(csv_path, 'w', encoding='utf-8', newline='') as f:
@@ -144,7 +115,7 @@ def convert_json_to_csv(json_path: str) -> None:
         writer.writeheader()
         writer.writerows(rows)
 
-    print(f'Processed {json_path} → {csv_path}  (clean_level={CLEAN_LEVEL})')
+    print(f'Processed {json_path} → {csv_path}')
 
 
 if args.input_file:
