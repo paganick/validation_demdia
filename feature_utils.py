@@ -309,6 +309,11 @@ def type_token_ratio(text):
         return 0
     return len(set(words)) / len(words)
 
+def count_sentences(text):
+    """Count the number of sentences in the text."""
+    sentences = sent_tokenize(str(text))
+    return len(sentences)
+
 def sentence_length_variance(text):
     """Calculate variance in sentence lengths"""
     sentences = sent_tokenize(text)
@@ -558,6 +563,7 @@ def extract_features(df, cache_path=None):
     'has_quotes': has_quotes,
 
     # === Advanced features ===
+    'sentence_count': count_sentences,
     'perplexity_proxy': perplexity_proxy,
     'type_token_ratio': type_token_ratio,
     'sentence_length_variance': sentence_length_variance,
