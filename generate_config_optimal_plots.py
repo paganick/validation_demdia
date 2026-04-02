@@ -25,6 +25,16 @@ from matplotlib.patches import Rectangle, Patch
 import warnings
 warnings.filterwarnings('ignore')
 
+def _save_stats(df, groupby_cols, value_cols, output_path):
+    """Save summary statistics (count, mean, std, median, Q1, Q3) for a figure's data."""
+    if isinstance(value_cols, str):
+        value_cols = [value_cols]
+    agg = df.groupby(groupby_cols)[value_cols].describe(percentiles=[.25, .5, .75])
+    agg.columns = ['_'.join(c).strip('_') for c in agg.columns]
+    agg = agg.reset_index()
+    agg.to_csv(output_path, index=False)
+    print(f"  Stats saved to: {output_path}")
+
 # Import custom utilities
 from plotting_utils import (
     MODEL_PALETTE, DATASET_PALETTE, parse_filename, make_label,
@@ -454,6 +464,8 @@ def plot_sota_vs_best_performance(df, response_type="random", metric="accuracy")
         ax.grid(True, alpha=0.3, axis='y')
         ax.set_axisbelow(True)
         
+        stats_path = os.path.join(OUTPUT_DIR, f'config_sota_vs_best_{response_type}_stats.csv')
+        _save_stats(subset, ['model', 'dataset', 'short_label'], f'{metric}_mean', stats_path)
         plt.tight_layout()
         output_path = os.path.join(OUTPUT_DIR, f'config_sota_vs_best_{response_type}.{SAVE_FORMAT}')
         fig.savefig(output_path, dpi=600, bbox_inches='tight', transparent=PRESENTATION_MODE)
@@ -546,6 +558,14 @@ def plot_intervention_steps_aggregated(df, response_type="random", metric="accur
         ax.tick_params(axis='y', labelsize=15)
         ax.legend(loc='lower left', fontsize=15)
         
+        if step_improvements:
+            step_rows = []
+            for s in step_improvements:
+                for mdl, imp in zip(s['models'], s['improvements']):
+                    step_rows.append({'step': s['step_name'], 'model': mdl, 'accuracy_change': imp})
+            stats_path = os.path.join(OUTPUT_DIR, f'config_stepwise_{response_type}_stats.csv')
+            pd.DataFrame(step_rows).to_csv(stats_path, index=False)
+            print(f"  Stats saved to: {stats_path}")
         plt.tight_layout()
         output_path = os.path.join(OUTPUT_DIR, f'config_stepwise_{response_type}.{SAVE_FORMAT}')
         fig.savefig(output_path, dpi=600, bbox_inches='tight', transparent=PRESENTATION_MODE)
@@ -623,6 +643,9 @@ def plot_response_overlap_summary(df_overlap):
         })
     
     df_summary = pd.DataFrame(summary_data)
+    stats_path = os.path.join(OUTPUT_DIR, f'config_overlap_stats.csv')
+    df_summary.to_csv(stats_path, index=False)
+    print(f"  Stats saved to: {stats_path}")
     model_order = get_ordered_models(df_summary['model'].unique())
     datasets = NORMALIZED_DATASETS
     
@@ -917,12 +940,15 @@ def plot_cosine_similarity_boxplot(similarity_data, df_best_configs):
     
     df_best = pd.concat(best_data_list, ignore_index=True)
     df_combined = pd.concat([df_sota, df_best], ignore_index=True)
-    
+
     datasets = NORMALIZED_DATASETS
-    
+
+    stats_path = os.path.join(OUTPUT_DIR, 'config_cosine_sota_vs_best_stats.csv')
+    _save_stats(df_combined, ['dataset', 'model', 'config_label', 'type'], 'similarity', stats_path)
+
     with with_plot_style(PRESENTATION_MODE):
         fig, ax = plt.subplots(figsize=(14, 8))
-        
+
         box_width = 0.35
         group_spacing = 0.4
         positions_per_dataset = []
@@ -1062,7 +1088,14 @@ def plot_cosine_similarity_boxplot_all_methods(similarity_data, df_best_configs)
     
     df_combined = pd.concat([df_baseline] + all_best_data, ignore_index=True)
     datasets = NORMALIZED_DATASETS
-    
+
+    # Detailed stats (per model × config_label × type)
+    stats_path = os.path.join(OUTPUT_DIR, 'config_cosine_all_methods_stats.csv')
+    _save_stats(df_combined, ['dataset', 'model', 'config_label', 'type'], 'similarity', stats_path)
+    # Summary stats (per dataset × type — matches what each boxplot in the figure shows)
+    summary_path = os.path.join(OUTPUT_DIR, 'config_cosine_all_methods_summary.csv')
+    _save_stats(df_combined, ['dataset', 'type'], 'similarity', summary_path)
+
     with with_plot_style(PRESENTATION_MODE):
         fig, ax = plt.subplots(figsize=(16, 8))
         
@@ -1346,11 +1379,21 @@ def plot_empath_feature_frequency(folder_paths, df_best_configs, response_type='
     
     ordered_models = get_ordered_models(list(all_models))
     total_models = len(ordered_models)
-    
+
+    stats_path = os.path.join(OUTPUT_DIR, f'config_empath_stats_{response_type}.csv')
+    empath_rows = []
+    for data_item in all_data:
+        for feat, model_counts in data_item['model_counts'].items():
+            for mdl, cnt in model_counts.items():
+                empath_rows.append({'dataset': data_item['dataset'], 'feature': feat, 'model': mdl, 'count': cnt})
+    if empath_rows:
+        pd.DataFrame(empath_rows).to_csv(stats_path, index=False)
+        print(f"  Stats saved to: {stats_path}")
+
     # Create aggregated plot with 3 subplots (one per dataset)
     fig_width = 18
     fig_height = 8
-    
+
     with with_plot_style(PRESENTATION_MODE):
         fig, axes = plt.subplots(1, len(all_data), figsize=(fig_width, fig_height), 
                                 sharey=False)
@@ -1520,7 +1563,13 @@ def plot_feature_importance_heatmap(df, max_features=10):
     if df is None or df.empty:
         print("  No feature importance data to plot")
         return
-    
+
+    stats_path = os.path.join(OUTPUT_DIR, f'config_feature_importance_stats.csv')
+    df.groupby(['dataset', 'model', 'feature'])['importance'].mean().reset_index().rename(
+        columns={'importance': 'mean_importance'}
+    ).to_csv(stats_path, index=False)
+    print(f"  Stats saved to: {stats_path}")
+
     with with_plot_style(PRESENTATION_MODE):
         # Order datasets: Bluesky, Twitter, Reddit
         dataset_order = NORMALIZED_DATASETS
