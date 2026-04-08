@@ -25,6 +25,9 @@ from matplotlib.patches import Patch, Rectangle
 import matplotlib.patches as mpatches
 import warnings
 warnings.filterwarnings('ignore')
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.inspection import permutation_importance
 
 def _save_stats(df, groupby_cols, value_cols, output_path):
     """Save summary statistics (count, mean, std, median, Q1, Q3) for a figure's data."""
@@ -798,7 +801,7 @@ def _load_feature_distributions(dataset_path: Path) -> dict:
 
 
 # === Figure 6: Raw Feature Bias (AI vs Human) ===
-def generate_feature_bias(top_n: int = 5):
+def generate_feature_bias(top_n: int = 10):
     """
     3 rows (platforms) × top_n columns (features).
     Each subplot: one boxplot per model (MODEL_PALETTE) + one Human boxplot (gray).
@@ -830,7 +833,7 @@ def generate_feature_bias(top_n: int = 5):
     n_rows, n_cols = len(pnames), top_n
 
     with with_plot_style(PRESENTATION_MODE):
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=(3.5 * n_cols, 4 * n_rows), sharey=False)
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(2.5 * n_cols, 3.5 * n_rows), sharey=False)
         if n_rows == 1: axes = axes[np.newaxis, :]
         if n_cols == 1: axes = axes[:, np.newaxis]
 
@@ -867,26 +870,38 @@ def generate_feature_bias(top_n: int = 5):
                     bp['whiskers'][i*2].set_color(color);   bp['whiskers'][i*2+1].set_color(color)
                     bp['caps'][i*2].set_color(color);       bp['caps'][i*2+1].set_color(color)
 
-                ax.axhline(human_median, color=HUMAN_COLOR, linestyle='--', linewidth=1, alpha=0.8)
-                ax.set_title(feat.replace('_', ' '), fontsize=12, pad=4)
+                # Jittered strip overlay — makes degenerate (IQR=0) distributions visible
+                rng = np.random.default_rng(42)
+                max_pts = 80
+                for pos, vals, color in zip(x_positions, box_data, box_colors):
+                    if len(vals) == 0:
+                        continue
+                    sample = vals if len(vals) <= max_pts else rng.choice(vals, max_pts, replace=False)
+                    jitter = rng.uniform(-0.18, 0.18, size=len(sample))
+                    ax.scatter(pos + jitter, sample, s=4, color=color, alpha=0.45, zorder=3, linewidths=0)
+
+                # Clip y-axis to 2nd–98th percentile to suppress extreme outliers
+                all_vals = np.concatenate([v for v in box_data if len(v) > 0])
+                if len(all_vals) > 0:
+                    lo, hi = np.percentile(all_vals, 2), np.percentile(all_vals, 98)
+                    pad = (hi - lo) * 0.1 if hi > lo else 0.1
+                    ax.set_ylim(lo - pad, hi + pad)
+
+                ax.axhline(human_median, color=HUMAN_COLOR, linestyle='-', linewidth=2.5, alpha=1.0, zorder=4)
+                ax.set_title(feat.replace('_', ' '), fontsize=10, pad=4)
                 if col_idx == 0:
                     ax.set_ylabel(format_dataset_name(pname), fontsize=13, color=pcolor, labelpad=6)
-                ax.tick_params(axis='y', labelsize=10)
+                ax.tick_params(axis='y', labelsize=9)
+                ax.tick_params(axis='x', bottom=False)
+                ax.set_xticks([])
                 ax.grid(True, alpha=0.3, axis='y')
-                ax.set_xticks(x_positions)
-                if row_idx == n_rows - 1:
-                    ax.set_xticklabels(x_labels, rotation=45, ha='right', fontsize=10)
-                    for tick, lbl in zip(ax.get_xticklabels(), x_labels):
-                        tick.set_color(HUMAN_COLOR if lbl == HUMAN_LABEL else MODEL_PALETTE.get(lbl, '#000000'))
-                else:
-                    ax.set_xticklabels([])
 
         legend_handles = [mpatches.Patch(facecolor=MODEL_PALETTE.get(m, '#888888'), alpha=0.75, label=m) for m in model_order]
         legend_handles.append(mpatches.Patch(facecolor=HUMAN_COLOR, alpha=0.75, label=HUMAN_LABEL))
-        fig.legend(handles=legend_handles, loc='lower center', bbox_to_anchor=(0.5, -0.02),
+        fig.legend(handles=legend_handles, loc='lower center', bbox_to_anchor=(0.5, -0.01),
                    ncol=min(len(legend_handles), 5), fontsize=11, frameon=True)
         plt.tight_layout()
-        plt.subplots_adjust(bottom=0.18)
+        plt.subplots_adjust(bottom=0.12)
         output_path = os.path.join(OUTPUT_DIR, f'SOTA_feature_bias.{SAVE_FORMAT}')
         fig.savefig(output_path, dpi=300, bbox_inches='tight', transparent=PRESENTATION_MODE)
         plt.close(fig)
@@ -894,7 +909,7 @@ def generate_feature_bias(top_n: int = 5):
 
 
 # === Figure 7: Feature Bias — AI deviation from human median ===
-def generate_feature_bias_diff(top_n: int = 5):
+def generate_feature_bias_diff(top_n: int = 10):
     """
     3 rows (platforms) × top_n columns (features).
     Each value is AI_feature - human_median; dashed line at 0 = no bias.
@@ -923,7 +938,7 @@ def generate_feature_bias_diff(top_n: int = 5):
     n_rows, n_cols = len(pnames), top_n
 
     with with_plot_style(PRESENTATION_MODE):
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=(3.5 * n_cols, 4 * n_rows), sharey=False)
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(2.5 * n_cols, 3.5 * n_rows), sharey=False)
         if n_rows == 1: axes = axes[np.newaxis, :]
         if n_cols == 1: axes = axes[:, np.newaxis]
 
@@ -966,26 +981,38 @@ def generate_feature_bias_diff(top_n: int = 5):
                     bp['whiskers'][i*2].set_color(color);   bp['whiskers'][i*2+1].set_color(color)
                     bp['caps'][i*2].set_color(color);       bp['caps'][i*2+1].set_color(color)
 
-                ax.axhline(0, color='black', linestyle='--', linewidth=1, alpha=0.6)
-                ax.set_title(feat.replace('_', ' '), fontsize=12, pad=4)
+                # Jittered strip overlay
+                rng = np.random.default_rng(42)
+                max_pts = 80
+                for pos, vals, color in zip(x_positions, box_data, box_colors):
+                    if len(vals) == 0:
+                        continue
+                    sample = vals if len(vals) <= max_pts else rng.choice(vals, max_pts, replace=False)
+                    jitter = rng.uniform(-0.18, 0.18, size=len(sample))
+                    ax.scatter(pos + jitter, sample, s=4, color=color, alpha=0.45, zorder=3, linewidths=0)
+
+                # Clip y-axis to 2nd–98th percentile to suppress extreme outliers
+                all_vals = np.concatenate([v for v in box_data if len(v) > 0])
+                if len(all_vals) > 0:
+                    lo, hi = np.percentile(all_vals, 2), np.percentile(all_vals, 98)
+                    pad = (hi - lo) * 0.1 if hi > lo else 0.1
+                    ax.set_ylim(lo - pad, hi + pad)
+
+                ax.axhline(0, color='black', linestyle='-', linewidth=2.5, alpha=1.0, zorder=4)
+                ax.set_title(feat.replace('_', ' '), fontsize=10, pad=4)
                 if col_idx == 0:
                     ax.set_ylabel(f"{format_dataset_name(pname)}\nAI − human median",
                                   fontsize=12, color=pcolor, labelpad=6)
-                ax.tick_params(axis='y', labelsize=10)
+                ax.tick_params(axis='y', labelsize=9)
+                ax.tick_params(axis='x', bottom=False)
+                ax.set_xticks([])
                 ax.grid(True, alpha=0.3, axis='y')
-                ax.set_xticks(x_positions)
-                if row_idx == n_rows - 1:
-                    ax.set_xticklabels(model_order, rotation=45, ha='right', fontsize=10)
-                    for tick, lbl in zip(ax.get_xticklabels(), model_order):
-                        tick.set_color(MODEL_PALETTE.get(lbl, '#000000'))
-                else:
-                    ax.set_xticklabels([])
 
         legend_handles = [mpatches.Patch(facecolor=MODEL_PALETTE.get(m, '#888888'), alpha=0.75, label=m) for m in model_order]
-        fig.legend(handles=legend_handles, loc='lower center', bbox_to_anchor=(0.5, -0.02),
+        fig.legend(handles=legend_handles, loc='lower center', bbox_to_anchor=(0.5, -0.01),
                    ncol=min(len(legend_handles), 5), fontsize=11, frameon=True)
         plt.tight_layout()
-        plt.subplots_adjust(bottom=0.18)
+        plt.subplots_adjust(bottom=0.12)
         output_path = os.path.join(OUTPUT_DIR, f'SOTA_feature_bias_diff.{SAVE_FORMAT}')
         fig.savefig(output_path, dpi=300, bbox_inches='tight', transparent=PRESENTATION_MODE)
         plt.close(fig)
@@ -1183,6 +1210,125 @@ def generate_feature_importance_by_model():
         print(f"  Saved to: {output_path}")
 
 
+# === Figure: MDI vs Permutation Feature Importance comparison ===
+def generate_feature_importance_comparison(n_repeats: int = 20, top_n: int = 10):
+    """
+    For each platform, train a Random Forest on SOTA-config validation data
+    and compute both Mean Decrease in Impurity (MDI) and Permutation Feature
+    Importance (PFI) on the held-out test set.  Importances are averaged across
+    models and shown as side-by-side horizontal bar charts (one row per platform).
+
+    MDI is known to be biased toward high-cardinality continuous features and is
+    computed on training data.  PFI measures the drop in AUC when each feature is
+    shuffled on the test set, giving an unbiased out-of-sample estimate.
+    """
+    print(f"\n=== Generating Figure: MDI vs Permutation Feature Importance ===")
+
+    EXCLUDE = {'spelling_grammar_errors', 'has_emoji', 'has_mention', 'has_link'}
+
+    # Collect (platform, model) -> (mdi_series, pfi_series)
+    platform_results = {}   # pname -> list of (mdi Series, pfi Series)
+
+    for dataset in DATASETS:
+        pname = normalize_dataset_name(dataset)
+        model_data = _load_feature_distributions(Path(dataset))
+        if not model_data:
+            print(f"  Skipping {pname}: no data")
+            continue
+
+        platform_results[pname] = []
+
+        for model, df in model_data.items():
+            feat_cols = [c for c in df.columns if c not in EXCLUDE | {'label'}]
+            feat_cols = [c for c in feat_cols if df[c].dtype in (np.float64, np.int64, float, int)]
+            X = df[feat_cols].fillna(0)
+            y = df['label']
+
+            if y.nunique() < 2 or len(X) < 20:
+                continue
+
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, stratify=y, random_state=42, test_size=0.25
+            )
+
+            clf = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1)
+            clf.fit(X_train, y_train)
+
+            mdi = pd.Series(clf.feature_importances_, index=feat_cols)
+
+            pfi_result = permutation_importance(
+                clf, X_test, y_test,
+                n_repeats=n_repeats,
+                random_state=42,
+                scoring='roc_auc',
+                n_jobs=-1,
+            )
+            pfi = pd.Series(pfi_result.importances_mean, index=feat_cols)
+
+            platform_results[pname].append((mdi, pfi))
+            print(f"    {pname} / {model}: done")
+
+    if not platform_results:
+        print("  No data found.")
+        return
+
+    pnames = list(platform_results.keys())
+    n_rows = len(pnames)
+
+    with with_plot_style(PRESENTATION_MODE):
+        fig, axes = plt.subplots(n_rows, 2, figsize=(14, 4 * n_rows))
+        if n_rows == 1:
+            axes = axes[np.newaxis, :]
+
+        for row_idx, pname in enumerate(pnames):
+            pairs = platform_results[pname]
+            if not pairs:
+                continue
+
+            all_mdi = pd.concat([p[0] for p in pairs], axis=1).mean(axis=1)
+            all_pfi = pd.concat([p[1] for p in pairs], axis=1).mean(axis=1)
+
+            # Normalise each to [0, 1] for comparability
+            all_mdi = all_mdi / all_mdi.sum() if all_mdi.sum() > 0 else all_mdi
+            all_pfi_pos = all_pfi.clip(lower=0)
+            all_pfi_pos = all_pfi_pos / all_pfi_pos.sum() if all_pfi_pos.sum() > 0 else all_pfi_pos
+
+            # Top-N by union of both rankings
+            top_mdi_feats = set(all_mdi.nlargest(top_n).index)
+            top_pfi_feats = set(all_pfi_pos.nlargest(top_n).index)
+            top_feats = list(top_mdi_feats | top_pfi_feats)
+            # Sort by average rank across both methods
+            avg_rank = (all_mdi[top_feats].rank(ascending=False) +
+                        all_pfi_pos[top_feats].rank(ascending=False)) / 2
+            top_feats = avg_rank.sort_values().index.tolist()[:top_n]
+
+            pcolor = get_dataset_color(pname)
+
+            for col_idx, (values, title) in enumerate([
+                (all_mdi[top_feats].sort_values(), 'MDI (Gini impurity, train)'),
+                (all_pfi[top_feats].sort_values(),  'Permutation (AUC drop, test)'),
+            ]):
+                ax = axes[row_idx, col_idx]
+                colors = ['#d32f2f' if v < 0 else pcolor for v in values]
+                ax.barh(range(len(values)), values.values, color=colors, alpha=0.8)
+                ax.set_yticks(range(len(values)))
+                ax.set_yticklabels([f.replace('_', ' ') for f in values.index], fontsize=10)
+                ax.axvline(0, color='black', linewidth=0.8)
+                ax.set_title(title, fontsize=12)
+                ax.grid(True, axis='x', alpha=0.3)
+                if col_idx == 0:
+                    ax.set_ylabel(format_dataset_name(pname), fontsize=13,
+                                  color=pcolor, labelpad=6)
+
+        plt.suptitle('Feature importance: MDI vs Permutation (SOTA config, averaged across models)',
+                     fontsize=13, y=1.01)
+        plt.tight_layout()
+        output_path = os.path.join(OUTPUT_DIR, f'SOTA_feature_importance_comparison.{SAVE_FORMAT}')
+        fig.savefig(output_path, dpi=300, bbox_inches='tight', transparent=PRESENTATION_MODE)
+        plt.close(fig)
+        print(f"  Saved to: {output_path}")
+
+
 def main():
     """Main function to generate all 4 required figures."""
     global DATASETS, NORMALIZED_DATASETS, OUTPUT_DIR
@@ -1225,6 +1371,7 @@ def main():
     generate_feature_bias()
     generate_feature_bias_diff()
     generate_feature_importance_by_model()
+    generate_feature_importance_comparison()
     generate_cosine_baselines()
     
     print("\n" + "=" * 60)
