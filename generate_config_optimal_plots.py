@@ -1841,7 +1841,7 @@ def generate_feature_importance_by_model_best_config(df_best_configs):
 
 
 # === Figure 11: Raw Feature Bias — best-config (AI vs Human) ===
-def generate_feature_bias_best_config(df_best_configs, top_n: int = 5):
+def generate_feature_bias_best_config(df_best_configs, top_n: int = 10):
     """
     3 rows (platforms) × top_n columns (features).
     Each subplot: one boxplot per model (MODEL_PALETTE) + one Human boxplot (gray),
@@ -1949,7 +1949,7 @@ def generate_feature_bias_best_config(df_best_configs, top_n: int = 5):
     n_rows, n_cols = len(pnames), top_n
 
     with with_plot_style(PRESENTATION_MODE):
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=(3.5 * n_cols, 4 * n_rows), sharey=False)
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(2.5 * n_cols, 3.5 * n_rows), sharey=False)
         if n_rows == 1: axes = axes[np.newaxis, :]
         if n_cols == 1: axes = axes[:, np.newaxis]
 
@@ -1986,27 +1986,39 @@ def generate_feature_bias_best_config(df_best_configs, top_n: int = 5):
                     bp['whiskers'][i*2].set_color(color);   bp['whiskers'][i*2+1].set_color(color)
                     bp['caps'][i*2].set_color(color);       bp['caps'][i*2+1].set_color(color)
 
-                ax.axhline(human_median, color=HUMAN_COLOR, linestyle='--', linewidth=1, alpha=0.8)
-                ax.set_title(feat.replace('_', ' '), fontsize=12, pad=4)
+                # Jittered strip overlay
+                rng = np.random.default_rng(42)
+                max_pts = 80
+                for pos, vals, color in zip(x_positions, box_data, box_colors):
+                    if len(vals) == 0:
+                        continue
+                    sample = vals if len(vals) <= max_pts else rng.choice(vals, max_pts, replace=False)
+                    jitter = rng.uniform(-0.18, 0.18, size=len(sample))
+                    ax.scatter(pos + jitter, sample, s=4, color=color, alpha=0.45, zorder=3, linewidths=0)
+
+                # Clip y-axis to 2nd–98th percentile
+                all_vals = np.concatenate([v for v in box_data if len(v) > 0])
+                if len(all_vals) > 0:
+                    lo, hi = np.percentile(all_vals, 2), np.percentile(all_vals, 98)
+                    pad = (hi - lo) * 0.1 if hi > lo else 0.1
+                    ax.set_ylim(lo - pad, hi + pad)
+
+                ax.axhline(human_median, color=HUMAN_COLOR, linestyle='-', linewidth=2.5, alpha=1.0, zorder=4)
+                ax.set_title(feat.replace('_', ' '), fontsize=10, pad=4)
                 if col_idx == 0:
                     ax.set_ylabel(format_dataset_name(pname), fontsize=13, color=pcolor, labelpad=6)
-                ax.tick_params(axis='y', labelsize=10)
+                ax.tick_params(axis='y', labelsize=9)
+                ax.tick_params(axis='x', bottom=False)
+                ax.set_xticks([])
                 ax.grid(True, alpha=0.3, axis='y')
-                ax.set_xticks(x_positions)
-                if row_idx == n_rows - 1:
-                    ax.set_xticklabels(x_labels, rotation=45, ha='right', fontsize=10)
-                    for tick, lbl in zip(ax.get_xticklabels(), x_labels):
-                        tick.set_color(HUMAN_COLOR if lbl == HUMAN_LABEL else MODEL_PALETTE.get(lbl, '#000000'))
-                else:
-                    ax.set_xticklabels([])
 
         legend_handles = [Patch(facecolor=MODEL_PALETTE.get(m, '#888888'), alpha=0.75, label=m)
                           for m in model_order]
         legend_handles.append(Patch(facecolor=HUMAN_COLOR, alpha=0.75, label=HUMAN_LABEL))
-        fig.legend(handles=legend_handles, loc='lower center', bbox_to_anchor=(0.5, -0.02),
+        fig.legend(handles=legend_handles, loc='lower center', bbox_to_anchor=(0.5, -0.01),
                    ncol=min(len(legend_handles), 5), fontsize=11, frameon=True)
         plt.tight_layout()
-        plt.subplots_adjust(bottom=0.18)
+        plt.subplots_adjust(bottom=0.12)
         output_path = os.path.join(OUTPUT_DIR, f'config_feature_bias.{SAVE_FORMAT}')
         fig.savefig(output_path, dpi=300, bbox_inches='tight', transparent=PRESENTATION_MODE)
         plt.close(fig)
@@ -2014,7 +2026,7 @@ def generate_feature_bias_best_config(df_best_configs, top_n: int = 5):
 
 
 # === Figure 12: Feature Bias (best-config AI − human median) ===
-def generate_feature_bias_diff_best_config(df_best_configs, top_n: int = 5):
+def generate_feature_bias_diff_best_config(df_best_configs, top_n: int = 10):
     """
     Same layout as generate_feature_bias_diff() in generate_SOTA_plots.py but uses
     the best configuration per model/dataset instead of baseline+persona-only files.
@@ -2128,7 +2140,7 @@ def generate_feature_bias_diff_best_config(df_best_configs, top_n: int = 5):
     n_rows, n_cols = len(pnames), top_n
 
     with with_plot_style(PRESENTATION_MODE):
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=(3.5 * n_cols, 4 * n_rows), sharey=False)
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(2.5 * n_cols, 3.5 * n_rows), sharey=False)
         if n_rows == 1: axes = axes[np.newaxis, :]
         if n_cols == 1: axes = axes[:, np.newaxis]
 
@@ -2172,27 +2184,39 @@ def generate_feature_bias_diff_best_config(df_best_configs, top_n: int = 5):
                     bp['whiskers'][i*2].set_color(color);   bp['whiskers'][i*2+1].set_color(color)
                     bp['caps'][i*2].set_color(color);       bp['caps'][i*2+1].set_color(color)
 
-                ax.axhline(0, color='black', linestyle='--', linewidth=1, alpha=0.6)
-                ax.set_title(feat.replace('_', ' '), fontsize=12, pad=4)
+                # Jittered strip overlay
+                rng = np.random.default_rng(42)
+                max_pts = 80
+                for pos, vals, color in zip(x_positions, box_data, box_colors):
+                    if len(vals) == 0:
+                        continue
+                    sample = vals if len(vals) <= max_pts else rng.choice(vals, max_pts, replace=False)
+                    jitter = rng.uniform(-0.18, 0.18, size=len(sample))
+                    ax.scatter(pos + jitter, sample, s=4, color=color, alpha=0.45, zorder=3, linewidths=0)
+
+                # Clip y-axis to 2nd–98th percentile
+                all_vals = np.concatenate([v for v in box_data if len(v) > 0])
+                if len(all_vals) > 0:
+                    lo, hi = np.percentile(all_vals, 2), np.percentile(all_vals, 98)
+                    pad = (hi - lo) * 0.1 if hi > lo else 0.1
+                    ax.set_ylim(lo - pad, hi + pad)
+
+                ax.axhline(0, color='black', linestyle='-', linewidth=2.5, alpha=1.0, zorder=4)
+                ax.set_title(feat.replace('_', ' '), fontsize=10, pad=4)
                 if col_idx == 0:
                     ax.set_ylabel(f"{format_dataset_name(pname)}\nAI − human median",
                                   fontsize=12, color=pcolor, labelpad=6)
-                ax.tick_params(axis='y', labelsize=10)
+                ax.tick_params(axis='y', labelsize=9)
+                ax.tick_params(axis='x', bottom=False)
+                ax.set_xticks([])
                 ax.grid(True, alpha=0.3, axis='y')
-                ax.set_xticks(x_positions)
-                if row_idx == n_rows - 1:
-                    ax.set_xticklabels(model_order, rotation=45, ha='right', fontsize=10)
-                    for tick, lbl in zip(ax.get_xticklabels(), model_order):
-                        tick.set_color(MODEL_PALETTE.get(lbl, '#000000'))
-                else:
-                    ax.set_xticklabels([])
 
         legend_handles = [Patch(facecolor=MODEL_PALETTE.get(m, '#888888'), alpha=0.75, label=m)
                           for m in model_order]
-        fig.legend(handles=legend_handles, loc='lower center', bbox_to_anchor=(0.5, -0.02),
+        fig.legend(handles=legend_handles, loc='lower center', bbox_to_anchor=(0.5, -0.01),
                    ncol=min(len(legend_handles), 5), fontsize=11, frameon=True)
         plt.tight_layout()
-        plt.subplots_adjust(bottom=0.18)
+        plt.subplots_adjust(bottom=0.12)
         output_path = os.path.join(OUTPUT_DIR, f'config_feature_bias_diff.{SAVE_FORMAT}')
         fig.savefig(output_path, dpi=300, bbox_inches='tight', transparent=PRESENTATION_MODE)
         plt.close(fig)
