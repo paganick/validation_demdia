@@ -107,6 +107,7 @@ def compute_platform_baselines(platform_folder, posts_pkl, model, rng):
     # Human training messages per user (for intra-human baseline)
     with open(posts_pkl, "rb") as f:
         posts_df = pickle.load(f)
+    posts_df = posts_df.reset_index(drop=True)
     training_msgs = (
         posts_df[posts_df["training"] == 1]
         .groupby("username")["message"]
@@ -230,7 +231,7 @@ def main():
         print(f"No platform subdirectories found in {base}", file=sys.stderr)
         sys.exit(1)
 
-    output_dir = Path(args.output_dir) if args.output_dir else base.parent / "cosine_baselines"
+    output_dir = Path(args.output_dir) if args.output_dir else base / "cosine_baselines"
     output_dir.mkdir(parents=True, exist_ok=True)
     print(f"Output directory: {output_dir}")
 
