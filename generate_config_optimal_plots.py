@@ -2212,7 +2212,10 @@ def main():
 
     if args.results_folder is not None:
         base = Path(args.results_folder)
-        found = sorted([str(p) for p in base.iterdir() if p.is_dir() and not p.name.endswith('_figures')])
+        PLATFORM_ORDER = ['bluesky', 'twitter', 'reddit']
+        all_dirs = {p.name: str(p) for p in base.iterdir() if p.is_dir() and not p.name.endswith('_figures')}
+        found = [all_dirs[k] for k in PLATFORM_ORDER if k in all_dirs] + \
+                [v for k, v in sorted(all_dirs.items()) if k not in PLATFORM_ORDER]
         if not found:
             print(f"Error: no subdirectories found in {base}", file=sys.stderr)
             sys.exit(1)
