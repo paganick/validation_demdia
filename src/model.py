@@ -88,8 +88,17 @@ class Model:
         self.finetuned = config["finetuned"]
         self.users = users  # List of usernames to filter training data (None = use all)
 
+        # LoRA / training hyperparameters (overridable per config; defaults match original run)
+        self.lora_r = config.get("lora_r", 16)
+        self.lora_alpha = config.get("lora_alpha", 32)
+        self.lora_dropout = config.get("lora_dropout", 0.1)
+        self.ft_learning_rate = config.get("ft_learning_rate", 1e-4)
+
         # Build fine-tuned directory path
+        ft_variant = config.get("ft_variant", "")
         base_dir = f"{config['finetuning_dir']}{config['model']}_finetuned_{os.path.splitext(posts_file)[0]}"
+        if ft_variant:
+            base_dir = f"{base_dir}_{ft_variant}"
         if users is not None:
             # Include a hash of the user list so each batch gets its own model.
             # Without this, all batches would share a single directory and the
@@ -403,9 +412,9 @@ class Model:
         # Improved LoRA configuration
         peft_config = LoraConfig(
             task_type=TaskType.CAUSAL_LM,
-            r=16,  # Slightly higher rank for better capacity
-            lora_alpha=32,  # 2x the rank
-            lora_dropout=0.1,  # Slightly higher dropout
+            r=self.lora_r,
+            lora_alpha=self.lora_alpha,
+            lora_dropout=self.lora_dropout,
             target_modules=["q_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
             bias="none",
         )
@@ -436,7 +445,7 @@ class Model:
             per_device_eval_batch_size=4,
             gradient_accumulation_steps=4,  # Maintain effective batch size of 8
             num_train_epochs=1,  # Fewer epochs to prevent overfitting
-            learning_rate=1e-4,  # Conservative learning rate
+            learning_rate=self.ft_learning_rate,
             lr_scheduler_type="cosine",
             warmup_steps=50,
             weight_decay=0.01,  # Add weight decay for regularization

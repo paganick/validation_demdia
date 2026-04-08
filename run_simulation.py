@@ -100,6 +100,9 @@ def main():
         if not config['persona']:
             output_filename += "__no_persona"
 
+        if config.get("ft_variant"):
+            output_filename += f"__{config['ft_variant']}"
+
         # Add batch suffix if batch processing
         if args.user_batch is not None:
             output_filename += f"__batch{args.user_batch}"
