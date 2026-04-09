@@ -919,7 +919,7 @@ def plot_cosine_similarity_boxplot(similarity_data, df_best_configs):
                         (df_random['context'] == 0) & 
                         (df_random['ft'] == 0)
                         ].copy()
-    df_sota['type'] = 'SOTA (BL+PE)'
+    df_sota['type'] = 'Reference config (BL+PE)'
     
     # Best config data
     best_data_list = []
@@ -967,8 +967,8 @@ def plot_cosine_similarity_boxplot(similarity_data, df_best_configs):
         all_alphas = []
         
         for dataset in datasets:
-            sota_subset = df_combined[(df_combined['dataset'] == dataset) & 
-                                     (df_combined['type'] == 'SOTA (BL+PE)')]
+            sota_subset = df_combined[(df_combined['dataset'] == dataset) &
+                                     (df_combined['type'] == 'Reference config (BL+PE)')]
             all_data.append(sota_subset['similarity'].values if len(sota_subset) > 0 else [])
             all_colors.append(get_dataset_color(dataset))
             all_alphas.append(1.0)
@@ -1023,7 +1023,7 @@ def plot_cosine_similarity_boxplot(similarity_data, df_best_configs):
         ax.set_axisbelow(True)
         
         legend_elements = [
-            Patch(facecolor='gray', alpha=1.0, edgecolor='black', label='SOTA (BL+PE)'),
+            Patch(facecolor='gray', alpha=1.0, edgecolor='black', label='Reference config (BL+PE)'),
             Patch(facecolor='gray', alpha=0.5, edgecolor='black', label='Best Config')
         ]
         ax.legend(handles=legend_elements, loc='lower right', fontsize=15, 
@@ -1193,6 +1193,184 @@ def plot_cosine_similarity_boxplot_all_methods(similarity_data, df_best_configs)
         fig.savefig(output_path, dpi=300, bbox_inches="tight", transparent=PRESENTATION_MODE)
         plt.close()
         print(f"  Saved to: {output_path}")
+
+
+def plot_cosine_similarity_by_model_all_methods(similarity_data, df_best_configs):
+    """
+    3 rows (one per platform) × model groups on x-axis.
+    Within each model group: 4 boxplots for the 4 config types
+    (Baseline, Best Random, Best Cosine Optimal, Best ML Optimal),
+    colored by config type.
+
+    Analogous to SOTA_cosine_similarity_by_model.png but split into
+    the 4 configurations from sota_vs_best_cosine_similarity_boxplot_all_methods.png.
+    """
+    print(f"\n=== Generating Figure: Cosine Similarity by Model × Config Type ===")
+
+    df_random = similarity_data['random']
+    df_ml     = similarity_data['ML_optimal']
+    df_cosine = similarity_data['cosine_optimal']
+
+    if df_random.empty or df_ml.empty or df_cosine.empty:
+        print("  Missing data for some response types")
+        return
+
+    # --- Build combined DataFrame ---
+    df_baseline = df_random[
+        (df_random['persona'] == 1) &
+        (df_random['style']   == 0) &
+        (df_random['context'] == 0) &
+        (df_random['ft']      == 0)
+    ].copy()
+    df_baseline['type'] = 'Baseline (BL+PE)'
+
+    response_datasets = [
+        (df_random, 'Best Random'),
+        (df_cosine, 'Best Cosine Optimal'),
+        (df_ml,     'Best ML Optimal'),
+    ]
+
+    all_best_data = []
+    for df_source, type_label in response_datasets:
+        pieces = []
+        for _, cfg in df_best_configs.iterrows():
+            chunk = df_source[
+                (df_source['model']   == cfg['model']) &
+                (df_source['dataset'] == cfg['dataset']) &
+                (df_source['persona'] == int(cfg['has_persona'])) &
+                (df_source['style']   == int(cfg['has_style'])) &
+                (df_source['context'] == int(cfg['has_context'])) &
+                (df_source['ft']      == int(cfg['has_finetuning']))
+            ].copy()
+            if len(chunk) > 0:
+                chunk['type'] = type_label
+                pieces.append(chunk)
+        if pieces:
+            all_best_data.append(pd.concat(pieces, ignore_index=True))
+
+    if not all_best_data:
+        print("  No best-config data found")
+        return
+
+    df_combined = pd.concat([df_baseline] + all_best_data, ignore_index=True)
+
+    # Save stats
+    stats_path = os.path.join(OUTPUT_DIR, 'config_cosine_by_model_all_methods_stats.csv')
+    _save_stats(df_combined, ['dataset', 'model', 'type'], 'similarity', stats_path)
+
+    config_types = [
+        'Baseline (BL+PE)',
+        'Best Random',
+        'Best Cosine Optimal',
+        'Best ML Optimal',
+    ]
+    # Distinct colors per config type
+    type_colors = {
+        'Baseline (BL+PE)':      '#999999',
+        'Best Random':           '#4C72B0',
+        'Best Cosine Optimal':   '#DD8452',
+        'Best ML Optimal':       '#55A868',
+    }
+
+    datasets    = NORMALIZED_DATASETS
+    model_order = get_ordered_models(df_combined['model'].unique())
+    n_types     = len(config_types)
+    box_width   = 0.16
+    group_span  = n_types * box_width          # width occupied by boxes in one group
+    group_gap   = 0.35                         # gap between model groups
+    group_step  = group_span + group_gap       # distance between group centres
+
+    # x-positions for each (model, type) pair
+    def group_positions(model_idx):
+        centre = model_idx * group_step
+        offsets = [(i - (n_types - 1) / 2) * box_width for i in range(n_types)]
+        return [centre + o for o in offsets]
+
+    with with_plot_style(PRESENTATION_MODE):
+        fig, axes = plt.subplots(
+            len(datasets), 1,
+            figsize=(max(14, 2.2 * len(model_order)), 5 * len(datasets)),
+            sharex=True,
+        )
+        if len(datasets) == 1:
+            axes = [axes]
+
+        for row_idx, (ax, dataset) in enumerate(zip(axes, datasets)):
+            all_pos, all_data, all_colors = [], [], []
+
+            for m_idx, model in enumerate(model_order):
+                positions = group_positions(m_idx)
+                for t_idx, ctype in enumerate(config_types):
+                    vals = df_combined[
+                        (df_combined['dataset'] == dataset) &
+                        (df_combined['model']   == model) &
+                        (df_combined['type']    == ctype)
+                    ]['similarity'].values
+                    all_pos.append(positions[t_idx])
+                    all_data.append(vals)
+                    all_colors.append(type_colors[ctype])
+
+            bp = ax.boxplot(
+                all_data,
+                positions=all_pos,
+                widths=box_width * 0.85,
+                patch_artist=True,
+                showfliers=True,
+                medianprops=dict(color='black', linewidth=1.5),
+                flierprops=dict(marker='o', markersize=2, alpha=0.35),
+            )
+            for patch, color in zip(bp['boxes'], all_colors):
+                patch.set_facecolor(color)
+                patch.set_alpha(0.75)
+                patch.set_edgecolor('black')
+                patch.set_linewidth(0.8)
+            for i, color in enumerate(all_colors):
+                bp['whiskers'][i * 2].set_color(color)
+                bp['whiskers'][i * 2 + 1].set_color(color)
+                bp['caps'][i * 2].set_color(color)
+                bp['caps'][i * 2 + 1].set_color(color)
+
+            ax.axhline(y=0, color='gray', linestyle='--', linewidth=1, alpha=0.5)
+            ax.set_ylim([-1, 1])
+            ax.set_ylabel("Cosine Similarity", fontsize=13)
+            ax.tick_params(axis='y', labelsize=12)
+            ax.grid(True, alpha=0.3, axis='y')
+            ax.set_axisbelow(True)
+
+            dataset_color = get_dataset_color(dataset)
+            ax.set_title(format_dataset_name(dataset), fontsize=14, loc='right',
+                         color=dataset_color, pad=6)
+
+            # x-tick at the centre of each model group
+            centres = [m_idx * group_step for m_idx in range(len(model_order))]
+            ax.set_xticks(centres)
+            if row_idx == len(datasets) - 1:
+                ax.set_xticklabels(model_order, rotation=45, ha='right', fontsize=12)
+                for tick, model in zip(ax.get_xticklabels(), model_order):
+                    tick.set_color(MODEL_PALETTE.get(model, '#000000'))
+            else:
+                ax.set_xticklabels([])
+
+            # Thin vertical separator between model groups
+            for m_idx in range(len(model_order) - 1):
+                sep_x = (m_idx * group_step + group_span / 2) + group_gap / 2
+                ax.axvline(sep_x, color='lightgray', linewidth=0.8, linestyle='-', zorder=0)
+
+        legend_handles = [
+            Patch(facecolor=type_colors[ct], alpha=0.75, edgecolor='black', label=ct)
+            for ct in config_types
+        ]
+        fig.legend(handles=legend_handles, loc='lower center',
+                   bbox_to_anchor=(0.5, -0.03), ncol=len(config_types),
+                   fontsize=12, frameon=True, title='Configuration type', title_fontsize=12)
+
+        plt.tight_layout()
+        plt.subplots_adjust(bottom=0.10)
+        output_path = os.path.join(OUTPUT_DIR, 'config_cosine_by_model_all_methods.png')
+        fig.savefig(output_path, dpi=300, bbox_inches='tight', transparent=PRESENTATION_MODE)
+        plt.close(fig)
+        print(f"  Saved to: {output_path}")
+
 
 # === Figure 7: Empath Feature Frequency (NEW) ===
 def load_empath_feature_data(folder_paths, df_best_configs, response_type='random'):
@@ -1841,14 +2019,33 @@ def generate_feature_importance_by_model_best_config(df_best_configs):
 
 
 # === Figure 11: Raw Feature Bias — best-config (AI vs Human) ===
-def generate_feature_bias_best_config(df_best_configs, top_n: int = 10):
+def generate_feature_bias_best_config(df_best_configs, top_n: int = 10, df_importance=None):
     """
     3 rows (platforms) × top_n columns (features).
     Each subplot: one boxplot per model (MODEL_PALETTE) + one Human boxplot (gray),
     plus a dashed horizontal line at the human median.
     Uses best configuration per model/dataset instead of baseline+persona-only files.
+
+    When df_importance is supplied the same global candidate_features strategy used
+    by the heatmap is applied, keeping the two plots in sync.
     """
     print(f"\n=== Generating Figure 9: Raw Feature Bias (best-config, AI vs Human) ===")
+
+    # Derive global candidate features from the heatmap's pre-loaded df (if available)
+    if df_importance is not None and not df_importance.empty:
+        _overall = df_importance.groupby('feature')['importance'].mean().sort_values(ascending=False)
+        _top_overall = set(_overall.head(10).index)
+        _top_per_model = set()
+        for _m in df_importance['model'].unique():
+            _mi = (df_importance[df_importance['model'] == _m]
+                   .groupby('feature')['importance'].mean()
+                   .sort_values(ascending=False))
+            _top_per_model.update(_mi.head(2).index)
+        candidate_features = _top_overall.union(_top_per_model)
+        all_models = df_importance['model'].unique().tolist()
+    else:
+        candidate_features = None
+        all_models = None
 
     platform_features: dict = {}
     platform_data: dict = {}
@@ -1882,7 +2079,9 @@ def generate_feature_bias_best_config(df_best_configs, top_n: int = 10):
                             and fpersona == expected['persona']):
                         df_imp = pd.read_csv(fpath)
                         if 'feature' in df_imp.columns and 'importance' in df_imp.columns:
-                            feat_importance_dfs.append(df_imp[['feature', 'importance']])
+                            df_imp = df_imp[['feature', 'importance']].copy()
+                            df_imp['model'] = model
+                            feat_importance_dfs.append(df_imp)
                 except Exception:
                     continue
 
@@ -1891,11 +2090,24 @@ def generate_feature_bias_best_config(df_best_configs, top_n: int = 10):
             continue
 
         combined_imp = pd.concat(feat_importance_dfs, ignore_index=True)
-        top_feats = (combined_imp.groupby('feature')['importance']
-                                 .mean()
-                                 .sort_values(ascending=False)
-                                 .head(top_n)
-                                 .index.tolist())
+        di = combined_imp.groupby('feature')['importance'].mean().sort_values(ascending=False)
+
+        if candidate_features is not None:
+            dataset_top = set(di.head(10).index)
+            dataset_top_per_model = set()
+            for _m in (all_models or []):
+                _mi = (combined_imp[combined_imp['model'] == _m]
+                       .groupby('feature')['importance'].mean()
+                       .sort_values(ascending=False))
+                dataset_top_per_model.update(_mi.head(2).index)
+            top_feats = sorted(
+                dataset_top.union(dataset_top_per_model).intersection(candidate_features),
+                key=lambda x: float(di.get(x, 0)),
+                reverse=True
+            )[:top_n]
+        else:
+            top_feats = di.head(top_n).index.tolist()
+
         print(f"  {pname}: top features = {top_feats}")
 
         model_data = {}
@@ -2026,15 +2238,34 @@ def generate_feature_bias_best_config(df_best_configs, top_n: int = 10):
 
 
 # === Figure 12: Feature Bias (best-config AI − human median) ===
-def generate_feature_bias_diff_best_config(df_best_configs, top_n: int = 10):
+def generate_feature_bias_diff_best_config(df_best_configs, top_n: int = 10, df_importance=None):
     """
     Same layout as generate_feature_bias_diff() in generate_SOTA_plots.py but uses
     the best configuration per model/dataset instead of baseline+persona-only files.
 
     3 rows (platforms) × top_n columns (features).
     Each value is AI_feature − human_median; dashed line at 0 = no bias.
+
+    When df_importance is supplied the same global candidate_features strategy used
+    by the heatmap is applied, keeping the two plots in sync.
     """
     print(f"\n=== Generating Figure 9: Feature Bias (best-config, AI − human median) ===")
+
+    # Derive global candidate features from the heatmap's pre-loaded df (if available)
+    if df_importance is not None and not df_importance.empty:
+        _overall = df_importance.groupby('feature')['importance'].mean().sort_values(ascending=False)
+        _top_overall = set(_overall.head(10).index)
+        _top_per_model = set()
+        for _m in df_importance['model'].unique():
+            _mi = (df_importance[df_importance['model'] == _m]
+                   .groupby('feature')['importance'].mean()
+                   .sort_values(ascending=False))
+            _top_per_model.update(_mi.head(2).index)
+        candidate_features = _top_overall.union(_top_per_model)
+        all_models = df_importance['model'].unique().tolist()
+    else:
+        candidate_features = None
+        all_models = None
 
     platform_features: dict = {}
     platform_data: dict = {}
@@ -2071,7 +2302,9 @@ def generate_feature_bias_diff_best_config(df_best_configs, top_n: int = 10):
                             and fpersona == expected['persona']):
                         df_imp = pd.read_csv(fpath)
                         if 'feature' in df_imp.columns and 'importance' in df_imp.columns:
-                            feat_importance_dfs.append(df_imp[['feature', 'importance']])
+                            df_imp = df_imp[['feature', 'importance']].copy()
+                            df_imp['model'] = model
+                            feat_importance_dfs.append(df_imp)
                 except Exception:
                     continue
 
@@ -2080,11 +2313,24 @@ def generate_feature_bias_diff_best_config(df_best_configs, top_n: int = 10):
             continue
 
         combined_imp = pd.concat(feat_importance_dfs, ignore_index=True)
-        top_feats = (combined_imp.groupby('feature')['importance']
-                                 .mean()
-                                 .sort_values(ascending=False)
-                                 .head(top_n)
-                                 .index.tolist())
+        di = combined_imp.groupby('feature')['importance'].mean().sort_values(ascending=False)
+
+        if candidate_features is not None:
+            dataset_top = set(di.head(10).index)
+            dataset_top_per_model = set()
+            for _m in (all_models or []):
+                _mi = (combined_imp[combined_imp['model'] == _m]
+                       .groupby('feature')['importance'].mean()
+                       .sort_values(ascending=False))
+                dataset_top_per_model.update(_mi.head(2).index)
+            top_feats = sorted(
+                dataset_top.union(dataset_top_per_model).intersection(candidate_features),
+                key=lambda x: float(di.get(x, 0)),
+                reverse=True
+            )[:top_n]
+        else:
+            top_feats = di.head(top_n).index.tolist()
+
         print(f"  {pname}: top features = {top_feats}")
 
         # -----------------------------------------------------------------
@@ -2292,6 +2538,7 @@ def main():
     if similarity_data['random'] is not None and not similarity_data['random'].empty:
         plot_cosine_similarity_boxplot(similarity_data, df_best_configs)
         plot_cosine_similarity_boxplot_all_methods(similarity_data, df_best_configs)
+        plot_cosine_similarity_by_model_all_methods(similarity_data, df_best_configs)
 
     # Generate Empath feature frequency plot
     feature_model_counts = load_empath_feature_data(DATASETS, df_best_configs, response_type='random')
@@ -2307,8 +2554,8 @@ def main():
     generate_feature_importance_by_model_best_config(df_best_configs)
 
     # Generate feature bias plots (best-config)
-    generate_feature_bias_best_config(df_best_configs, top_n=5)
-    generate_feature_bias_diff_best_config(df_best_configs, top_n=5)
+    generate_feature_bias_best_config(df_best_configs, top_n=10, df_importance=df_importance)
+    generate_feature_bias_diff_best_config(df_best_configs, top_n=10, df_importance=df_importance)
 
     print("\n" + "=" * 60)
     print("All figures generated successfully!")
