@@ -754,26 +754,92 @@ def generate_aggregated_feature_frequency():
 # === Main Execution ===
 # === Feature bias helpers ===
 
-def _get_top_features(dataset_path: Path, top_n: int = 5) -> list:
-    """Return top-N features ranked by mean RF importance across SOTA-config models."""
+def _get_candidate_features(datasets) -> tuple:
+    """Compute global candidate features using the same strategy as the SOTA_ML heatmap.
+
+    Returns (candidate_features: set, all_models: list).
+    candidate_features = global top-10 by mean importance ∪ top-2 per model (globally).
+    """
+    all_data = []
+    for dataset in datasets:
+        files = glob.glob(str(Path(dataset)) + '/**/*feature_correlation_stats.csv', recursive=True)
+        files = [f for f in files if filter_for_baseline_persona(f)]
+        for fpath in files:
+            try:
+                df = pd.read_csv(fpath)
+                if 'feature' not in df.columns or 'importance' not in df.columns:
+                    continue
+                model, _, _, _, _ = parse_filename(fpath)
+                if model:
+                    df = df[['feature', 'importance']].copy()
+                    df['model'] = model
+                    all_data.append(df)
+            except Exception:
+                continue
+    if not all_data:
+        return set(), []
+    combined = pd.concat(all_data, ignore_index=True)
+    top_overall = set(
+        combined.groupby('feature')['importance'].mean()
+                .sort_values(ascending=False).head(10).index
+    )
+    top_per_model = set()
+    for model in combined['model'].unique():
+        mi = (combined[combined['model'] == model]
+              .groupby('feature')['importance'].mean()
+              .sort_values(ascending=False))
+        top_per_model.update(mi.head(2).index)
+    return top_overall.union(top_per_model), combined['model'].unique().tolist()
+
+
+def _get_top_features(dataset_path: Path, top_n: int = 5,
+                      candidate_features: set = None, all_models: list = None) -> list:
+    """Return top-N features ranked by mean RF importance across SOTA-config models.
+
+    When candidate_features and all_models are supplied the same intersection
+    strategy used by the SOTA_ML heatmap is applied, keeping the two plots in sync.
+    """
     files = glob.glob(str(dataset_path / '**' / '*feature_correlation_stats.csv'), recursive=True)
     files = [f for f in files if filter_for_baseline_persona(f)]
     dfs = []
     for fpath in files:
         try:
             df = pd.read_csv(fpath)
-            if 'feature' in df.columns and 'importance' in df.columns:
-                dfs.append(df[['feature', 'importance']])
+            if 'feature' not in df.columns or 'importance' not in df.columns:
+                continue
+            if candidate_features is not None:
+                model, _, _, _, _ = parse_filename(fpath)
+                if model:
+                    df = df[['feature', 'importance']].copy()
+                    df['model'] = model
+            else:
+                df = df[['feature', 'importance']]
+            dfs.append(df)
         except Exception:
             continue
     if not dfs:
         return []
     combined = pd.concat(dfs, ignore_index=True)
-    return (combined.groupby('feature')['importance']
-                    .mean()
-                    .sort_values(ascending=False)
-                    .head(top_n)
-                    .index.tolist())
+    di = combined.groupby('feature')['importance'].mean().sort_values(ascending=False)
+
+    if candidate_features is None:
+        return di.head(top_n).index.tolist()
+
+    # Mirror heatmap logic: per-dataset top-10 ∪ per-dataset top-2-per-model,
+    # intersected with globally-derived candidate_features.
+    dataset_top = set(di.head(10).index)
+    dataset_top_per_model = set()
+    if all_models is not None and 'model' in combined.columns:
+        for model in all_models:
+            mi = (combined[combined['model'] == model]
+                  .groupby('feature')['importance'].mean()
+                  .sort_values(ascending=False))
+            dataset_top_per_model.update(mi.head(2).index)
+    return sorted(
+        dataset_top.union(dataset_top_per_model).intersection(candidate_features),
+        key=lambda x: float(di.get(x, 0)),
+        reverse=True
+    )[:top_n]
 
 
 def _load_feature_distributions(dataset_path: Path) -> dict:
@@ -808,12 +874,14 @@ def generate_feature_bias(top_n: int = 10):
     """
     print(f"\n=== Generating Figure 6: Raw Feature Bias (AI vs Human) ===")
 
+    candidate_features, all_models = _get_candidate_features(DATASETS)
+
     platform_features = {}
     platform_data     = {}
 
     for dataset in DATASETS:
         pname = normalize_dataset_name(dataset)
-        top_feats  = _get_top_features(Path(dataset), top_n)
+        top_feats  = _get_top_features(Path(dataset), top_n, candidate_features, all_models)
         model_data = _load_feature_distributions(Path(dataset))
         if not top_feats or not model_data:
             print(f"  Skipping {pname}: missing data")
@@ -916,12 +984,14 @@ def generate_feature_bias_diff(top_n: int = 10):
     """
     print(f"\n=== Generating Figure 7: Feature Bias (AI − human median) ===")
 
+    candidate_features, all_models = _get_candidate_features(DATASETS)
+
     platform_features = {}
     platform_data     = {}
 
     for dataset in DATASETS:
         pname = normalize_dataset_name(dataset)
-        top_feats  = _get_top_features(Path(dataset), top_n)
+        top_feats  = _get_top_features(Path(dataset), top_n, candidate_features, all_models)
         model_data = _load_feature_distributions(Path(dataset))
         if not top_feats or not model_data:
             continue
@@ -1200,7 +1270,7 @@ def generate_feature_importance_by_model():
         cbar = fig.colorbar(im, ax=ax, pad=0.01, fraction=0.02)
         cbar.set_label('Mean RF Importance\n(avg across platforms)', fontsize=10)
 
-        ax.set_title('Feature Importance by Model (SOTA config, averaged across platforms)',
+        ax.set_title('Feature Importance by Model (reference configuration, averaged across platforms)',
                      fontsize=13, pad=10)
         plt.tight_layout()
 
@@ -1320,7 +1390,7 @@ def generate_feature_importance_comparison(n_repeats: int = 20, top_n: int = 10)
                     ax.set_ylabel(format_dataset_name(pname), fontsize=13,
                                   color=pcolor, labelpad=6)
 
-        plt.suptitle('Feature importance: MDI vs Permutation (SOTA config, averaged across models)',
+        plt.suptitle('Feature importance: MDI vs Permutation (reference configuration, averaged across models)',
                      fontsize=13, y=1.01)
         plt.tight_layout()
         output_path = os.path.join(OUTPUT_DIR, f'SOTA_feature_importance_comparison.{SAVE_FORMAT}')
