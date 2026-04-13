@@ -173,19 +173,13 @@ Create balanced datasets (human vs AI) for each platform:
 
 ```bash
 # Bluesky
-python build_validation_data.py \
-    --real_file=data/bluesky/posts.pkl \
-    --folder=results_cleaned/bluesky
+python build_validation_data.py --folder=results_cleaned/bluesky
 
 # Twitter
-python build_validation_data.py \
-    --real_file=data/twitter/posts.pkl \
-    --folder=results_cleaned/twitter
+python build_validation_data.py --folder=results_cleaned/twitter
 
 # Reddit
-python build_validation_data.py \
-    --real_file=data/reddit/posts.pkl \
-    --folder=results_cleaned/reddit
+python build_validation_data.py --folder=results_cleaned/reddit
 ```
 
 **Output:**
