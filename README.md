@@ -159,13 +159,13 @@ python LLM_judge.py results --include-advanced
 - `*_response_comparisons.csv` (side-by-side comparison)
 - `*_responses_features.csv` (cached feature matrix)
 
-### Step 3: Convert to CSV (Optional)
+### Step 3: Convert Optimal Responses to CSV
 
 ```bash
-python convert_emojiis.py results
+python optimal_responses_to_csv.py results_cleaned/
 ```
 
-Converts JSON to CSV format for easier analysis.
+Converts each `*_optimal_response.json` produced by `LLM_judge.py` into a sibling `*_optimal_response.csv` file.
 
 ### Step 4: Build Validation Datasets
 
@@ -352,7 +352,7 @@ validation_demdia/
 ├── features_analysis.py          # Random Forest feature analysis
 ├── feature_utils.py              # Feature extraction functions
 ├── post_process.py               # Aggregate validation results
-├── convert_emojiis.py            # JSON to CSV conversion
+├── optimal_responses_to_csv.py   # Convert optimal_response.json → CSV
 ├── parse_reddit_data.py          # Parse raw Reddit JSON
 ├── aggregate_reddit_data.py      # Generate Reddit personas
 ├── plotting_utils.py             # Shared plotting utilities
