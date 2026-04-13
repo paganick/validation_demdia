@@ -542,14 +542,22 @@ python validate_text.py --input_dir=results/results_bluesky/ --validation=empath
 
 If you use this code in your research, please cite:
 
-```
-[Add citation information once published]
+```bibtex
+@misc{pagan2025computational,
+  title   = {Computational Turing Test Reveals Systematic Differences Between Human and AI Language},
+  author  = {Pagan, Nicolò and Törnberg, Petter and Bail, Christopher A. and Hannák, Anikó and Barrie, Christopher},
+  year    = {2025},
+  eprint  = {2511.04195},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CL},
+  url     = {https://arxiv.org/abs/2511.04195}
+}
 ```
 
 ## License
 
-[Add license information]
+This code is released under the [MIT License](LICENSE).
 
 ## Contact
 
-[Add contact information]
+Nicolò Pagan — see paper for institutional affiliation and contact details.
