@@ -141,6 +141,8 @@ training finishes. Each batch trains on its own users and saves to a separate di
 - Config YAMLs in `configs/` (one per model/configuration)
 - User datasets: `data/{platform}/posts.pkl`, `data/{platform}/personas.pkl`
 - Batch assignments: `user_batches.json`
+- Per-user history files (`data/{platform}/user_histories/`) are created automatically
+  on the first run from `posts.pkl` and do not need to be provided separately.
 
 #### Running on a SLURM cluster
 
