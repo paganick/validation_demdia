@@ -123,13 +123,15 @@ Depending on model size and available GPU memory, runs may time out before compl
 all users. Re-running the same command is safe — already-complete users are skipped
 automatically. Repeat as needed until all batches are fully populated.
 
-**After all batches are complete, merge into per-config files:**
+**After all batches are complete, join into per-config files:**
 
 ```bash
-python merge_batch_results.py --results_dir results/ --delete_batches
+python join_complete_batches.py --output-dir results_joined/
 ```
 
-This produces `results/{platform}/{config}__random_response.json`.
+This skips any config/platform combination where not all batch files are present and
+produces `results_joined/{platform}/{vendor}/{ModelName}__{config_flags}__random_response.json`.
+Use `--dry-run` to preview what would be joined without writing files.
 
 **Fine-tuning coordination:** when multiple batches run in parallel, the first job that
 needs a fine-tuned model trains it; the others wait via file lock and load it once
@@ -137,8 +139,49 @@ training finishes. Each batch trains on its own users and saves to a separate di
 
 **Input:**
 - Config YAMLs in `configs/` (one per model/configuration)
-- User datasets: `bluesky_data/personas.pkl`, Twitter data, Reddit data
+- User datasets: `data/{platform}/posts.pkl`, `data/{platform}/personas.pkl`
 - Batch assignments: `user_batches.json`
+
+#### Running on a SLURM cluster
+
+Each simulation job is a single call to `run_simulation.py` for one (config, platform,
+batch) triple. The full job list can be enumerated from `configs/*.yaml` and
+`user_batches.json`. A typical array job looks like this:
+
+```bash
+#!/bin/bash
+#SBATCH --array=1-<N_TASKS>%<CONCURRENCY>
+#SBATCH --time=<WALL_TIME>   # 6h for non-finetuned, 24h for finetuned
+#SBATCH --gpus=1
+#SBATCH --mem=64G            # 128G for finetuned configs
+
+TASK_LINE=$(sed -n "${SLURM_ARRAY_TASK_ID}p" tasks.tsv)
+CONFIG=$(echo "$TASK_LINE" | cut -f1)
+PLATFORM=$(echo "$TASK_LINE" | cut -f2)
+BATCH=$(echo "$TASK_LINE" | cut -f3)
+
+apptainer exec --nv conda.sif \
+    python run_simulation.py \
+        --config_file  "configs/$CONFIG" \
+        --dataset      "$PLATFORM" \
+        --output_dir   "results/$PLATFORM" \
+        --user_batch   "$BATCH" \
+        --batch_file   user_batches.json \
+        --n_responses_per_user 20
+```
+
+where `tasks.tsv` is a tab-separated file with columns `config_yaml  platform  batch_id`,
+one row per job. Generate it from the current configs and batch assignments with:
+
+```bash
+python join_complete_batches.py --list-tasks > tasks.tsv
+```
+
+You can monitor overall progress with:
+
+```bash
+python analyze_pipeline_status.py
+```
 
 **Output:**
 - `results/{platform}/{config}__random_response.json` (after merging)
@@ -337,6 +380,8 @@ validation_demdia/
 ├── bluesky_data/                 # Bluesky user data
 │   └── personas.pkl
 ├── run_simulation.py             # Main entry point for generation
+├── join_complete_batches.py      # Merge batch outputs into per-config files
+├── analyze_pipeline_status.py    # Monitor batch completion and SLURM queue
 ├── LLM_judge.py                  # ML-based response selection
 ├── build_validation_data.py      # Create human vs AI datasets
 ├── validate_text.py              # BERT + Empath validation
