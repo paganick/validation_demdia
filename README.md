@@ -184,14 +184,31 @@ python analyze_pipeline_status.py
 ```
 
 **Output:**
-- `results/{platform}/{config}__random_response.json` (after merging)
+- `results_joined/{platform}/{vendor}/{ModelName}__{config_flags}__random_response.json`
 
-### Step 2: Select Best Responses
+### Step 2: Clean Responses
+
+Strip formatting artifacts introduced by instruction-tuned models (e.g. `[Response]`
+headers, bold wrappers, handle prefixes) before response selection:
+
+```bash
+python response_cleaning.py results_joined/ --output-dir results_cleaned/
+```
+
+Always specify `--output-dir` so that `results_joined/` is kept intact as the raw
+backup. If you later need to adjust the cleaning level or re-run with different
+settings, the original joined files remain available. Running without `--output-dir`
+modifies files in-place and makes the raw responses unrecoverable.
+
+**Output:**
+- `results_cleaned/{platform}/.../*_random_response.json` (cleaned copies)
+
+### Step 3: Select Best Responses
 
 Use ML and cosine similarity to select most human-like responses:
 
 ```bash
-python LLM_judge.py results --include-advanced
+python LLM_judge.py results_cleaned/ --include-advanced
 ```
 
 **Input:**
@@ -202,7 +219,7 @@ python LLM_judge.py results --include-advanced
 - `*_response_comparisons.csv` (side-by-side comparison)
 - `*_responses_features.csv` (cached feature matrix)
 
-### Step 3: Convert Optimal Responses to CSV
+### Step 4: Convert Optimal Responses to CSV
 
 ```bash
 python optimal_responses_to_csv.py results_cleaned/
@@ -210,7 +227,7 @@ python optimal_responses_to_csv.py results_cleaned/
 
 Converts each `*_optimal_response.json` produced by `LLM_judge.py` into a sibling `*_optimal_response.csv` file.
 
-### Step 4: Build Validation Datasets
+### Step 5: Build Validation Datasets
 
 Create balanced datasets (human vs AI) for each platform:
 
@@ -230,14 +247,12 @@ python build_validation_data.py --folder=results_cleaned/reddit
 - `*_cosine_validation_data.csv` (Cosine-selected responses)
 - `*_random_validation_data.csv` (Baseline)
 
-### Step 5: Run Validation
+### Step 6: Run Validation
 
 ```bash
-conda activate shap_env
-
-python validate_text.py --input_dir=results/results_bluesky/ --validation=all
-python validate_text.py --input_dir=results/results_twitter/ --validation=all
-python validate_text.py --input_dir=results/results_reddit/ --validation=all
+python validate_text.py --input_dir=results_cleaned/bluesky/ --validation=all
+python validate_text.py --input_dir=results_cleaned/twitter/ --validation=all
+python validate_text.py --input_dir=results_cleaned/reddit/ --validation=all
 ```
 
 **What `--validation=all` does:**
@@ -251,26 +266,28 @@ python validate_text.py --input_dir=results/results_reddit/ --validation=all
 - `*_confusion_matrix.csv` (classification results)
 - `*_significant_features.csv` (Empath categories with significant differences)
 
-### Step 6: Feature Analysis
+### Step 7: Feature Analysis
 
 Compute linguistic features and train Random Forest:
 
 ```bash
 # Compute and cache features
-python features_analysis.py compute_features results
+python features_analysis.py compute_features results_cleaned/
 
 # Train RF on ground truth labels
-python features_analysis.py evaluate results labels
+python features_analysis.py evaluate results_cleaned/ labels
 
 # Optional: Train RF on BERT predictions
-python features_analysis.py evaluate results bert_prediction
+python features_analysis.py evaluate results_cleaned/ bert_prediction
 ```
 
-### Step 7: Generate Analysis Plots
+### Step 8: Generate Analysis Plots
 
 ```bash
-python generate_SOTA_plots.py results
-python generate_config_optimal_plots.py results
+python generate_SOTA_plots.py results_cleaned/
+python generate_config_optimal_plots.py results_cleaned/
+python compute_cosine_baselines.py results_cleaned/
+python analyze_feature_differences.py results_cleaned/
 ```
 
 Creates publication-ready figures for research papers.
@@ -368,33 +385,51 @@ Trains Random Forest on 20 engineered features to classify text.
 
 ```
 validation_demdia/
-├── configs/                      # Model configuration YAMLs
-│   ├── llama3.1_base.yaml
-│   ├── mistral_base.yaml
+├── configs/                           # Model configuration YAMLs
+│   ├── llama3.1_8b_base.yaml
+│   ├── mistral_7b_base.yaml
 │   └── ...
-├── src/                          # Core simulation engine
-│   ├── agent.py                  # User agent (loads posts, generates responses)
-│   ├── model.py                  # LLM wrapper (loading, fine-tuning)
-│   ├── simulate.py               # Simulation orchestration
+├── src/                               # Core simulation engine
+│   ├── agent.py                       # User agent (loads posts, generates responses)
+│   ├── model.py                       # LLM wrapper (loading, fine-tuning)
+│   ├── simulate.py                    # Simulation orchestration
 │   └── config_utils.py, model_utils.py, globals.py
-├── bluesky_data/                 # Bluesky user data
-│   └── personas.pkl
-├── run_simulation.py             # Main entry point for generation
-├── join_complete_batches.py      # Merge batch outputs into per-config files
-├── analyze_pipeline_status.py    # Monitor batch completion and SLURM queue
-├── LLM_judge.py                  # ML-based response selection
-├── build_validation_data.py      # Create human vs AI datasets
-├── validate_text.py              # BERT + Empath validation
-├── features_analysis.py          # Random Forest feature analysis
-├── feature_utils.py              # Feature extraction functions
-├── post_process.py               # Aggregate validation results
-├── optimal_responses_to_csv.py   # Convert optimal_response.json → CSV
-├── parse_reddit_data.py          # Parse raw Reddit JSON
-├── aggregate_reddit_data.py      # Generate Reddit personas
-├── plotting_utils.py             # Shared plotting utilities
-├── generate_SOTA_plots.py        # Main research figures
-├── generate_config_optimal_plots.py  # Configuration comparisons
-└── utils.py                      # Validator class (BERT, Empath)
+├── data/                              # Input datasets (anonymized)
+│   ├── bluesky/posts.pkl, personas.pkl
+│   ├── twitter/posts.pkl, personas.pkl
+│   └── reddit/posts.pkl, personas.pkl
+│
+│   — Simulation pipeline —
+├── run_simulation.py                  # Step 1a: generate AI responses (per batch)
+├── join_complete_batches.py           # Step 1b: merge batches → results_joined/
+├── response_cleaning.py               # Step 2:  clean responses → results_cleaned/
+├── LLM_judge.py                       # Step 3:  select best responses
+├── optimal_responses_to_csv.py        # Step 4:  convert JSON → CSV
+├── build_validation_data.py           # Step 5:  build human vs AI datasets
+├── validate_text.py                   # Step 6:  BERT + Empath validation
+├── features_analysis.py               # Step 7:  Random Forest feature analysis
+│
+│   — Analysis and plots —
+├── generate_SOTA_plots.py             # Main accuracy/comparison figures
+├── generate_config_optimal_plots.py   # Per-config optimality plots
+├── compute_cosine_baselines.py        # Cosine similarity baseline distributions
+├── analyze_feature_differences.py     # Feature-level human vs AI differences
+├── analyze_ft_hyperparam.py           # Fine-tuning hyperparameter sweep analysis
+│
+│   — Utilities —
+├── analyze_pipeline_status.py         # Monitor batch completion and SLURM queue
+├── feature_utils.py                   # Feature extraction functions
+├── plotting_utils.py                  # Shared plotting utilities
+├── post_process.py                    # Aggregate validation results
+├── utils.py                           # Validator class (BERT, Empath)
+│
+│   — Data preprocessing (one-time) —
+├── anonymize_usernames.py             # Replace real usernames with User_XXXX IDs
+├── anonymize_mentions.py              # Anonymize @mentions in post text
+├── parse_reddit_data.py               # Parse raw Reddit JSON dumps
+├── aggregate_reddit_data.py           # Generate Reddit persona descriptions
+├── prepare_user_batches.py            # Assign users to reproducible batches
+└── generate_personas_llama.py         # Generate LLaMA-based persona descriptions
 ```
 
 ## Usage Examples
