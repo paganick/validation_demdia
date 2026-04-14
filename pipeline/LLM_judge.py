@@ -66,7 +66,8 @@ def set_seed(seed=42):
 set_seed(42)
 
 # Load the embedding model once
-embedding_model = SentenceTransformer("/scratch/nicpag/all-MiniLM-L6-v2-local")
+_sentence_model_path = os.environ.get("SENTENCE_MODEL_PATH", "sentence-transformers/all-MiniLM-L6-v2")
+embedding_model = SentenceTransformer(_sentence_model_path)
 
 def compute_cosine_similarity(a: str, b: str) -> float:
     """
@@ -85,7 +86,7 @@ def compute_cosine_similarity(a: str, b: str) -> float:
     embeddings = embedding_model.encode([a, b])
     return float(cosine_similarity([embeddings[0]], [embeddings[1]])[0][0])
 
-from feature_utils import (
+from src.feature_utils import (
     # Basic
     count_words, count_links, count_mentions, extract_emojis,
     count_hashtags, count_punctuation, count_uppercase_letters,

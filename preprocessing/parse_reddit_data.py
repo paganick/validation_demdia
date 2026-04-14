@@ -32,11 +32,12 @@ This structure enables:
     3. Preservation of conversational context
 
 Usage:
-    python parse_reddit_data.py
-
-Note: Hardcoded paths point to /scratch/nicpag/ - modify if running elsewhere
+    python preprocessing/parse_reddit_data.py \\
+        --comments filtered_comments.jsonl \\
+        --submissions rpolitics_submissions.txt
 """
 
+import argparse
 import json
 import os
 import pandas as pd
@@ -179,20 +180,21 @@ def process_reddit_data(comments_file, submissions_file):
     print(f"Data saved in '{output_dir}' directory")
 
 if __name__ == "__main__":
-    # Main execution
-    comments_file = '/scratch/nicpag/filtered_comments.jsonl'
-    submissions_file = '/scratch/nicpag/rpolitics_submissions.txt'
-    
-    # Check if files exist
-    if not os.path.exists(comments_file):
-        print(f"Error: {comments_file} not found")
-        exit(1)
-    
-    if not os.path.exists(submissions_file):
-        print(f"Error: {submissions_file} not found")
-        exit(1)
-    
+    parser = argparse.ArgumentParser(
+        description="Parse raw Reddit JSONL data into per-user post datasets."
+    )
+    parser.add_argument("--comments", required=True,
+                        help="Path to filtered comments JSONL file")
+    parser.add_argument("--submissions", required=True,
+                        help="Path to Reddit submissions text file")
+    args = parser.parse_args()
+
+    for path in (args.comments, args.submissions):
+        if not os.path.exists(path):
+            print(f"Error: {path} not found")
+            exit(1)
+
     try:
-        process_reddit_data(comments_file, submissions_file)
+        process_reddit_data(args.comments, args.submissions)
     except Exception as e:
         print(f"An error occurred: {e}")

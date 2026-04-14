@@ -82,7 +82,7 @@ def main():
         config = load_config(cfg_path)
 
         # Set defaults
-        config.setdefault("finetuning_dir", "/home/nicpag/scratch/finetuned_models/")
+        config.setdefault("finetuning_dir", os.environ.get("FINETUNING_DIR", "finetuned_models/"))
         config.setdefault("instruction_tuned", False)
         config.setdefault("persona", True)
         config.setdefault("n_style_examples", 0)

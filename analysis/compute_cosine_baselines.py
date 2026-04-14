@@ -27,7 +27,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 
-SENTENCE_MODEL_PATH = "/scratch/nicpag/all-MiniLM-L6-v2-local"
+SENTENCE_MODEL_PATH = os.environ.get("SENTENCE_MODEL_PATH", "sentence-transformers/all-MiniLM-L6-v2")
 RANDOM_SEED = 42
 
 # SOTA config filter: noft, ctx0, style0, with persona (not no_persona, not ctx1, not style10)

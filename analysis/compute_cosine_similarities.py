@@ -7,7 +7,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 from tqdm import tqdm
 
 # Initialize the embedding model once
-model = SentenceTransformer("/scratch/nicpag/all-MiniLM-L6-v2-local")
+_sentence_model_path = os.environ.get("SENTENCE_MODEL_PATH", "sentence-transformers/all-MiniLM-L6-v2")
+model = SentenceTransformer(_sentence_model_path)
 
 def compute_similarity(a: str, b: str) -> float:
     """Compute cosine similarity between two strings."""
