@@ -11,6 +11,7 @@ BERT_models/*
 # Keep username mapping secure (allows de-anonymization)
 username_mapping_*.json
 
+preprocessing/parse_reddit_data.py
 check_run.py
 copy_data.py
 move_files.py
