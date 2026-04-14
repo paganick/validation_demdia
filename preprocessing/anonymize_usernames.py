@@ -2,6 +2,11 @@
 """
 Anonymize usernames across all platforms.
 
+NOTE: This script was run once during dataset preparation and is provided for
+documentation purposes only. The anonymized posts.pkl files are distributed
+directly and do not need to be regenerated. Re-running this script requires
+access to the original non-anonymized data, which is not publicly released.
+
 This script:
 1. Creates a consistent hash-based mapping for each username
 2. Updates personas_llama.pkl and posts_llama.pkl with anonymized usernames

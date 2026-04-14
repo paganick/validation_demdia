@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """
-Anonymize mentions in posts.pkl files, keeping only top 20 public figures.
+Anonymize @mentions in posts.pkl files, keeping only the top 20 public figures.
 Creates backups of original files before overwriting.
+
+NOTE: This script was run once during dataset preparation and is provided for
+documentation purposes only. The anonymized posts.pkl files are distributed
+directly and do not need to be regenerated. Re-running this script requires
+access to the original non-anonymized data, which is not publicly released.
 """
 
 import pickle
