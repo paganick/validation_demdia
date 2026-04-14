@@ -20,7 +20,7 @@ import argparse
 from pathlib import Path
 from datetime import datetime
 
-DATA_DIR = Path("/home/nicpag/data/demdia_val_revision/data")
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 PLATFORMS = ["twitter", "reddit", "bluesky"]
 DEFAULT_BATCH_SIZE = 60
 

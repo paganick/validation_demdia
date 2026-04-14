@@ -35,7 +35,7 @@ from tqdm.auto import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 # Configuration
-DATA_DIR = Path("/home/nicpag/data/demdia_val_revision/data")
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 MODEL_NAME = "meta-llama/Llama-3.1-8B-Instruct"
 PLATFORMS = ["twitter", "reddit", "bluesky"]
 

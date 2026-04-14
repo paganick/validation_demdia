@@ -31,7 +31,7 @@ from tqdm import tqdm
 import hashlib
 
 # Define paths
-DATA_DIR = Path("/home/nicpag/data/demdia_val_revision/data")
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 PLATFORMS = ["twitter", "reddit", "bluesky"]
 MODEL_NAME = "meta-llama/Llama-3.1-8B-Instruct"
 

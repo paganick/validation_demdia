@@ -89,8 +89,9 @@ class Validator:
         
         print(f"Running {n_runs} training runs with seeds: {random_seeds}")
 
-        scratch_dir = os.environ.get("SCRATCH", f"/scratch/{os.environ.get('USER', 'nicpag')}")
-        bert_models_dir = os.path.join(scratch_dir, "BERT_models")
+        scratch_dir = os.environ.get("BERT_MODELS_DIR",
+                                      os.path.join(os.path.dirname(__file__), "..", "BERT_models"))
+        bert_models_dir = os.path.normpath(scratch_dir)
         os.makedirs(bert_models_dir, exist_ok=True)
         
         # Check dataset characteristics
