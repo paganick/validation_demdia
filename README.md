@@ -15,6 +15,10 @@ This repository implements a comprehensive system for:
 - [Architecture](#architecture)
 - [Installation](#installation)
 - [Workflow](#workflow)
+  - [Phase 1: Preprocessing](#phase-1-preprocessing)
+  - [Phase 2: Simulation](#phase-2-simulation)
+  - [Phase 3: Postprocessing](#phase-3-postprocessing)
+  - [Phase 4: Plotting and Analysis](#phase-4-plotting-and-analysis)
 - [Personalization Methods](#personalization-methods)
 - [Validation Methods](#validation-methods)
 - [Project Structure](#project-structure)
@@ -87,55 +91,21 @@ conda activate shap_env
 
 ## Workflow
 
-### Step 0: Generate Persona Descriptions
+### Phase 1: Preprocessing
 
-Each user in the dataset is represented by a **persona description** — a paragraph
-summarising their communication style and interests, used to condition the LLM.
-Pre-generated GPT-4 personas are provided in `data/{platform}/personas.pkl`.
+Preprocessing is a **one-time step** performed before any simulations. The distributed
+dataset already includes pre-generated `personas.pkl` files, so this phase only needs
+to be repeated if you are working with a new dataset or platform.
 
-To regenerate them using **Llama-3.1-8B-Instruct** (e.g. for a new dataset or platform),
-run the two-step pipeline:
-
-**Step 0a — Generate third-person descriptions from posts:**
+**Step 1a — Assign users to batches:**
 
 ```bash
-python preprocessing/generate_personas_llama.py --platform all
+python preprocessing/prepare_user_batches.py
 ```
 
-Reads `data/{platform}/posts.pkl`, writes `data/{platform}/personas_llama.pkl`
-(third-person, one row per user with a `persona` column).
-
-**Step 0b — Transform to second-person:**
-
-```bash
-python preprocessing/transform_llama_personas_to_second_person.py --platform all
-```
-
-Reads `personas_llama.pkl`, adds a `persona_third_person` column (original) and
-overwrites `persona` with the second-person version required by instruction-tuned
-prompts. Saves back to `personas_llama.pkl`.
-
-**Step 0c — Promote to canonical file:**
-
-```bash
-cp data/{platform}/personas_llama.pkl data/{platform}/personas.pkl
-```
-
-After this, `personas.pkl` has the two columns expected by `run_simulation.py`:
-- `persona` — second-person ("You are @User_XXXX…"), used with instruction-tuned models
-- `persona_third_person` — third-person ("@User_XXXX is…"), used with base models
-
-Both steps accept `--data-dir <path>` to target a custom data directory (e.g. for testing).
-
----
-
-### Step 1: Generate AI Responses
-
-Simulations must be run **in batches** to ensure reproducibility. Users are split into
-fixed batches of ≤ 60 (stored in `user_batches.json`), and each batch is processed
-independently. This is required for fine-tuned configurations, where each batch trains
-a LoRA model on its own users — running without batches would mix users across
-fine-tuning runs and produce non-reproducible results.
+Creates `user_batches.json`, which assigns users to fixed reproducible batches (≤ 60
+users each). This is required for fine-tuned configurations to ensure each batch trains
+its own LoRA adapter on a consistent set of users.
 
 | Platform | Total users | Batches |
 |----------|-------------|---------|
@@ -143,15 +113,44 @@ fine-tuning runs and produce non-reproducible results.
 | Reddit   | 492         | 9       |
 | Bluesky  | 60          | 1       |
 
-**Setup:**
+**Step 1b — Generate persona descriptions:**
+
+Each user is represented by a persona description — a paragraph summarising their
+communication style and interests, used to condition the LLM.
 
 ```bash
-# (Optional) Regenerate batch assignments if personas change
-python preprocessing/prepare_user_batches.py
+python preprocessing/generate_personas_llama.py --platform all
 ```
 
-**Run each batch** (one process per platform × config × batch, parallelise as your
-cluster allows):
+Reads `data/{platform}/posts.pkl`, writes `data/{platform}/personas_llama.pkl`
+(third-person, one row per user).
+
+**Step 1c — Transform to second-person:**
+
+```bash
+python preprocessing/transform_llama_personas_to_second_person.py --platform all
+```
+
+Adds a `persona_third_person` column (original) and overwrites `persona` with the
+second-person version required by instruction-tuned prompts.
+
+**Step 1d — Promote to canonical file:**
+
+```bash
+cp data/{platform}/personas_llama.pkl data/{platform}/personas.pkl
+```
+
+After this, `personas.pkl` contains the two columns expected by `run_simulation.py`:
+- `persona` — second-person ("You are @User_XXXX…"), for instruction-tuned models
+- `persona_third_person` — third-person ("@User_XXXX is…"), for base models
+
+Both persona scripts accept `--data-dir <path>` to target a custom data directory.
+
+---
+
+### Phase 2: Simulation
+
+**Step 2a — Run simulations (one process per platform × config × batch):**
 
 ```bash
 python run_simulation.py \
@@ -161,36 +160,27 @@ python run_simulation.py \
     --output_dir=results
 ```
 
-Depending on model size and available GPU memory, runs may time out before completing
-all users. Re-running the same command is safe — already-complete users are skipped
-automatically. Repeat as needed until all batches are fully populated.
+Re-running is safe — already-complete users are skipped automatically. Repeat as
+needed until all batches are fully populated.
 
-**After all batches are complete, join into per-config files:**
+**Fine-tuning note:** when multiple batches run in parallel, the first job to need a
+fine-tuned model trains it; the others wait via file lock and load it once training
+finishes. Each batch trains on its own users and saves to a separate directory.
 
-```bash
-python join_complete_batches.py --output-dir results_joined/
-```
-
-This skips any config/platform combination where not all batch files are present and
-produces `results_joined/{platform}/{vendor}/{ModelName}__{config_flags}__random_response.json`.
-Use `--dry-run` to preview what would be joined without writing files.
-
-**Fine-tuning coordination:** when multiple batches run in parallel, the first job that
-needs a fine-tuned model trains it; the others wait via file lock and load it once
-training finishes. Each batch trains on its own users and saves to a separate directory.
-
-**Input:**
+**Inputs:**
 - Config YAMLs in `configs/` (one per model/configuration)
-- User datasets: `data/{platform}/posts.pkl`, `data/{platform}/personas.pkl`
-- Batch assignments: `user_batches.json`
-- Per-user history files (`data/{platform}/user_histories/`) are created automatically
-  on the first run from `posts.pkl` and do not need to be provided separately.
+- `data/{platform}/posts.pkl`, `data/{platform}/personas.pkl`
+- `user_batches.json`
 
 #### Running on a SLURM cluster
 
-Each simulation job is a single call to `run_simulation.py` for one (config, platform,
-batch) triple. The full job list can be enumerated from `configs/*.yaml` and
-`user_batches.json`. A typical array job looks like this:
+Generate the full task list (one row per config × platform × batch):
+
+```bash
+python join_complete_batches.py --list-tasks > tasks.tsv
+```
+
+Then submit as an array job:
 
 ```bash
 #!/bin/bash
@@ -214,84 +204,67 @@ apptainer exec --nv conda.sif \
         --n_responses_per_user 20
 ```
 
-where `tasks.tsv` is a tab-separated file with columns `config_yaml  platform  batch_id`,
-one row per job. Generate it from the current configs and batch assignments with:
-
-```bash
-python join_complete_batches.py --list-tasks > tasks.tsv
-```
-
-You can monitor overall progress with:
+Monitor batch completion with:
 
 ```bash
 python analyze_pipeline_status.py
 ```
 
-**Output:**
+**Step 2b — Join completed batches:**
+
+```bash
+python join_complete_batches.py --output-dir results_joined/
+```
+
+Skips any config/platform combination where not all batch files are present.
+Use `--dry-run` to preview without writing. Output:
 - `results_joined/{platform}/{vendor}/{ModelName}__{config_flags}__random_response.json`
 
-### Step 2: Clean Responses
+---
+
+### Phase 3: Postprocessing
+
+**Step 3a — Clean responses:**
 
 Strip formatting artifacts introduced by instruction-tuned models (e.g. `[Response]`
-headers, bold wrappers, handle prefixes) before response selection:
+headers, bold wrappers, handle prefixes):
 
 ```bash
 python pipeline/response_cleaning.py results_joined/ --output-dir results_cleaned/
 ```
 
-Always specify `--output-dir` so that `results_joined/` is kept intact as the raw
-backup. If you later need to adjust the cleaning level or re-run with different
-settings, the original joined files remain available. Running without `--output-dir`
-modifies files in-place and makes the raw responses unrecoverable.
+Always specify `--output-dir` to keep `results_joined/` intact as a raw backup.
 
-**Output:**
-- `results_cleaned/{platform}/.../*_random_response.json` (cleaned copies)
-
-### Step 3: Select Best Responses
-
-Use ML and cosine similarity to select most human-like responses:
+**Step 3b — Select best responses:**
 
 ```bash
 python pipeline/LLM_judge.py results_cleaned/ --include-advanced
 ```
 
-**Input:**
-- `*_random_response.json` files
+Uses ML (Random Forest on 20 linguistic features) and cosine similarity
+(all-MiniLM-L6-v2) to select the most human-like candidate per prompt. Output:
+- `*_optimal_response.json`, `*_response_comparisons.csv`, `*_responses_features.csv`
 
-**Output:**
-- `*_optimal_response.json` (enriched with ML_best and cosine_best)
-- `*_response_comparisons.csv` (side-by-side comparison)
-- `*_responses_features.csv` (cached feature matrix)
-
-### Step 4: Convert Optimal Responses to CSV
+**Step 3c — Convert to CSV:**
 
 ```bash
 python pipeline/optimal_responses_to_csv.py results_cleaned/
 ```
 
-Converts each `*_optimal_response.json` produced by `LLM_judge.py` into a sibling `*_optimal_response.csv` file.
+Converts each `*_optimal_response.json` into a sibling `*_optimal_response.csv`.
 
-### Step 5: Build Validation Datasets
-
-Create balanced datasets (human vs AI) for each platform:
+**Step 3d — Build validation datasets:**
 
 ```bash
-# Bluesky
 python pipeline/build_validation_data.py --folder=results_cleaned/bluesky
-
-# Twitter
 python pipeline/build_validation_data.py --folder=results_cleaned/twitter
-
-# Reddit
 python pipeline/build_validation_data.py --folder=results_cleaned/reddit
 ```
 
-**Output:**
-- `*_ml_validation_data.csv` (ML-selected responses)
-- `*_cosine_validation_data.csv` (Cosine-selected responses)
-- `*_random_validation_data.csv` (Baseline)
+Creates balanced human-vs-AI datasets for each platform and response type
+(`*_ml_validation_data.csv`, `*_cosine_validation_data.csv`, `*_random_validation_data.csv`).
 
-### Step 6: Run Validation
+**Step 3e — Run BERT and Empath validation:**
 
 ```bash
 python pipeline/validate_text.py --input_dir=results_cleaned/bluesky/ --validation=all
@@ -299,42 +272,33 @@ python pipeline/validate_text.py --input_dir=results_cleaned/twitter/ --validati
 python pipeline/validate_text.py --input_dir=results_cleaned/reddit/ --validation=all
 ```
 
-**What `--validation=all` does:**
-1. BERT validation (5 runs, median selected)
-2. Empath linguistic analysis with statistical testing
-3. Generates confusion matrices and feature lists
+Runs BERT classification (5 runs, median selected) and Empath linguistic analysis.
+Output: `*_labelled.csv`, `*_trainer_results.json`, `*_confusion_matrix.csv`,
+`*_significant_features.csv`.
 
-**Output files:**
-- `*_validation_data_trainer_results.json` (BERT training metrics)
-- `*_validation_data_labelled.csv` (texts with BERT predictions)
-- `*_confusion_matrix.csv` (classification results)
-- `*_significant_features.csv` (Empath categories with significant differences)
-
-### Step 7: Feature Analysis
-
-Compute linguistic features and train Random Forest:
+**Step 3f — Feature analysis:**
 
 ```bash
-# Compute and cache features
 python pipeline/features_analysis.py compute_features results_cleaned/
-
-# Train RF on ground truth labels
 python pipeline/features_analysis.py evaluate results_cleaned/ labels
-
-# Optional: Train RF on BERT predictions
-python pipeline/features_analysis.py evaluate results_cleaned/ bert_prediction
 ```
 
-### Step 8: Generate Analysis Plots
+Extracts 20 linguistic features and trains a Random Forest classifier.
+
+---
+
+### Phase 4: Plotting and Analysis
 
 ```bash
+python analysis/post_process.py results_cleaned/
 python analysis/generate_SOTA_plots.py results_cleaned/
 python analysis/generate_config_optimal_plots.py results_cleaned/
 python analysis/compute_cosine_baselines.py results_cleaned/
 python analysis/analyze_feature_differences.py results_cleaned/
 ```
 
-Creates publication-ready figures for research papers.
+`post_process.py` aggregates per-file validation results into a single
+`summary_metrics.csv`. The remaining scripts produce publication-ready figures.
 
 ## Personalization Methods
 
@@ -435,50 +399,48 @@ validation_demdia/
 │   ├── twitter/posts.pkl, personas.pkl
 │   └── reddit/posts.pkl, personas.pkl
 │
-│   — Root: simulation entry points —
-├── run_simulation.py                  # Step 1a: generate AI responses (per batch)
-├── join_complete_batches.py           # Step 1b: merge batches → results_joined/
+│   — Phase 2: Simulation entry points —
+├── run_simulation.py                  # Generate AI responses (one batch per run)
+├── join_complete_batches.py           # Merge completed batches → results_joined/
 ├── analyze_pipeline_status.py         # Monitor batch completion and SLURM queue
 │
-│   — src/: simulation engine and shared utilities —
+│   — Shared library —
 ├── src/
-│   ├── agent.py                       # User agent (loads posts, generates responses)
-│   ├── model.py                       # LLM wrapper (loading, fine-tuning)
-│   ├── simulate.py                    # Simulation orchestration
-│   ├── feature_utils.py               # Feature extraction functions (20 features)
-│   ├── plotting_utils.py              # Shared plotting utilities
+│   ├── agent.py                       # User agent: loads posts and persona, formats prompts
+│   ├── model.py                       # LLM wrapper: loading, inference, LoRA fine-tuning
+│   ├── simulate.py                    # Simulation loop and result serialisation
+│   ├── feature_utils.py               # Linguistic feature extraction (20 features)
+│   ├── plotting_utils.py              # Shared plotting utilities and filename parsing
 │   ├── utils.py                       # Validator class (BERT, Empath)
 │   └── config_utils.py, model_utils.py, globals.py
 │
-│   — pipeline/: postprocessing steps (run from project root) —
+│   — Phase 3: Postprocessing —
 ├── pipeline/
-│   ├── response_cleaning.py           # Step 2: strip formatting artifacts
-│   ├── LLM_judge.py                   # Step 3: select best responses (ML + cosine)
-│   ├── optimal_responses_to_csv.py    # Step 4: convert JSON → CSV
-│   ├── build_validation_data.py       # Step 5: build human vs AI datasets
-│   ├── validate_text.py               # Step 6: BERT + Empath validation
-│   └── features_analysis.py           # Step 7: Random Forest feature analysis
+│   ├── response_cleaning.py           # Step 3a: strip formatting artifacts
+│   ├── LLM_judge.py                   # Step 3b: select best responses (ML + cosine)
+│   ├── optimal_responses_to_csv.py    # Step 3c: convert JSON → CSV
+│   ├── build_validation_data.py       # Step 3d: build human vs AI datasets
+│   ├── validate_text.py               # Step 3e: BERT + Empath validation
+│   └── features_analysis.py           # Step 3f: Random Forest feature analysis
 │
-│   — analysis/: final analysis and plots —
+│   — Phase 4: Plotting and Analysis —
 ├── analysis/
-│   ├── generate_SOTA_plots.py         # Main accuracy/comparison figures
-│   ├── generate_config_optimal_plots.py  # Per-config optimality plots
+│   ├── post_process.py                # Aggregate per-file results → summary_metrics.csv
+│   ├── generate_SOTA_plots.py         # Main accuracy and comparison figures
+│   ├── generate_config_optimal_plots.py  # Per-configuration optimality plots
 │   ├── compute_cosine_baselines.py    # Cosine similarity baseline distributions
 │   ├── analyze_feature_differences.py # Feature-level human vs AI differences
 │   ├── analyze_ft_hyperparam.py       # Fine-tuning hyperparameter sweep analysis
 │   ├── compute_baselines.py           # Baseline metrics
-│   ├── compute_cosine_similarities.py # Cosine similarity calculations
-│   └── post_process.py                # Aggregate validation results
+│   └── compute_cosine_similarities.py # Cosine similarity calculations
 │
-│   — preprocessing/: one-time data preparation —
+│   — Phase 1: Preprocessing (one-time) —
 └── preprocessing/
-    ├── anonymize_usernames.py          # Replace real usernames with User_XXXX IDs
-    ├── anonymize_mentions.py           # Anonymize @mentions in post text
-    ├── parse_reddit_data.py            # Parse raw Reddit JSON dumps
-    ├── aggregate_reddit_data.py        # Generate Reddit persona descriptions
-    ├── prepare_user_batches.py         # Assign users to reproducible batches
-    ├── generate_personas_llama.py      # Generate LLaMA-based persona descriptions
-    └── transform_llama_personas_to_second_person.py
+    ├── prepare_user_batches.py         # Step 1a: assign users to reproducible batches
+    ├── generate_personas_llama.py      # Step 1b: generate persona descriptions (Llama)
+    ├── transform_llama_personas_to_second_person.py  # Step 1c: third → second person
+    ├── anonymize_usernames.py          # Documentation only — run once on original data
+    └── anonymize_mentions.py           # Documentation only — run once on original data
 ```
 
 ## Usage Examples
