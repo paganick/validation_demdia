@@ -3,8 +3,8 @@ import argparse
 import pandas as pd
 import traceback
 import sys
-from feature_utils import *
-from plotting_utils import parse_filename
+from src.feature_utils import *
+from src.plotting_utils import parse_filename
 
 def find_row_mismatch(input_df, cache_df, input_col='length', cache_col='word_count'):
     """

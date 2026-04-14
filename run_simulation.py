@@ -41,6 +41,8 @@ def main():
                         help="Path to batch assignments file (default: user_batches.json)")
     parser.add_argument('--fill_incomplete', action='store_true', default=False,
                         help="Re-attempt samples with fewer than 20 valid responses (default: skip any sample already in the file)")
+    parser.add_argument('--data_dir', type=str, default="data",
+                        help="Root data directory containing {dataset}/posts.pkl and personas.pkl (default: data/)")
 
     args = parser.parse_args()
 
@@ -65,8 +67,8 @@ def main():
         raise ValueError("You must provide either --config_file or --config_dir")
 
     # Data file paths (separate posts and personas files)
-    posts_file = f'data/{args.dataset}/posts.pkl'
-    personas_file = f'data/{args.dataset}/personas.pkl'
+    posts_file = os.path.join(args.data_dir, args.dataset, 'posts.pkl')
+    personas_file = os.path.join(args.data_dir, args.dataset, 'personas.pkl')
 
     print(f"📁 Dataset: {args.dataset}")
     print(f"   Posts: {posts_file}")
@@ -82,7 +84,10 @@ def main():
         config = load_config(cfg_path)
 
         # Set defaults
-        config.setdefault("finetuning_dir", os.environ.get("FINETUNING_DIR", "finetuned_models/"))
+        _default_ft_dir = os.path.join(
+            os.environ.get("SCRATCH", "."), "finetuned_models"
+        ) if "SCRATCH" in os.environ else os.environ.get("FINETUNING_DIR", "finetuned_models/")
+        config.setdefault("finetuning_dir", os.environ.get("FINETUNING_DIR", _default_ft_dir))
         config.setdefault("instruction_tuned", False)
         config.setdefault("persona", True)
         config.setdefault("n_style_examples", 0)

@@ -15,7 +15,7 @@ except ImportError:
     print("Warning: Empath module is not installed. Empath validation will be skipped.")
 
 # Import the Validator class from our utilities file
-from utils import Validator
+from src.utils import Validator
 
 # Initialize the BERT tokenizer to be used throughout the script
 tokenizer = BertTokenizer.from_pretrained("bert-base-uncased", local_files_only=False)

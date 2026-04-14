@@ -87,6 +87,48 @@ conda activate shap_env
 
 ## Workflow
 
+### Step 0: Generate Persona Descriptions
+
+Each user in the dataset is represented by a **persona description** — a paragraph
+summarising their communication style and interests, used to condition the LLM.
+Pre-generated GPT-4 personas are provided in `data/{platform}/personas.pkl`.
+
+To regenerate them using **Llama-3.1-8B-Instruct** (e.g. for a new dataset or platform),
+run the two-step pipeline:
+
+**Step 0a — Generate third-person descriptions from posts:**
+
+```bash
+python preprocessing/generate_personas_llama.py --platform all
+```
+
+Reads `data/{platform}/posts.pkl`, writes `data/{platform}/personas_llama.pkl`
+(third-person, one row per user with a `persona` column).
+
+**Step 0b — Transform to second-person:**
+
+```bash
+python preprocessing/transform_llama_personas_to_second_person.py --platform all
+```
+
+Reads `personas_llama.pkl`, adds a `persona_third_person` column (original) and
+overwrites `persona` with the second-person version required by instruction-tuned
+prompts. Saves back to `personas_llama.pkl`.
+
+**Step 0c — Promote to canonical file:**
+
+```bash
+cp data/{platform}/personas_llama.pkl data/{platform}/personas.pkl
+```
+
+After this, `personas.pkl` has the two columns expected by `run_simulation.py`:
+- `persona` — second-person ("You are @User_XXXX…"), used with instruction-tuned models
+- `persona_third_person` — third-person ("@User_XXXX is…"), used with base models
+
+Both steps accept `--data-dir <path>` to target a custom data directory (e.g. for testing).
+
+---
+
 ### Step 1: Generate AI Responses
 
 Simulations must be run **in batches** to ensure reproducibility. Users are split into
@@ -445,10 +487,10 @@ validation_demdia/
 
 ```bash
 python run_simulation.py \
-    --config_dir=configs \
-    --config_file=llama3.1_base.yaml \
-    --n_users=50 \
-    --output_dir=results_test
+    --config_file configs/llama_3_1_8b_base.yaml \
+    --dataset bluesky \
+    --user_batch 0 \
+    --output_dir results_test
 ```
 
 ### Force reprocess all LLM Judge results
