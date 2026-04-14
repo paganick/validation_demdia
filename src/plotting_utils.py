@@ -304,7 +304,7 @@ def filter_for_baseline_persona(filepath: str) -> bool:
     
     return False
 
-# === Data Loading Functions (from old plotting_utils) ===
+# === Data Loading Functions ===
 def load_uncertainty_data(folder_path):
     """Load accuracy data (with mean/std) from all trainer_results.json files in a folder."""
     results = []

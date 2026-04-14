@@ -21,7 +21,7 @@ class Agent:
             dataset: Dataset name ('twitter', 'reddit', 'bluesky')
             posts_file: Path to posts pickle file (contains username, message, reply_to, training)
             personas_file: Path to personas pickle file (contains username, persona).
-                          If None, assumes posts_file contains persona column (old format).
+                          If None, persona is read from the posts_file directly.
         """
         self.username = username
         self.dataset = dataset
@@ -33,12 +33,10 @@ class Agent:
     def load_persona_examples(self):
         """Reads posts and persona files and stores all examples of text by the agent.
 
-        Supports two data formats:
-        1. New format: Separate posts_file and personas_file
-           - posts_file: username, message, reply_to, training
-           - personas_file: username, persona (one row per user, already in third person)
-        2. Old format: Single file with all columns (personas_file is None)
-           - Contains: username, persona, persona_third_person, message, reply_to, training
+        Supports two data layouts:
+        1. Separate files: posts_file (username, message, reply_to, training) +
+           personas_file (username, persona — one row per user)
+        2. Combined file: all columns in posts_file; personas_file is None
         """
         # Load posts data
         try:
@@ -58,8 +56,7 @@ class Agent:
 
         # Load persona data
         if self.personas_file is not None:
-            # New format: separate personas file (Llama-generated)
-            # After transformation, this file has the same format as old personas.pkl:
+            # Separate personas file:
             # - 'persona': second person (for instruction-tuned prompts)
             # - 'persona_third_person': third person (for non-instruction-tuned prompts)
             try:
@@ -84,7 +81,7 @@ class Agent:
                 self.persona = None
                 self.persona_third_person = None
         else:
-            # Old format: persona in the same file as posts
+            # Combined file: persona columns are in the posts file
             self.persona = self.df_user['persona'].iloc[0] if 'persona' in df_posts.columns else None
 
             # Load third-person persona if available (for non-instruction-tuned prompts)

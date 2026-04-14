@@ -691,36 +691,22 @@ def safe_read_csv(file_path, max_retries=3):
     """
     Safely read CSV with multiple fallback strategies for malformed files.
     """
-    print(f"DEBUG: Attempting to read CSV: {file_path}")
-    
-    # Check if file exists and get basic info
     if not os.path.exists(file_path):
-        print(f"ERROR: File does not exist: {file_path}")
+        print(f"Error: file does not exist: {file_path}")
         return None
-        
-    file_size = os.path.getsize(file_path)
-    print(f"DEBUG: File size: {file_size:,} bytes")
-    
-    # Strategy 1: Try with error handling and different engine
-    try:
-        print("DEBUG: Trying with python engine and error handling...")
-        df = pd.read_csv(file_path, engine='python', on_bad_lines='warn')
-        print(f"DEBUG: Successfully loaded with python engine. Shape: {df.shape}")
-        return df
-    except Exception as e:
-        print(f"DEBUG: Python engine method failed: {str(e)[:200]}")
 
-    # Strategy 2: Try default pandas read_csv
+    # Strategy 1: python engine with lenient error handling
     try:
-        print("DEBUG: Trying default pandas read_csv...")
-        df = pd.read_csv(file_path)
-        print(f"DEBUG: Successfully loaded with default method. Shape: {df.shape}")
-        return df
-    except Exception as e:
-        print(f"DEBUG: Default method failed: {str(e)[:200]}")
+        return pd.read_csv(file_path, engine='python', on_bad_lines='warn')
+    except Exception:
+        pass
 
-    print("ERROR: All CSV reading strategies failed. File may be severely corrupted.")
-    return None
+    # Strategy 2: default pandas engine
+    try:
+        return pd.read_csv(file_path)
+    except Exception as e:
+        print(f"Error: all CSV reading strategies failed for {file_path}: {str(e)[:200]}")
+        return None
 
 import json
 import numpy as np
@@ -739,21 +725,17 @@ def find_median_accuracy_run(trainer_results_path):
     Returns:
         dict: The training run data with median accuracy
     """
-    print(f"DEBUG: Loading trainer results from: {trainer_results_path}")
     
     with open(trainer_results_path, 'r') as f:
         results = json.load(f)
     
     # Extract accuracies and find median
     accuracies = [run['accuracy'] for run in results]
-    print(f"DEBUG: Found accuracies: {accuracies}")
     
     median_accuracy = np.median(accuracies)
-    print(f"DEBUG: Median accuracy: {median_accuracy}")
     
     # Find the run closest to median accuracy
     median_run = min(results, key=lambda x: abs(x['accuracy'] - median_accuracy))
-    print(f"DEBUG: Selected run {median_run['run']} with accuracy {median_run['accuracy']}")
     
     return median_run
 
@@ -771,7 +753,6 @@ def create_validation_dataframe(median_run):
     true_labels = median_run['true_labels']
     bert_predictions = median_run['predictions']
     
-    print(f"DEBUG: Creating DataFrame with {len(val_texts)} validation samples")
     
     df = pd.DataFrame({
         'text': val_texts,
@@ -779,9 +760,6 @@ def create_validation_dataframe(median_run):
         'bert_prediction': bert_predictions
     })
     
-    print(f"DEBUG: Validation DataFrame shape: {df.shape}")
-    print(f"DEBUG: Label distribution - True: {pd.Series(true_labels).value_counts().to_dict()}")
-    print(f"DEBUG: Label distribution - BERT: {pd.Series(bert_predictions).value_counts().to_dict()}")
     
     return df
 
@@ -815,7 +793,6 @@ def evaluate_with_median_run_data(full_path, label_source):
         - Saves results to '*_{from_bert|from_labels}_median_run_results.csv'
         - Saves agreement stats to '*_{from_bert|from_labels}_median_run_agreement.csv'
     """
-    print(f"DEBUG: Starting evaluation with median run data for: {full_path}")
     
     # Find corresponding trainer results file
     trainer_results_path = full_path.replace('_validation_data_labelled.csv', '_validation_data_trainer_results.json')
@@ -831,30 +808,24 @@ def evaluate_with_median_run_data(full_path, label_source):
     val_df = create_validation_dataframe(median_run)
     
     # Load full dataset 
-    print(f"DEBUG: Loading full dataset...")
     full_df = safe_read_csv(full_path)
     if full_df is None:
         print(f"ERROR: Could not read full dataset: {full_path}")
         return
     
-    print(f"DEBUG: Full dataset shape: {full_df.shape}")
     
     # Clean the full dataset
     full_df['text'] = full_df['text'].fillna('').astype(str)
     full_df = full_df.dropna(subset=[label_source])
     
-    print(f"DEBUG: Full dataset after cleaning: {full_df.shape}")
     
     # Create a set of validation texts to exclude from training
     val_texts_set = set(val_df['text'].tolist())
-    print(f"DEBUG: Validation set contains {len(val_texts_set)} unique texts")
     
     # Split full dataset: training = all data EXCEPT validation texts
     train_mask = ~full_df['text'].isin(val_texts_set)
     train_df = full_df[train_mask].copy()
     
-    print(f"DEBUG: Training set shape after excluding validation: {train_df.shape}")
-    print(f"DEBUG: Excluded {len(full_df) - len(train_df)} validation samples from training")
     
     if len(train_df) == 0:
         print(f"ERROR: No training data remaining after excluding validation set!")
@@ -862,7 +833,6 @@ def evaluate_with_median_run_data(full_path, label_source):
     
     # Extract features for training dataset
     feature_cache_path = full_path.replace("_labelled.csv", "_features.csv")
-    print(f"DEBUG: Using feature cache: {feature_cache_path}")
     
     if not os.path.exists(feature_cache_path):
         print(f"ERROR: Feature cache not found: {feature_cache_path}")
@@ -871,7 +841,6 @@ def evaluate_with_median_run_data(full_path, label_source):
     
     # Load full feature cache
     features_df = pd.read_csv(feature_cache_path)
-    print(f"DEBUG: Full features shape: {features_df.shape}")
     
     if len(features_df) != len(full_df):
         print(f"WARNING: Feature cache size mismatch. Regenerating features...")
@@ -886,18 +855,14 @@ def evaluate_with_median_run_data(full_path, label_source):
         print(f"ERROR: After reset, features ({len(features_df)}) and data ({len(full_df)}) still don't match!")
         return
     
-    print(f"DEBUG: After index reset - Full DF: {full_df.shape}, Features: {features_df.shape}")
     
     # Recreate train_mask after index reset
     train_mask = ~full_df['text'].isin(val_texts_set)
     train_df = full_df[train_mask].copy()
     
-    print(f"DEBUG: Training set shape after excluding validation: {train_df.shape}")
-    print(f"DEBUG: Excluded {len(full_df) - len(train_df)} validation samples from training")
     
     # Get features for training set only (exclude validation indices)
     train_features = features_df[train_mask].copy()
-    print(f"DEBUG: Training features shape: {train_features.shape}")
     
     # Verify that train_features and train_df have matching lengths
     if len(train_features) != len(train_df):
@@ -905,20 +870,16 @@ def evaluate_with_median_run_data(full_path, label_source):
         return
     
     # Train Random Forest on training set only
-    print(f"DEBUG: Training Random Forest on training set (excluding validation)...")
     exclude_features = ['spelling_grammar_errors', 'has_emoji', 'has_mention', 'has_link']
     X_train = train_features.drop(columns=[f for f in exclude_features if f in train_features.columns], errors="ignore")
     y_train = train_df[label_source]
     
-    print(f"DEBUG: Training set label distribution: {y_train.value_counts().to_dict()}")
     
     clf = RandomForestClassifier(n_estimators=100, random_state=42)
     clf.fit(X_train, y_train)
     
-    print(f"DEBUG: Random Forest trained successfully on {len(X_train)} samples")
     
     # Extract features for validation set
-    print(f"DEBUG: Extracting features for validation set...")
     val_features = extract_features(val_df)
     X_val = val_features.drop(columns=[f for f in exclude_features if f in val_features.columns], errors="ignore")
     
@@ -939,14 +900,12 @@ def evaluate_with_median_run_data(full_path, label_source):
     X_val = X_val[X_train.columns]
     
     # Make predictions on validation set
-    print(f"DEBUG: Making Random Forest predictions on validation set...")
     rf_predictions = clf.predict(X_val)
     rf_probabilities = clf.predict_proba(X_val)[:, 1]
     
     # Calculate AUC
     y_val = val_df[label_source]
     auc = roc_auc_score(y_val, rf_probabilities)
-    print(f"DEBUG: Random Forest AUC on validation set: {auc:.4f}")
     
     # Create results DataFrame
     results_df = pd.DataFrame({
@@ -962,8 +921,6 @@ def evaluate_with_median_run_data(full_path, label_source):
     output_path = full_path.replace("_labelled.csv", f"{suffix}_median_run_results.csv")
     results_df.to_csv(output_path, index=False)
     
-    print(f"DEBUG: Results saved to: {output_path}")
-    print(f"DEBUG: Results shape: {results_df.shape}")
     
     # Print summary statistics
     print(f"\n=== EVALUATION SUMMARY ===")
@@ -1052,7 +1009,6 @@ def evaluate_with_median_run_data(full_path, label_source):
     # Save agreement statistics
     agreement_output_path = full_path.replace("_labelled.csv", f"{suffix}_median_run_agreement.csv")
     agreement_stats.to_csv(agreement_output_path, index=False)
-    print(f"DEBUG: Agreement statistics saved to: {agreement_output_path}")
     
     return auc, results_df, agreement_stats
 
@@ -1076,7 +1032,6 @@ def evaluate_all_datasets_median_run(folder_path, label_source):
           aggregated agreement metrics across all datasets
         - Prints detailed debug info and summary statistics
     """
-    print(f"DEBUG: Starting evaluate_all_datasets_median_run with folder_path: {folder_path}, label_source: {label_source}")
     
     assert label_source in ['labels', 'bert_prediction'], "label_source must be 'labels' or 'bert_prediction'"
 
@@ -1090,13 +1045,11 @@ def evaluate_all_datasets_median_run(folder_path, label_source):
     files_processed = 0
 
     for root, _, files in os.walk(folder_path):
-        print(f"DEBUG: Scanning directory: {root}")
         
         for filename in files:
             if filename.endswith('validation_data_labelled.csv') and ('random' in filename or 'cosine' in filename or 'ml' in filename):
                 files_found += 1
                 full_path = os.path.join(root, filename)
-                print(f'DEBUG: Found matching file #{files_found}: {full_path}')
 
                 try:
                     auc, results_df, agreement_stats = evaluate_with_median_run_data(full_path, label_source)
@@ -1104,7 +1057,6 @@ def evaluate_all_datasets_median_run(folder_path, label_source):
                     # Parse filename for metadata
                     try:
                         model, ft, context, style, persona = parse_filename(filename)
-                        print(f"DEBUG: Parsed filename - model: {model}, ft: {ft}, context: {context}, style: {style}, persona: {persona}")
                         if 'random' in filename:
                             source_type = 'random'
                         else:
@@ -1149,7 +1101,6 @@ def evaluate_all_datasets_median_run(folder_path, label_source):
                     traceback.print_exc()
                     continue
 
-    print(f"DEBUG: Summary - Found {files_found} files, successfully processed {files_processed}")
     
     if results_summary:
         # Save combined summary
@@ -1158,12 +1109,10 @@ def evaluate_all_datasets_median_run(folder_path, label_source):
         # Save evaluation summary
         summary_path = os.path.join(folder_path, f'median_run_evaluation_summary{suffix}.csv')
         pd.DataFrame(results_summary).to_csv(summary_path, index=False)
-        print(f"DEBUG: Evaluation summary saved to: {summary_path}")
         
         # Save agreement summary
         agreement_summary_path = os.path.join(folder_path, f'median_run_agreement_summary{suffix}.csv')
         pd.DataFrame(agreement_summary).to_csv(agreement_summary_path, index=False)
-        print(f"DEBUG: Agreement summary saved to: {agreement_summary_path}")
         
         # Print overall statistics
         print(f"\n=== OVERALL SUMMARY ===")

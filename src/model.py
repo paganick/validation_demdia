@@ -387,7 +387,7 @@ class Model:
         
         # Model-specific loading to avoid dtype issues
         if is_apertus:
-            # Apertus: use float32 for fine-tuning (more stable, like old version)
+            # Apertus: use float32 for fine-tuning (more stable than bfloat16 for this architecture)
             model = AutoModelForCausalLM.from_pretrained(
                 self.model_name,
                 torch_dtype=torch.float32,
