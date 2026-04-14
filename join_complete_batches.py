@@ -91,6 +91,7 @@ def load_batch_counts(batch_file: Path) -> dict:
 
 
 def load_json_safe(path: Path) -> list | None:
+    """Load a JSON file, returning None on parse or IO error."""
     try:
         with open(path, encoding="utf-8") as f:
             return json.load(f)

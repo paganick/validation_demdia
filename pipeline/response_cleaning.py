@@ -196,13 +196,10 @@ def clean_response(text: str, level: int = 2, author: str = '') -> str:
     return text
 
 
-def clean_entry(entry: dict, level: int = 2) -> dict | None:
+def clean_entry(entry: dict, level: int = 2) -> tuple[dict | None, str]:
     """Apply clean_response to all response fields of a simulation entry.
 
-    Modifies and returns the entry dict in-place.  Returns None if the entry
-    should be dropped (all candidates cleaned to empty).
-
-    Fields cleaned:
+    Fields cleaned in-place:
       - 'response'            : single randomly-selected response
       - 'all_valid_responses' : list of all candidate responses
 
@@ -210,7 +207,7 @@ def clean_entry(entry: dict, level: int = 2) -> dict | None:
       1. Empty candidates are removed from all_valid_responses.
       2. If response cleaned to '' but valid candidates remain,
          response is replaced with all_valid_responses[0].
-      3. If no valid candidates remain the entry is dropped (returns None).
+      3. If no valid candidates remain the entry is dropped.
 
     The entry's 'user' field is used as the author for handle-prefix rules:
     only handles matching the author are stripped; references to other users
@@ -219,7 +216,7 @@ def clean_entry(entry: dict, level: int = 2) -> dict | None:
     Returns a 2-tuple (entry_or_None, action_str) where action_str is one of:
       'clean'    – response unchanged
       'replaced' – response was empty after cleaning, replaced with avr[0]
-      'dropped'  – all candidates empty; entry should be discarded (entry is None)
+      'dropped'  – all candidates empty; entry is None
     """
     if level == 0:
         return entry, 'clean'
@@ -252,7 +249,7 @@ def classify_response(text: str) -> str:
     """Classify a response by the first cleaning rule that would fire.
 
     Returns one of: 'at_user', 'u_handle', 'bare_user', 'brk_out', 'brk_text',
-                    'brk_only', 'clean'
+                    'brk_only', 'resp_label', 'clean'
     Classification is based on pattern type only (no author check).
     """
     if not text or not isinstance(text, str):
