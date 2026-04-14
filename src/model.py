@@ -252,6 +252,16 @@ class Model:
             self.model.generation_config.eos_token_id = self.tokenizer.eos_token_id
 
     def finetune_model(self):
+        """Fine-tune the base model on the platform's training posts using LoRA.
+
+        Loads the base model in 8-bit quantisation, applies LoRA adapters
+        (rank/alpha/dropout/lr from config), and trains on up to 200 posts per user
+        from the training split.  The resulting adapter is saved to self.fine_tuned_dir
+        and loaded back so the model is ready for inference.
+
+        A 90/10 train/validation split is used internally; checkpoints are written
+        to a sibling directory (<fine_tuned_dir>_checkpoints).
+        """
         checkpoint_dir = self.fine_tuned_dir.replace("_finetuned", "_checkpoints")
 
         bnb_config = BitsAndBytesConfig(

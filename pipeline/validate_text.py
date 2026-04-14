@@ -21,6 +21,7 @@ from src.utils import Validator
 tokenizer = BertTokenizer.from_pretrained("bert-base-uncased", local_files_only=False)
 
 def find_validation_files(base_folder):
+    """Recursively find all *_validation_data.csv files under base_folder."""
     validation_files = []
     for root, _, files in os.walk(base_folder):
         for file in files:
@@ -30,6 +31,14 @@ def find_validation_files(base_folder):
 
 
 def process_file(file_path, run_bert=True, run_empath=True):
+    """Run BERT and/or Empath validation on a single *_validation_data.csv file.
+
+    Skips steps whose output files already exist (incremental / re-runnable).
+    Outputs written next to the input file:
+      - *_labelled.csv, *_trainer_results.json, *_confusion_matrix.csv,
+        *_bert_report.json  (BERT)
+      - *_empath_significant_features.csv  (Empath)
+    """
     print(f"\nProcessing file: {file_path}")
     base, ext = os.path.splitext(file_path)
     labelled_file = base + "_labelled.csv"
