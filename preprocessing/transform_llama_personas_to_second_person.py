@@ -206,14 +206,17 @@ def simple_transform_to_second_person(text: str, username: str, platform: str) -
     return result
 
 
-def process_platform(platform: str, model, tokenizer, cache: dict) -> pd.DataFrame:
+def process_platform(platform: str, model, tokenizer, cache: dict,
+                     data_dir: Path = None) -> pd.DataFrame:
     """Process personas for a single platform.
 
     Transforms the data to match the old personas.pkl format:
     - 'persona': Second person (for instruction-tuned prompts)
     - 'persona_third_person': Third person (for non-instruction-tuned prompts)
     """
-    filepath = DATA_DIR / platform / "personas_llama.pkl"
+    if data_dir is None:
+        data_dir = DATA_DIR
+    filepath = data_dir / platform / "personas_llama.pkl"
 
     print(f"\nProcessing {platform}...")
 
@@ -346,9 +349,16 @@ def main():
         default=2,
         help="Number of examples to show per platform (default: 2)"
     )
+    parser.add_argument(
+        "--data-dir",
+        type=str,
+        default=str(DATA_DIR),
+        help="Root data directory containing {platform}/personas_llama.pkl (default: data/)"
+    )
 
     args = parser.parse_args()
 
+    data_dir = Path(args.data_dir)
     platforms = PLATFORMS if args.platform == "all" else [args.platform]
 
     print("=" * 70)
@@ -364,13 +374,14 @@ def main():
     # Process each platform
     dataframes = {}
     for platform in platforms:
-        dataframes[platform] = process_platform(platform, model, tokenizer, cache)
+        dataframes[platform] = process_platform(platform, model, tokenizer, cache,
+                                                data_dir=data_dir)
 
     # Show examples
     show_examples(dataframes, args.show_examples)
 
-    # Create comparison CSV
-    output_csv = DATA_DIR.parent / "llama_persona_transformation_samples.csv"
+    # Create comparison CSV next to the data dir
+    output_csv = data_dir.parent / "llama_persona_transformation_samples.csv"
     create_comparison_csv(dataframes, output_csv)
 
     print("\n" + "=" * 70)

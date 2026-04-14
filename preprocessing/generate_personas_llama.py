@@ -34,7 +34,7 @@ from pathlib import Path
 from tqdm.auto import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-# Configuration
+# Configuration (DATA_DIR can be overridden via --data-dir CLI argument)
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 MODEL_NAME = "meta-llama/Llama-3.1-8B-Instruct"
 PLATFORMS = ["twitter", "reddit", "bluesky"]
@@ -267,6 +267,7 @@ Persona description for {full_username}:"""
 
 
 def process_platform(platform: str, model, tokenizer,
+                     data_dir: Path,
                      max_posts: int = 30, max_users: int = 0) -> tuple:
     """
     Process a single platform and generate llama personas.
@@ -275,17 +276,18 @@ def process_platform(platform: str, model, tokenizer,
         platform: Platform name
         model: Loaded model
         tokenizer: Loaded tokenizer
+        data_dir: Root data directory (contains {platform}/posts.pkl)
         max_posts: Maximum posts per user for persona generation
         max_users: Maximum users to process (0 = all)
 
     Returns:
         Tuple of (posts_df, personas_df)
     """
-    filepath = DATA_DIR / platform / "personas.pkl"
+    filepath = data_dir / platform / "posts.pkl"
     print(f"\nProcessing {platform}...")
-    print(f"  Loading: {filepath}")
+    print(f"  Loading posts: {filepath}")
 
-    # Load the existing data
+    # Load posts data (has username, message, reply_to, training columns)
     df = pd.read_pickle(filepath)
     print(f"  Shape: {df.shape}")
     print(f"  Unique users: {df['username'].nunique()}")
@@ -297,10 +299,8 @@ def process_platform(platform: str, model, tokenizer,
         unique_users = unique_users[:max_users]
         print(f"  Limited to {max_users} users")
 
-    # Prepare posts dataframe (all posts for selected users)
-    posts_df = df[df['username'].isin(unique_users)][
-        ['username', 'message', 'reply_to', 'training']
-    ].copy()
+    # Keep posts dataframe for output
+    posts_df = df[df['username'].isin(unique_users)].copy()
 
     # Generate personas for each user
     personas_list = []
@@ -348,28 +348,27 @@ def main(args):
     # Load model once
     model, tokenizer = load_model()
 
+    data_dir = Path(args.data_dir)
+
     # Process each platform
     for platform in platforms_to_process:
         posts_df, personas_df = process_platform(
             platform=platform,
             model=model,
             tokenizer=tokenizer,
+            data_dir=data_dir,
             max_posts=args.max_posts,
             max_users=args.max_users
         )
 
         # Save output files
-        output_dir = DATA_DIR / platform
+        output_dir = data_dir / platform
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-        posts_output = output_dir / "posts_llama.pkl"
         personas_output = output_dir / "personas_llama.pkl"
-
-        posts_df.to_pickle(posts_output)
         personas_df.to_pickle(personas_output)
 
-        print(f"\n  Saved posts to: {posts_output}")
-        print(f"    Shape: {posts_df.shape}")
-        print(f"  Saved personas to: {personas_output}")
+        print(f"\n  Saved personas to: {personas_output}")
         print(f"    Shape: {personas_df.shape}")
 
         # Print sample persona
@@ -406,6 +405,12 @@ if __name__ == "__main__":
         type=int,
         default=0,
         help="Maximum number of users to process per platform (0 = all, default: 0)"
+    )
+    parser.add_argument(
+        "--data-dir",
+        type=str,
+        default=str(DATA_DIR),
+        help="Root data directory containing {platform}/posts.pkl (default: data/)"
     )
 
     args = parser.parse_args()

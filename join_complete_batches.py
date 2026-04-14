@@ -13,11 +13,18 @@ Incomplete configs (missing any batch) are skipped and reported in the summary.
 Re-running is safe — already-joined files are skipped unless --force is given.
 
 Usage:
-    python join_complete_batches.py                           # default: results_joined/
-    python join_complete_batches.py --output-dir results_v2  # custom output dir
-    python join_complete_batches.py --dry-run                 # preview only
-    python join_complete_batches.py --force                   # re-join existing
-    python join_complete_batches.py --list-tasks              # print TSV of all jobs
+    python join_complete_batches.py                            # default: results_joined/
+    python join_complete_batches.py --output-dir results_v2   # custom output dir
+    python join_complete_batches.py --dry-run                  # preview only
+    python join_complete_batches.py --force                    # re-join existing
+    python join_complete_batches.py --list-tasks               # print TSV of all jobs
+
+    # Test / custom layout:
+    python join_complete_batches.py \\
+        --results-dir tests/results \\
+        --configs-dir tests/configs \\
+        --batch-file  tests/user_batches_test.json \\
+        --output-dir  tests/results_joined
 """
 
 import argparse
@@ -27,11 +34,8 @@ from pathlib import Path
 
 import yaml
 
-BASE_DIR    = Path(__file__).resolve().parent
-RESULTS_DIR = BASE_DIR / "results"
-CONFIG_DIR  = BASE_DIR / "configs"
-BATCH_FILE  = BASE_DIR / "user_batches.json"
-PLATFORMS   = ["bluesky", "twitter", "reddit"]
+BASE_DIR  = Path(__file__).resolve().parent
+PLATFORMS = ["bluesky", "twitter", "reddit"]
 
 
 # ---------------------------------------------------------------------------
@@ -58,10 +62,10 @@ def config_to_slug(config: dict) -> str:
 # Data loaders
 # ---------------------------------------------------------------------------
 
-def load_configs() -> list:
-    """Load all YAML configs from configs/ and return list of info dicts."""
+def load_configs(config_dir: Path) -> list:
+    """Load all YAML configs from config_dir and return list of info dicts."""
     configs = []
-    for cfg_path in sorted(CONFIG_DIR.glob("*.yaml")):
+    for cfg_path in sorted(config_dir.glob("*.yaml")):
         with open(cfg_path) as f:
             config = yaml.safe_load(f)
         config.setdefault("finetuned", False)
@@ -76,9 +80,9 @@ def load_configs() -> list:
     return configs
 
 
-def load_batch_counts() -> dict:
-    """Return {platform: n_batches} from user_batches.json."""
-    with open(BATCH_FILE) as f:
+def load_batch_counts(batch_file: Path) -> dict:
+    """Return {platform: n_batches} from the batch assignments file."""
+    with open(batch_file) as f:
         data = json.load(f)
     return {
         platform: data["platforms"][platform]["n_batches"]
@@ -128,6 +132,18 @@ def main():
         help="Output directory (default: results_joined/)"
     )
     parser.add_argument(
+        "--results-dir", default="results",
+        help="Directory containing per-platform batch files (default: results/)"
+    )
+    parser.add_argument(
+        "--configs-dir", default="configs",
+        help="Directory containing YAML config files (default: configs/)"
+    )
+    parser.add_argument(
+        "--batch-file", default="user_batches.json",
+        help="Batch assignments JSON file (default: user_batches.json)"
+    )
+    parser.add_argument(
         "--dry-run", action="store_true",
         help="Preview what would be joined without writing any files"
     )
@@ -145,8 +161,12 @@ def main():
     )
     args = parser.parse_args()
 
-    configs      = load_configs()
-    batch_counts = load_batch_counts()
+    results_dir = Path(args.results_dir)
+    config_dir  = Path(args.configs_dir)
+    batch_file  = Path(args.batch_file)
+
+    configs      = load_configs(config_dir)
+    batch_counts = load_batch_counts(batch_file)
 
     # --list-tasks: enumerate all jobs and exit
     if args.list_tasks:
@@ -157,7 +177,7 @@ def main():
                     print(f"{c['filename']}\t{platform}\t{batch_id}")
         return
 
-    output_dir = BASE_DIR / args.output_dir
+    output_dir = Path(args.output_dir)
 
     n_joined     = 0
     n_skipped    = 0
@@ -171,7 +191,7 @@ def main():
 
             # Check all batch files exist
             batch_paths = [
-                RESULTS_DIR / platform / f"{slug}__batch{b}.json"
+                results_dir / platform / f"{slug}__batch{b}.json"
                 for b in range(n_batches)
             ]
             missing = [p for p in batch_paths if not p.exists()]
