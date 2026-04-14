@@ -297,7 +297,7 @@ def _run_simulation_with_lock(config, dataset, posts_file, personas_file, n_user
             reply_to = row.reply_to
             original_message = row.message
 
-            # Get persona from separate file or from row (old format)
+            # Get persona from separate file, or from the posts row if no personas file
             if df_personas is not None:
                 user_persona = df_personas[df_personas['username'] == username]
                 persona = user_persona['persona'].iloc[0] if not user_persona.empty else None

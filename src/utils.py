@@ -20,7 +20,7 @@ class Validator:
     """
     Validator class to perform validation using BERT and Empath.
 
-    TODO: Note: this is missing two types of validation, as I was not yet able to fully automate these. These are available separately.
+    Note: two additional validation types (political affiliation prediction and minimodel behavior checks) are not automated here and are available separately.
     - Validation 3: Do the models correctly predict attributes of the individual that they are modeling? E.g., political affiliation. (See llama_finetuning_annotatino.ipnyb)
     - Validation 4: Minimodels. Do the models fulfill some basic behavior of human conversation? 
     """

@@ -11,7 +11,6 @@ def find_row_mismatch(input_df, cache_df, input_col='length', cache_col='word_co
     Find where two DataFrames diverge by comparing a common column.
     Returns info about the first misaligned row.
     """
-    print(f"DEBUG: Comparing {input_col} vs {cache_col} columns...")
     
     # Check if columns exist
     if input_col not in input_df.columns:
@@ -27,8 +26,6 @@ def find_row_mismatch(input_df, cache_df, input_col='length', cache_col='word_co
     input_vals = input_df[input_col].values
     cache_vals = cache_df[cache_col].values
     
-    print(f"DEBUG: Input values range: {input_vals[:5]} ... {input_vals[-5:]}")
-    print(f"DEBUG: Cache values range: {cache_vals[:5]} ... {cache_vals[-5:]}")
     
     # Compare row by row until we find a mismatch
     min_len = min(len(input_vals), len(cache_vals))
@@ -61,7 +58,6 @@ def find_row_mismatch(input_df, cache_df, input_col='length', cache_col='word_co
             'cache_val': None
         }
     
-    print("DEBUG: No mismatch found - all values match!")
     return None
 
 def get_responses_features_path(validation_data_path):
@@ -93,7 +89,6 @@ def build_features_from_responses_cache(validation_df, responses_features_path):
     coverage = merged['word_count'].notna().sum()
     n_missing = len(validation_df) - coverage
     if n_missing > 0:
-        print(f"DEBUG: {n_missing}/{len(validation_df)} texts not in responses cache (likely real human posts) — computing features for those rows only")
 
     rename_map = {
         'link_count': 'links_count',
@@ -136,7 +131,6 @@ def build_features_from_responses_cache(validation_df, responses_features_path):
 
 
 def compute_features_for_all(folder_path):
-    print(f"DEBUG: Starting compute_features_for_all with folder_path: {folder_path}")
     
     if not os.path.exists(folder_path):
         print(f"ERROR: Folder path does not exist: {folder_path}")
@@ -146,14 +140,11 @@ def compute_features_for_all(folder_path):
     files_processed = 0
     
     for root, dirs, files in os.walk(folder_path):
-        print(f"DEBUG: Scanning directory: {root}")
-        print(f"DEBUG: Found {len(files)} files in directory")
         
         for filename in files:
             if filename.endswith('validation_data.csv') and ('random' in filename or 'cosine' in filename or 'ml' in filename):
                 files_found += 1
                 full_path = os.path.join(root, filename)
-                print(f'DEBUG: Found matching file #{files_found}: {full_path}')
                 print(f'Computing features for {full_path}.')
 
                 try:
@@ -162,19 +153,14 @@ def compute_features_for_all(folder_path):
                         print(f"ERROR: Could not read {full_path}. Skipping.")
                         continue
                         
-                    print(f"DEBUG: CSV loaded successfully. Shape: {df.shape}")
-                    print(f"DEBUG: Columns: {list(df.columns)}")
                     
                     if 'text' not in df.columns:
                         print(f"ERROR: 'text' column not found in {full_path}")
-                        print(f"DEBUG: Available columns: {list(df.columns)}")
                         continue
                     
                     df['text'] = df['text'].fillna('').astype(str)
-                    print(f"DEBUG: Text column processed. Non-null text entries: {df['text'].ne('').sum()}")
 
                     feature_cache_path = full_path.replace(".csv", "_features.csv")
-                    print(f"DEBUG: Feature cache path: {feature_cache_path}")
 
                     if os.path.exists(feature_cache_path):
                         print(f"SKIP: Feature cache already exists, skipping {full_path}")
@@ -184,19 +170,15 @@ def compute_features_for_all(folder_path):
                     # Fast path: look up pre-computed features from LLM_judge responses cache
                     responses_features_path = get_responses_features_path(full_path)
                     if responses_features_path and os.path.exists(responses_features_path):
-                        print(f"DEBUG: Found responses cache, building features via lookup")
                         features_df = build_features_from_responses_cache(df, responses_features_path)
                         if features_df is not None:
                             features_df.to_csv(feature_cache_path, index=False)
                             print(f'Saved features to {feature_cache_path} (from responses cache)')
-                            print(f"DEBUG: Features shape: {features_df.shape}")
                             files_processed += 1
                             continue
-                        print(f"DEBUG: Responses cache lookup failed, falling back to full extraction")
 
                     features_df = extract_features(df, cache_path=feature_cache_path)
                     print(f'Saved features to {feature_cache_path}')
-                    print(f"DEBUG: Features shape: {features_df.shape}")
                     
                     files_processed += 1
                     
@@ -207,7 +189,6 @@ def compute_features_for_all(folder_path):
                     traceback.print_exc()
                     continue
     
-    print(f"DEBUG: Summary - Found {files_found} files, successfully processed {files_processed}")
 
 def analyze_data_quality(df, label_source, file_path):
     """
@@ -326,7 +307,6 @@ def analyze_data_quality(df, label_source, file_path):
     return problematic_mask
 
 def evaluate_all_datasets(folder_path, label_source):
-    print(f"DEBUG: Starting evaluate_all_datasets with folder_path: {folder_path}, label_source: {label_source}")
     
     assert label_source in ['labels', 'bert_prediction'], "label_source must be 'labels' or 'bert_prediction'"
 
@@ -343,13 +323,11 @@ def evaluate_all_datasets(folder_path, label_source):
     files_processed = 0
 
     for root, _, files in os.walk(folder_path):
-        print(f"DEBUG: Scanning directory: {root}")
         
         for filename in files:
             if filename.endswith('validation_data_labelled.csv') and ('random' in filename or 'cosine' in filename or 'ml' in filename):
                 files_found += 1
                 full_path = os.path.join(root, filename)
-                print(f'DEBUG: Found matching file #{files_found}: {full_path}')
                 print(f'Evaluating {full_path}.')
 
                 try:
@@ -358,8 +336,6 @@ def evaluate_all_datasets(folder_path, label_source):
                         print(f"ERROR: Could not read {full_path}. Stopping.")
                         sys.exit(1)
                         
-                    print(f"DEBUG: CSV loaded successfully. Shape: {df.shape}")
-                    print(f"DEBUG: Columns: {list(df.columns)}")
                     
                     if 'text' not in df.columns:
                         print(f"ERROR: 'text' column not found in {full_path}. Stopping.")
@@ -367,7 +343,6 @@ def evaluate_all_datasets(folder_path, label_source):
                         
                     if label_source not in df.columns:
                         print(f"ERROR: Label source '{label_source}' column not found in {full_path}. Stopping.")
-                        print(f"DEBUG: Available columns: {list(df.columns)}")
                         sys.exit(1)
 
                     # Comprehensive data quality analysis
@@ -375,7 +350,6 @@ def evaluate_all_datasets(folder_path, label_source):
                     
                     # Clean the data based on analysis
                     df['text'] = df['text'].fillna('').astype(str)
-                    print(f"DEBUG: Text column processed. Non-null text entries: {df['text'].ne('').sum()}")
                     
                     # Check and clean labels column
                     labels_before = len(df)
@@ -383,14 +357,10 @@ def evaluate_all_datasets(folder_path, label_source):
                     
                     if labels_null_count > 0:
                         print(f"WARNING: Found {labels_null_count} rows with missing/null labels")
-                        print(f"DEBUG: Removing rows with missing labels...")
                         df = df.dropna(subset=[label_source])
-                        print(f"DEBUG: After removing null labels: {len(df)} rows (removed {labels_before - len(df)} rows)")
                     
-                    print(f"DEBUG: Labels distribution: {df[label_source].value_counts().to_dict()}")
 
                     feature_cache_path = full_path.replace("_labelled.csv", "_features.csv")
-                    print(f"DEBUG: Looking for feature cache at: {feature_cache_path}")
                     
                     if not os.path.exists(feature_cache_path):
                         print(f"ERROR: Feature cache file not found: {feature_cache_path}. Stopping.")
@@ -401,7 +371,6 @@ def evaluate_all_datasets(folder_path, label_source):
                     cache_df = None
                     if os.path.exists(feature_cache_path):
                         cache_df = pd.read_csv(feature_cache_path, engine='python')
-                        print(f"DEBUG: Feature cache shape: {cache_df.shape}")
                         
                         if len(cache_df) != len(df):
                             print(f"WARNING: Shape mismatch detected!")
@@ -411,22 +380,16 @@ def evaluate_all_datasets(folder_path, label_source):
                             
                             print("SOLUTION: Automatically regenerating features to match current data...")
                             
-                            # Delete the old cache and regenerate
+                            # Remove stale cache and regenerate
                             os.remove(feature_cache_path)
-                            print(f"DEBUG: Deleted old cache file: {feature_cache_path}")
                             cache_df = None
                         else:
-                            print("DEBUG: Cache size matches input data - using existing features")
                     else:
-                        print(f"DEBUG: No feature cache found at: {feature_cache_path}")
                     
                     # Compute or load features
                     if cache_df is None:
-                        print(f"DEBUG: Computing features for {len(df)} rows...")
                         features_df = extract_features(df, cache_path=feature_cache_path)
-                        print(f"DEBUG: Features computed. Shape: {features_df.shape}")
                     else:
-                        print(f"DEBUG: Using existing feature cache")
                         features_df = cache_df
                         
                     base_output_path = full_path.replace(".csv", f"{suffix}")
@@ -438,22 +401,18 @@ def evaluate_all_datasets(folder_path, label_source):
                         source_type ='random'
                     else:
                         source_type = "cosine" if "cosine" in filename else "ml"
-                    print(f"DEBUG: Source type: {source_type}")
 
                     try:
                         model, ft, context, style, persona = parse_filename(filename)
-                        print(f"DEBUG: Parsed filename - model: {model}, ft: {ft}, context: {context}, style: {style}, persona: {persona}")
                     except Exception as parse_error:
                         print(f"ERROR: Could not parse filename {filename}: {parse_error}")
                         print("STOPPING EXECUTION due to filename parsing error.")
                         sys.exit(1)
 
                     # Evaluate from cached features
-                    print("DEBUG: Starting feature evaluation...")
                     auc, feature_importance, correlation_df = evaluate_features_single_dataset(
                         df, feature_cache_path, label_source=label_source
                     )
-                    print(f"DEBUG: Evaluation complete. AUC: {auc}")
 
                     # Save AUC summary
                     results_auc.append({
@@ -498,7 +457,6 @@ def evaluate_all_datasets(folder_path, label_source):
                     print(f"\nCONTINUING with next file...")
                     continue
 
-    print(f"DEBUG: Summary - Found {files_found} files, successfully processed {files_processed}")
     
     if not results_auc:
         print("WARNING: No files were successfully processed. No output files will be created.")
@@ -507,13 +465,10 @@ def evaluate_all_datasets(folder_path, label_source):
     # Save combined outputs
     try:
         pd.DataFrame(results_auc).to_csv(os.path.join(folder_path, f'auc_results{suffix}.csv'), index=False)
-        print(f"DEBUG: Saved AUC results to: {os.path.join(folder_path, f'auc_results{suffix}.csv')}")
         
         pd.DataFrame(results_importances).to_csv(os.path.join(folder_path, f'importances{suffix}.csv'), index=False)
-        print(f"DEBUG: Saved importance results to: {os.path.join(folder_path, f'importances{suffix}.csv')}")
         
         pd.concat(results_correlation, ignore_index=True).to_csv(os.path.join(folder_path, f'correlation_results{suffix}.csv'), index=False)
-        print(f"DEBUG: Saved correlation results to: {os.path.join(folder_path, f'correlation_results{suffix}.csv')}")
         
     except Exception as e:
         print(f"ERROR: Failed to save combined results: {e}")
@@ -551,7 +506,6 @@ def evaluate_single_file(file_path, label_source):
             print(f"ERROR: Could not read {file_path}")
             return None
 
-        print(f"DEBUG: CSV loaded successfully. Shape: {df.shape}")
 
         if 'text' not in df.columns:
             print(f"ERROR: 'text' column not found in {file_path}")
@@ -559,7 +513,6 @@ def evaluate_single_file(file_path, label_source):
 
         if label_source not in df.columns:
             print(f"ERROR: Label source '{label_source}' column not found in {file_path}")
-            print(f"DEBUG: Available columns: {list(df.columns)}")
             return None
 
         # Clean the data
@@ -572,7 +525,6 @@ def evaluate_single_file(file_path, label_source):
 
         # Find or compute feature cache
         feature_cache_path = file_path.replace("_labelled.csv", "_features.csv")
-        print(f"DEBUG: Looking for feature cache at: {feature_cache_path}")
 
         if not os.path.exists(feature_cache_path):
             print(f"Feature cache not found. Computing features...")
@@ -624,11 +576,9 @@ def evaluate_single_file(file_path, label_source):
             model, ft, context, style, persona = "unknown", "unknown", "unknown", "unknown", "unknown"
 
         # Evaluate features
-        print("DEBUG: Starting feature evaluation...")
         auc, feature_importance, correlation_df = evaluate_features_single_dataset(
             df, feature_cache_path, label_source=label_source
         )
-        print(f"DEBUG: Evaluation complete. AUC: {auc}")
 
         # Save feature importance stats
         feature_dict = feature_importance.to_dict()
@@ -714,24 +664,19 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    print(f"DEBUG: Parsed arguments - command: {args.command}")
 
     if args.command == "compute_features":
         if args.file:
-            print(f"DEBUG: Running compute_features (single-file mode) with file: {args.file}")
             compute_features_for_single_file(args.file)
         elif args.folder_path:
-            print(f"DEBUG: Running compute_features with folder_path: {args.folder_path}")
             compute_features_for_all(args.folder_path)
         else:
             print("ERROR: Must specify either folder_path or --file")
             compute_parser.print_help()
     elif args.command == "evaluate":
         if args.file:
-            print(f"DEBUG: Running evaluate (single-file mode) with file: {args.file}, label_source: {args.label_source}")
             evaluate_single_file(args.file, args.label_source)
         elif args.folder_path:
-            print(f"DEBUG: Running evaluate with folder_path: {args.folder_path}, label_source: {args.label_source}")
             evaluate_all_datasets(args.folder_path, args.label_source)
             evaluate_all_datasets_median_run(args.folder_path, args.label_source)
         else:
