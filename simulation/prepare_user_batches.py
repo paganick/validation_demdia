@@ -9,9 +9,15 @@ This script:
 
 The batch assignments are deterministic (sorted by username, then split).
 
+Output:
+    user_batches.json at the project root — read by run_simulation.py
+    and join_complete_batches.py via the --batch_file argument.
+    This file is tracked in git; re-run this script only if the user
+    pool changes (e.g. new platform or updated anonymization).
+
 Usage:
-    python prepare_user_batches.py
-    python prepare_user_batches.py --batch_size 50
+    python simulation/prepare_user_batches.py
+    python simulation/prepare_user_batches.py --batch_size 50
 """
 
 import pandas as pd
