@@ -96,7 +96,7 @@ class Model:
 
         # Build fine-tuned directory path
         ft_variant = config.get("ft_variant", "")
-        base_dir = f"{config['finetuning_dir']}{config['model']}_finetuned_{os.path.splitext(posts_file)[0]}"
+        base_dir = os.path.join(config['finetuning_dir'], f"{config['model']}_finetuned_{os.path.splitext(posts_file)[0]}")
         if ft_variant:
             base_dir = f"{base_dir}_{ft_variant}"
         if users is not None:
