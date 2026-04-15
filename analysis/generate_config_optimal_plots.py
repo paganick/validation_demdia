@@ -37,7 +37,7 @@ def _save_stats(df, groupby_cols, value_cols, output_path):
     print(f"  Stats saved to: {output_path}")
 
 # Import custom utilities
-from src.plotting_utils import (
+from simulation.src.plotting_utils import (
     MODEL_PALETTE, DATASET_PALETTE, parse_filename, make_label,
     get_ordered_models, format_dataset_name, with_plot_style,
     parse_confusion_matrix, calculate_metrics, find_confusion_matrix_fields,

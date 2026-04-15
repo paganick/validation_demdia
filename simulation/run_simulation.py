@@ -1,6 +1,11 @@
 import argparse
 import os
+import sys
 import json
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+
 from src.simulate import *
 from src.config_utils import load_config
 import src.globals as globals_module

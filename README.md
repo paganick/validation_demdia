@@ -121,7 +121,7 @@ prompts. Saves back to `personas_llama.pkl`.
 cp data/{platform}/personas_llama.pkl data/{platform}/personas.pkl
 ```
 
-After this, `personas.pkl` has the two columns expected by `run_simulation.py`:
+After this, `personas.pkl` has the two columns expected by `simulation/run_simulation.py`:
 - `persona` — second-person ("You are @User_XXXX…"), used with instruction-tuned models
 - `persona_third_person` — third-person ("@User_XXXX is…"), used with base models
 
@@ -147,14 +147,14 @@ fine-tuning runs and produce non-reproducible results.
 
 ```bash
 # (Optional) Regenerate batch assignments if personas change
-python preprocessing/prepare_user_batches.py
+python simulation/prepare_user_batches.py
 ```
 
 **Run each batch** (one process per platform × config × batch, parallelise as your
 cluster allows):
 
 ```bash
-python run_simulation.py \
+python simulation/run_simulation.py \
     --config_file=configs/<model>.yaml \
     --dataset=<platform> \
     --user_batch=<N> \
@@ -168,7 +168,7 @@ automatically. Repeat as needed until all batches are fully populated.
 **After all batches are complete, join into per-config files:**
 
 ```bash
-python join_complete_batches.py --output-dir results_joined/
+python simulation/join_complete_batches.py --output-dir results_joined/
 ```
 
 This skips any config/platform combination where not all batch files are present and
@@ -188,7 +188,7 @@ training finishes. Each batch trains on its own users and saves to a separate di
 
 #### Running on a SLURM cluster
 
-Each simulation job is a single call to `run_simulation.py` for one (config, platform,
+Each simulation job is a single call to `simulation/run_simulation.py` for one (config, platform,
 batch) triple. The full job list can be enumerated from `configs/*.yaml` and
 `user_batches.json`. A typical array job looks like this:
 
@@ -205,7 +205,7 @@ PLATFORM=$(echo "$TASK_LINE" | cut -f2)
 BATCH=$(echo "$TASK_LINE" | cut -f3)
 
 apptainer exec --nv conda.sif \
-    python run_simulation.py \
+    python simulation/run_simulation.py \
         --config_file  "configs/$CONFIG" \
         --dataset      "$PLATFORM" \
         --output_dir   "results/$PLATFORM" \
@@ -218,7 +218,7 @@ where `tasks.tsv` is a tab-separated file with columns `config_yaml  platform  b
 one row per job. Generate it from the current configs and batch assignments with:
 
 ```bash
-python join_complete_batches.py --list-tasks > tasks.tsv
+python simulation/join_complete_batches.py --list-tasks > tasks.tsv
 ```
 
 You can monitor overall progress with:
@@ -236,7 +236,7 @@ Strip formatting artifacts introduced by instruction-tuned models (e.g. `[Respon
 headers, bold wrappers, handle prefixes) before response selection:
 
 ```bash
-python pipeline/response_cleaning.py results_joined/ --output-dir results_cleaned/
+python postprocessing/response_cleaning.py results_joined/ --output-dir results_cleaned/
 ```
 
 Always specify `--output-dir` so that `results_joined/` is kept intact as the raw
@@ -252,7 +252,7 @@ modifies files in-place and makes the raw responses unrecoverable.
 Use ML and cosine similarity to select most human-like responses:
 
 ```bash
-python pipeline/LLM_judge.py results_cleaned/ --include-advanced
+python postprocessing/LLM_judge.py results_cleaned/ --include-advanced
 ```
 
 **Input:**
@@ -266,7 +266,7 @@ python pipeline/LLM_judge.py results_cleaned/ --include-advanced
 ### Step 4: Convert Optimal Responses to CSV
 
 ```bash
-python pipeline/optimal_responses_to_csv.py results_cleaned/
+python postprocessing/optimal_responses_to_csv.py results_cleaned/
 ```
 
 Converts each `*_optimal_response.json` produced by `LLM_judge.py` into a sibling `*_optimal_response.csv` file.
@@ -277,13 +277,13 @@ Create balanced datasets (human vs AI) for each platform:
 
 ```bash
 # Bluesky
-python pipeline/build_validation_data.py --folder=results_cleaned/bluesky
+python postprocessing/build_validation_data.py --folder=results_cleaned/bluesky
 
 # Twitter
-python pipeline/build_validation_data.py --folder=results_cleaned/twitter
+python postprocessing/build_validation_data.py --folder=results_cleaned/twitter
 
 # Reddit
-python pipeline/build_validation_data.py --folder=results_cleaned/reddit
+python postprocessing/build_validation_data.py --folder=results_cleaned/reddit
 ```
 
 **Output:**
@@ -294,9 +294,9 @@ python pipeline/build_validation_data.py --folder=results_cleaned/reddit
 ### Step 6: Run Validation
 
 ```bash
-python pipeline/validate_text.py --input_dir=results_cleaned/bluesky/ --validation=all
-python pipeline/validate_text.py --input_dir=results_cleaned/twitter/ --validation=all
-python pipeline/validate_text.py --input_dir=results_cleaned/reddit/ --validation=all
+python postprocessing/validate_text.py --input_dir=results_cleaned/bluesky/ --validation=all
+python postprocessing/validate_text.py --input_dir=results_cleaned/twitter/ --validation=all
+python postprocessing/validate_text.py --input_dir=results_cleaned/reddit/ --validation=all
 ```
 
 **What `--validation=all` does:**
@@ -316,16 +316,16 @@ Compute linguistic features and train Random Forest:
 
 ```bash
 # Compute and cache features
-python pipeline/features_analysis.py compute_features results_cleaned/
+python postprocessing/features_analysis.py compute_features results_cleaned/
 
 # Train RF on ground truth labels
-python pipeline/features_analysis.py evaluate results_cleaned/ labels
+python postprocessing/features_analysis.py evaluate results_cleaned/ labels
 
 # Optional: Train RF on BERT predictions
-python pipeline/features_analysis.py evaluate results_cleaned/ bert_prediction
+python postprocessing/features_analysis.py evaluate results_cleaned/ bert_prediction
 ```
 
-### Step 8: Generate Analysis Plots
+### Step 8: Generate Plots
 
 ```bash
 python analysis/generate_SOTA_plots.py results_cleaned/
@@ -435,50 +435,46 @@ validation_demdia/
 │   ├── twitter/posts.pkl, personas.pkl
 │   └── reddit/posts.pkl, personas.pkl
 │
-│   — Root: simulation entry points —
-├── run_simulation.py                  # Step 1a: generate AI responses (per batch)
-├── join_complete_batches.py           # Step 1b: merge batches → results_joined/
-├── analyze_pipeline_status.py         # Monitor batch completion and SLURM queue
+│   — preprocessing/: one-time data preparation —
+├── preprocessing/
+│   ├── anonymize_usernames.py          # Replace real usernames with User_XXXX IDs
+│   ├── anonymize_mentions.py           # Anonymize @mentions in post text
+│   └── parse_reddit_data.py            # Parse raw Reddit JSON dumps (gitignored)
 │
-│   — src/: simulation engine and shared utilities —
-├── src/
-│   ├── agent.py                       # User agent (loads posts, generates responses)
-│   ├── model.py                       # LLM wrapper (loading, fine-tuning)
-│   ├── simulate.py                    # Simulation orchestration
-│   ├── feature_utils.py               # Feature extraction functions (20 features)
-│   ├── plotting_utils.py              # Shared plotting utilities
-│   ├── utils.py                       # Validator class (BERT, Empath)
-│   └── config_utils.py, model_utils.py, globals.py
+│   — simulation/: batch setup, generation, joining —
+├── simulation/
+│   ├── prepare_user_batches.py         # Assign users to reproducible batches
+│   ├── run_simulation.py               # Step 1a: generate AI responses (per batch)
+│   ├── join_complete_batches.py        # Step 1b: merge batches → results_joined/
+│   └── src/
+│       ├── agent.py                    # User agent (loads posts, generates responses)
+│       ├── model.py                    # LLM wrapper (loading, fine-tuning)
+│       ├── simulate.py                 # Simulation orchestration
+│       ├── feature_utils.py            # Feature extraction functions (20 features)
+│       ├── plotting_utils.py           # Shared plotting utilities
+│       ├── utils.py                    # Validator class (BERT, Empath)
+│       └── config_utils.py, model_utils.py, globals.py
 │
-│   — pipeline/: postprocessing steps (run from project root) —
-├── pipeline/
-│   ├── response_cleaning.py           # Step 2: strip formatting artifacts
-│   ├── LLM_judge.py                   # Step 3: select best responses (ML + cosine)
-│   ├── optimal_responses_to_csv.py    # Step 4: convert JSON → CSV
-│   ├── build_validation_data.py       # Step 5: build human vs AI datasets
-│   ├── validate_text.py               # Step 6: BERT + Empath validation
-│   └── features_analysis.py           # Step 7: Random Forest feature analysis
+│   — postprocessing/: cleaning, judging, validation —
+├── postprocessing/
+│   ├── response_cleaning.py            # Step 2: strip formatting artifacts
+│   ├── LLM_judge.py                    # Step 3: select best responses (ML + cosine)
+│   ├── optimal_responses_to_csv.py     # Step 4: convert JSON → CSV
+│   ├── build_validation_data.py        # Step 5: build human vs AI datasets
+│   ├── validate_text.py                # Step 6: BERT + Empath validation
+│   └── features_analysis.py            # Step 7: Random Forest feature analysis
 │
 │   — analysis/: final analysis and plots —
 ├── analysis/
-│   ├── generate_SOTA_plots.py         # Main accuracy/comparison figures
-│   ├── generate_config_optimal_plots.py  # Per-config optimality plots
-│   ├── compute_cosine_baselines.py    # Cosine similarity baseline distributions
-│   ├── analyze_feature_differences.py # Feature-level human vs AI differences
-│   ├── analyze_ft_hyperparam.py       # Fine-tuning hyperparameter sweep analysis
-│   ├── compute_baselines.py           # Baseline metrics
-│   ├── compute_cosine_similarities.py # Cosine similarity calculations
-│   └── post_process.py                # Aggregate validation results
+│   ├── generate_SOTA_plots.py          # Main accuracy/comparison figures
+│   ├── generate_config_optimal_plots.py   # Per-config optimality plots
+│   ├── compute_cosine_baselines.py     # Cosine similarity baseline distributions
+│   ├── analyze_feature_differences.py  # Feature-level human vs AI differences
+│   ├── analyze_ft_hyperparam.py        # Fine-tuning hyperparameter sweep analysis
+│   ├── compute_baselines.py            # Baseline metrics
+│   └── compute_cosine_similarities.py  # Cosine similarity calculations
 │
-│   — preprocessing/: one-time data preparation —
-└── preprocessing/
-    ├── anonymize_usernames.py          # Replace real usernames with User_XXXX IDs
-    ├── anonymize_mentions.py           # Anonymize @mentions in post text
-    ├── parse_reddit_data.py            # Parse raw Reddit JSON dumps
-    ├── aggregate_reddit_data.py        # Generate Reddit persona descriptions
-    ├── prepare_user_batches.py         # Assign users to reproducible batches
-    ├── generate_personas_llama.py      # Generate LLaMA-based persona descriptions
-    └── transform_llama_personas_to_second_person.py
+├── analyze_pipeline_status.py          # Monitor batch completion and SLURM queue
 ```
 
 ## Usage Examples
@@ -486,7 +482,7 @@ validation_demdia/
 ### Generate responses for a single configuration
 
 ```bash
-python run_simulation.py \
+python simulation/run_simulation.py \
     --config_file configs/llama_3_1_8b_base.yaml \
     --dataset bluesky \
     --user_batch 0 \
@@ -496,19 +492,19 @@ python run_simulation.py \
 ### Force reprocess all LLM Judge results
 
 ```bash
-python pipeline/LLM_judge.py results --force-reprocess --include-advanced
+python postprocessing/LLM_judge.py results --force-reprocess --include-advanced
 ```
 
 ### Validate with only BERT (skip Empath)
 
 ```bash
-python pipeline/validate_text.py --input_dir=results/results_bluesky/ --validation=bert
+python postprocessing/validate_text.py --input_dir=results/results_bluesky/ --validation=bert
 ```
 
 ### Validate with only Empath (skip BERT)
 
 ```bash
-python pipeline/validate_text.py --input_dir=results/results_bluesky/ --validation=empath
+python postprocessing/validate_text.py --input_dir=results/results_bluesky/ --validation=empath
 ```
 
 ## Output Files
@@ -558,13 +554,6 @@ python pipeline/validate_text.py --input_dir=results/results_bluesky/ --validati
 - `*_from_labels_median_run_agreement.csv`: Agreement statistics
   - BERT-RF agreement, BERT-actual agreement, RF-actual agreement
   - Three-way agreement analysis
-
-### Summary Files
-
-- `summary_metrics.csv`: Aggregated results across all configurations
-  - Model configuration columns (model, finetuning, context, style, OPPU)
-  - Confusion matrix cells (0-0, 1-0, 0-1, 1-1)
-  - Stylistic metrics (avg_words, avg_links, avg_emojis, avg_mentions)
 
 ## Key Research Questions
 
