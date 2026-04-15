@@ -12,25 +12,7 @@ BERT_models/*
 username_mapping_*.json
 
 preprocessing/parse_reddit_data.py
-check_run.py
-copy_data.py
-move_files.py
-test_apertus.py
-copy_basic_files.py
-extract_sample.py
-generate_stats.py
-analyze_extra_patterns.py
-analyze_response_patterns.py
-compare_reproducibility.py
-compare_results.py
-copy_results.py
-inspect_data_and_prompts.py
-generate_model_configs.py
-test_reproducibility.py
-transform_personas_llm.py
-transform_personas.py
-pipeline_ops/
-resubmit/
+developer_only_files/
 
 # Editor swap files
 *.sw[mnop]
