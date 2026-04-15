@@ -175,6 +175,17 @@ This skips any config/platform combination where not all batch files are present
 produces `results_joined/{platform}/{vendor}/{ModelName}__{config_flags}__random_response.json`.
 Use `--dry-run` to preview what would be joined without writing files.
 
+**Fine-tuned model storage:** LoRA adapters can be large. By default they are written to
+`finetuned_models/` in the project root. Set `FINETUNING_DIR` to redirect them elsewhere
+(e.g. a scratch partition):
+
+```bash
+export FINETUNING_DIR=/scratch/$USER/finetuned_models
+```
+
+Alternatively, if `$SCRATCH` is set in your environment, the default automatically
+becomes `$SCRATCH/finetuned_models/`.
+
 **Fine-tuning coordination:** when multiple batches run in parallel, the first job that
 needs a fine-tuned model trains it; the others wait via file lock and load it once
 training finishes. Each batch trains on its own users and saves to a separate directory.
