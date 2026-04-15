@@ -86,7 +86,7 @@ def compute_cosine_similarity(a: str, b: str) -> float:
     embeddings = embedding_model.encode([a, b])
     return float(cosine_similarity([embeddings[0]], [embeddings[1]])[0][0])
 
-from src.feature_utils import (
+from simulation.src.feature_utils import (
     # Basic
     count_words, count_links, count_mentions, extract_emojis,
     count_hashtags, count_punctuation, count_uppercase_letters,
