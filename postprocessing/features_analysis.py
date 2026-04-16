@@ -89,6 +89,7 @@ def build_features_from_responses_cache(validation_df, responses_features_path):
     coverage = merged['word_count'].notna().sum()
     n_missing = len(validation_df) - coverage
     if n_missing > 0:
+        print(f"Warning: {n_missing} validation rows not found in features cache")
 
     rename_map = {
         'link_count': 'links_count',
@@ -384,8 +385,10 @@ def evaluate_all_datasets(folder_path, label_source):
                             os.remove(feature_cache_path)
                             cache_df = None
                         else:
+                            pass  # cache valid, use as-is
                     else:
-                    
+                        pass  # no cache file, will compute features
+
                     # Compute or load features
                     if cache_df is None:
                         features_df = extract_features(df, cache_path=feature_cache_path)
