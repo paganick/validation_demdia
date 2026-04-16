@@ -228,7 +228,7 @@ def main():
                         help="Cleaned results folder (e.g. results_cleaned_20260309_095640). "
                              "Platform subfolders are detected automatically.")
     parser.add_argument("--output-dir", default=None,
-                        help="Where to save output CSVs (default: <results_folder>/../cosine_baselines)")
+                        help="Where to save output CSVs (default: <results_folder>/cosine_baselines)")
     args = parser.parse_args()
 
     base = Path(args.results_folder)
