@@ -1,7 +1,11 @@
 results/*
 results_replica/*
 results_ft_hyperparam/
-configs_llama70B/*
+results_ft_hyperparam_pp/
+results_joined/
+results_cleaned/
+results_PNAS_revision/
+results_PNAS_no_revision/
 logs/*
 data_backup_*/
 
