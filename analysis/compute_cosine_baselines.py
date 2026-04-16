@@ -12,8 +12,14 @@ For each platform and SOTA config (baseline + persona), computes 5 distributions
 All distributions are sampled to the same size (n = number of test entries per platform)
 for fair comparison.
 
+Output: cosine_baselines/cosine_baselines_{platform}.csv and cosine_baselines_all.csv
+        (default location relative to the results folder; override with --output-dir)
+
+This script is a prerequisite for generate_SOTA_plots.py (Figure 9: Cosine Similarity
+Baselines). Run it once after LLM_judge.py completes, before running generate_SOTA_plots.py.
+
 Usage:
-    python compute_cosine_baselines.py results_cleaned_20260309_095640 [--output-dir OUTPUT_DIR]
+    python compute_cosine_baselines.py <results_cleaned_folder> [--output-dir OUTPUT_DIR]
 """
 
 import os
