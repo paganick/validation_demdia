@@ -60,7 +60,6 @@ For each prompt, the system generates multiple candidate responses and selects t
 - Fine-tunes BERT to distinguish human from AI text
 - 5 training runs, median accuracy selected
 - Reports accuracy, F1, confusion matrix
-- Optional SHAP analysis for explainability
 
 **Empath Linguistic Analysis:**
 - Computes 200 psycholinguistic categories per text
@@ -80,10 +79,18 @@ For each prompt, the system generates multiple candidate responses and selects t
 # Create conda environment
 conda env create -f environment.yml
 conda activate validation_demdia
-
-# For SHAP analysis (optional)
-conda activate shap_env
 ```
+
+**PyTorch + CUDA:** the default `torch>=2.10.0` entry in `environment.yml` installs the CPU build.
+For GPU support, install PyTorch separately with the appropriate CUDA index URL after activating the environment:
+
+```bash
+pip install torch>=2.10.0 --index-url https://download.pytorch.org/whl/cu128
+```
+
+Replace `cu128` with your CUDA version (e.g. `cu118`, `cu121`). See [pytorch.org](https://pytorch.org/get-started/locally/) for options.
+
+**Apptainer/Singularity:** the `conda.def` definition file builds a container image (`conda.sif`) that mirrors this environment and is used for cluster runs.
 
 ## Workflow
 
@@ -264,6 +271,13 @@ Use ML and cosine similarity to select most human-like responses:
 
 ```bash
 python postprocessing/LLM_judge.py results_cleaned/ --include-advanced
+```
+
+By default the script downloads `sentence-transformers/all-MiniLM-L6-v2` from HuggingFace.
+On air-gapped clusters, save it locally first and point to it via an environment variable:
+
+```bash
+export SENTENCE_MODEL_PATH=/path/to/all-MiniLM-L6-v2-local
 ```
 
 **Input:**
@@ -534,19 +548,19 @@ python simulation/run_simulation.py \
 ### Force reprocess all LLM Judge results
 
 ```bash
-python postprocessing/LLM_judge.py results --force-reprocess --include-advanced
+python postprocessing/LLM_judge.py results_cleaned/ --force-reprocess --include-advanced
 ```
 
 ### Validate with only BERT (skip Empath)
 
 ```bash
-python postprocessing/validate_text.py --input_dir=results/results_bluesky/ --validation=bert
+python postprocessing/validate_text.py --input_dir=results_cleaned/bluesky/ --validation=bert
 ```
 
 ### Validate with only Empath (skip BERT)
 
 ```bash
-python postprocessing/validate_text.py --input_dir=results/results_bluesky/ --validation=empath
+python postprocessing/validate_text.py --input_dir=results_cleaned/bluesky/ --validation=empath
 ```
 
 ## Output Files
