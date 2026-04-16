@@ -336,12 +336,21 @@ python postprocessing/features_analysis.py evaluate results_cleaned/ labels
 python postprocessing/features_analysis.py evaluate results_cleaned/ bert_prediction
 ```
 
-### Step 8: Generate Plots
+### Step 8: Compute Cosine Similarity Baselines
+
+Required prerequisite for Figure 9 in `generate_SOTA_plots.py`. Computes five cosine
+similarity distributions per platform (human-vs-AI, intra-AI, intra-human, random-human,
+random-AI) and writes them to `cosine_baselines/`.
+
+```bash
+python analysis/compute_cosine_baselines.py results_cleaned/
+```
+
+### Step 9: Generate Plots
 
 ```bash
 python analysis/generate_SOTA_plots.py results_cleaned/
 python analysis/generate_config_optimal_plots.py results_cleaned/
-python analysis/compute_cosine_baselines.py results_cleaned/
 python analysis/analyze_feature_differences.py results_cleaned/
 ```
 

@@ -1108,7 +1108,12 @@ def generate_cosine_baselines(baselines_csv: str = None):
         # Try default location relative to OUTPUT_DIR's parent
         default = os.path.join(os.path.dirname(OUTPUT_DIR), "cosine_baselines", "cosine_baselines_all.csv")
         if not os.path.exists(default):
-            print(f"  Baselines CSV not found at {default}, skipping.")
+            print(
+                f"  WARNING: Baselines CSV not found at {default}.\n"
+                f"  Run compute_cosine_baselines.py first:\n"
+                f"    python analysis/compute_cosine_baselines.py <results_cleaned_folder>\n"
+                f"  Skipping Figure 9."
+            )
             return
         baselines_csv = default
 
