@@ -8,20 +8,20 @@ Confidence bars come from the 3 repeated runs in trainer_results.json.
 Lower accuracy = better (harder for classifier to detect AI-generated text).
 
 Usage:
-    python analyze_ft_hyperparam.py
+    python analyze_ft_hyperparam.py --sweep-dir <postprocessed_sweep_dir> --ref-dir <postprocessed_ref_dir>
+
+    --sweep-dir   Postprocessed results from the ft hyperparameter sweep
+                  (contains twitter/<vendor>/ subfolders with trainer_results.json files)
+    --ref-dir     Postprocessed results from the main reference run
+                  (used for the no-FT baseline and the default-FT comparison)
 """
 
+import argparse
 import json
 import glob
 from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
-
-# ── Configuration ────────────────────────────────────────────────────────────
-
-BASE_DIR = Path(__file__).resolve().parent
-PP_DIR   = BASE_DIR / "results_ft_hyperparam_pp"
-REF_DIR  = BASE_DIR / "results_2026_03_17"
 
 MODELS = {
     "Llama-3.1-8B": {
@@ -71,7 +71,7 @@ def find_trainer_results(directory: Path, slug: str, variant_slug: str) -> Path 
     return Path(matches[0]) if matches else None
 
 
-def collect_results() -> dict:
+def collect_results(pp_dir: Path, ref_dir: Path) -> dict:
     """
     Returns:
         results[model_name][variant] = {"mean": float, "std": float, "runs": list[float]}
@@ -84,12 +84,12 @@ def collect_results() -> dict:
 
         for variant in VARIANTS:
             if variant == "noft":
-                path = REF_DIR / BEST_NOFT_TRAINER[model_name]
+                path = ref_dir / BEST_NOFT_TRAINER[model_name]
             elif variant == "default":
-                search_dir = REF_DIR / "twitter" / vendor
+                search_dir = ref_dir / "twitter" / vendor
                 path = find_trainer_results(search_dir, slug, variant)
             else:
-                search_dir = PP_DIR / "twitter" / vendor
+                search_dir = pp_dir / "twitter" / vendor
                 path = find_trainer_results(search_dir, slug, variant)
             if path is None:
                 print(f"  WARNING: trainer_results not found for {model_name} / {variant}")
@@ -203,7 +203,19 @@ def plot_results(results: dict, out_path: Path):
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    results = collect_results()
+    parser = argparse.ArgumentParser(description="Plot BERT accuracy for ft hyperparameter sweep.")
+    parser.add_argument("--sweep-dir", required=True,
+                        help="Postprocessed results from the ft hyperparameter sweep "
+                             "(contains twitter/<vendor>/ subfolders)")
+    parser.add_argument("--ref-dir", required=True,
+                        help="Postprocessed results from the main reference run "
+                             "(used for no-FT baseline and default-FT comparison)")
+    args = parser.parse_args()
+
+    pp_dir  = Path(args.sweep_dir)
+    ref_dir = Path(args.ref_dir)
+
+    results = collect_results(pp_dir, ref_dir)
     print_table(results)
-    out_path = PP_DIR / "ft_hyperparam_bert_accuracy.png"
+    out_path = pp_dir / "ft_hyperparam_bert_accuracy.png"
     plot_results(results, out_path)

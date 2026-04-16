@@ -1,0 +1,6 @@
+model: swiss-ai/Apertus-8B-2509
+instruction_tuned: false
+persona: true
+n_style_examples: 10
+retrieve_context: false
+finetuned: false

@@ -5,34 +5,20 @@ across selected configurations and models (Twitter, random reply type).
 Label convention (from build_validation_data.py): 0 = AI, 1 = human.
 
 Usage:
-    python analyze_feature_differences.py
+    python analyze_feature_differences.py --sweep-dir <postprocessed_sweep_dir> --ref-dir <postprocessed_ref_dir>
+
+    --sweep-dir   Postprocessed results from the ft hyperparameter sweep
+                  (contains twitter/<vendor>/ subfolders)
+    --ref-dir     Postprocessed results from the main reference run
+                  (used for the no-FT baseline and the default-FT comparison)
 """
 
+import argparse
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from pathlib import Path
-
-# ── Config ───────────────────────────────────────────────────────────────────
-
-BASE_DIR = Path(__file__).resolve().parent
-REF_DIR  = BASE_DIR / "results_2026_03_17" / "twitter"
-PP_DIR   = BASE_DIR / "results_ft_hyperparam_pp" / "twitter"
-
-CONFIGS = [
-    # (model_label, col_label, base_path_stem)
-    ("Llama-3.1-8B",    "No FT\n(best)",     REF_DIR / "meta-llama/Llama-3.1-8B__noft__ctx1__style10___random_validation_data"),
-    ("Llama-3.1-8B",    "FT default",         REF_DIR / "meta-llama/Llama-3.1-8B__ft__ctx1__style10___random_validation_data"),
-    ("Llama-3.1-8B",    "FT low rank",        PP_DIR  / "meta-llama/Llama-3.1-8B__ft__ctx1__style10__ft_lorank___random_validation_data"),
-    ("Llama-3.1-8B",    "FT conserv.",        PP_DIR  / "meta-llama/Llama-3.1-8B__ft__ctx1__style10__ft_conservative___random_validation_data"),
-    ("Llama-3.1-8B",    "FT high reg.",       PP_DIR  / "meta-llama/Llama-3.1-8B__ft__ctx1__style10__ft_highreg___random_validation_data"),
-    ("Mistral-7B-v0.1", "No FT\n(best)",     REF_DIR / "mistralai/Mistral-7B-v0.1__noft__ctx0__style0__no_persona___random_validation_data"),
-    ("Mistral-7B-v0.1", "FT default",         REF_DIR / "mistralai/Mistral-7B-v0.1__ft__ctx1__style10___random_validation_data"),
-    ("Mistral-7B-v0.1", "FT low rank",        PP_DIR  / "mistralai/Mistral-7B-v0.1__ft__ctx1__style10__ft_lorank___random_validation_data"),
-    ("Mistral-7B-v0.1", "FT conserv.",        PP_DIR  / "mistralai/Mistral-7B-v0.1__ft__ctx1__style10__ft_conservative___random_validation_data"),
-    ("Mistral-7B-v0.1", "FT high reg.",       PP_DIR  / "mistralai/Mistral-7B-v0.1__ft__ctx1__style10__ft_highreg___random_validation_data"),
-]
 
 # Features to show (ordered by overall mean importance)
 FEATURES = [
@@ -89,7 +75,7 @@ def print_table(matrix: pd.DataFrame):
 
 # ── Plotting ─────────────────────────────────────────────────────────────────
 
-def plot_diffs(matrix: pd.DataFrame, out_path: Path):
+def plot_diffs(matrix: pd.DataFrame, out_path: Path, configs: list):
     """
     Heatmap: rows = features, columns = configs.
     Color encodes AI − human difference, normalized per feature (so all features
@@ -130,7 +116,7 @@ def plot_diffs(matrix: pd.DataFrame, out_path: Path):
                     fontsize=7, color=color)
 
     # Separator between Llama and Mistral groups
-    n_llama = sum(1 for m, _, __ in CONFIGS if m == "Llama-3.1-8B")
+    n_llama = sum(1 for m, _, __ in configs if m == "Llama-3.1-8B")
     ax.axvline(n_llama - 0.5, color="black", linewidth=2, zorder=5)
 
     # Separator between noft and ft within each group
@@ -179,10 +165,10 @@ def load_raw(base: Path) -> dict | None:
     }
 
 
-def plot_raw_values(out_path: Path, top_n: int = 8):
+def plot_raw_values(out_path: Path, configs: list, top_n: int = 8):
     # Load all configs
     data = {}   # (model, col_label) -> {"human": Series, "ai": Series}
-    for model, col_label, base in CONFIGS:
+    for model, col_label, base in configs:
         raw = load_raw(base)
         if raw is not None:
             data[(model, col_label)] = raw
@@ -204,7 +190,7 @@ def plot_raw_values(out_path: Path, top_n: int = 8):
 
     for col_idx, model in enumerate(models):
         configs_for_model = [(col_label, base)
-                             for m, col_label, base in CONFIGS if m == model]
+                             for m, col_label, base in configs if m == model]
 
         for row_idx, (feat_key, feat_label) in enumerate(features):
             ax = axes[row_idx, col_idx]
@@ -261,9 +247,34 @@ def plot_raw_values(out_path: Path, top_n: int = 8):
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    col_tuples, series_list = [], []
+    parser = argparse.ArgumentParser(description="Plot feature differences for ft hyperparameter sweep.")
+    parser.add_argument("--sweep-dir", required=True,
+                        help="Postprocessed results from the ft hyperparameter sweep "
+                             "(contains twitter/<vendor>/ subfolders)")
+    parser.add_argument("--ref-dir", required=True,
+                        help="Postprocessed results from the main reference run "
+                             "(used for no-FT baseline and default-FT comparison)")
+    args = parser.parse_args()
 
-    for model, col_label, base in CONFIGS:
+    pp_dir  = Path(args.sweep_dir)
+    ref_dir = Path(args.ref_dir)
+
+    configs = [
+        # (model_label, col_label, base_path_stem)
+        ("Llama-3.1-8B",    "No FT\n(best)",  ref_dir / "twitter/meta-llama/Llama-3.1-8B__noft__ctx1__style10___random_validation_data"),
+        ("Llama-3.1-8B",    "FT default",      ref_dir / "twitter/meta-llama/Llama-3.1-8B__ft__ctx1__style10___random_validation_data"),
+        ("Llama-3.1-8B",    "FT low rank",     pp_dir  / "twitter/meta-llama/Llama-3.1-8B__ft__ctx1__style10__ft_lorank___random_validation_data"),
+        ("Llama-3.1-8B",    "FT conserv.",     pp_dir  / "twitter/meta-llama/Llama-3.1-8B__ft__ctx1__style10__ft_conservative___random_validation_data"),
+        ("Llama-3.1-8B",    "FT high reg.",    pp_dir  / "twitter/meta-llama/Llama-3.1-8B__ft__ctx1__style10__ft_highreg___random_validation_data"),
+        ("Mistral-7B-v0.1", "No FT\n(best)",  ref_dir / "twitter/mistralai/Mistral-7B-v0.1__noft__ctx0__style0__no_persona___random_validation_data"),
+        ("Mistral-7B-v0.1", "FT default",      ref_dir / "twitter/mistralai/Mistral-7B-v0.1__ft__ctx1__style10___random_validation_data"),
+        ("Mistral-7B-v0.1", "FT low rank",     pp_dir  / "twitter/mistralai/Mistral-7B-v0.1__ft__ctx1__style10__ft_lorank___random_validation_data"),
+        ("Mistral-7B-v0.1", "FT conserv.",     pp_dir  / "twitter/mistralai/Mistral-7B-v0.1__ft__ctx1__style10__ft_conservative___random_validation_data"),
+        ("Mistral-7B-v0.1", "FT high reg.",    pp_dir  / "twitter/mistralai/Mistral-7B-v0.1__ft__ctx1__style10__ft_highreg___random_validation_data"),
+    ]
+
+    col_tuples, series_list = [], []
+    for model, col_label, base in configs:
         diff = load_diff(base)
         if diff is not None:
             col_tuples.append((model, col_label))
@@ -282,8 +293,5 @@ if __name__ == "__main__":
 
     print_table(matrix_flat)
 
-    out_path = BASE_DIR / "results_ft_hyperparam_pp" / "ft_hyperparam_feature_diffs.png"
-    plot_diffs(matrix_flat, out_path)
-
-    out_path2 = BASE_DIR / "results_ft_hyperparam_pp" / "ft_hyperparam_feature_raw.png"
-    plot_raw_values(out_path2)
+    plot_diffs(matrix_flat, pp_dir / "ft_hyperparam_feature_diffs.png", configs)
+    plot_raw_values(pp_dir / "ft_hyperparam_feature_raw.png", configs)

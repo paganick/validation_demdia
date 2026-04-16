@@ -1,26 +1,25 @@
 """
 Analyze random forest feature importances for fine-tuned model detectability.
 
-Loads feature_importance_stats.csv files for both the default ft config
-(from results_2026_03_17) and the hyperparameter variants (from results_ft_hyperparam_pp),
-random reply type only. Plots mean importance per feature per model, with individual
-variant values overlaid as dots to show consistency across hyperparameter choices.
+Loads feature_importance_stats.csv files for both the default ft config and
+the hyperparameter sweep variants, random reply type only. Plots mean importance
+per feature per model, with individual variant values overlaid as dots to show
+consistency across hyperparameter choices.
 
 Usage:
-    python analyze_ft_hyperparam_features.py
+    python analyze_ft_hyperparam_features.py --sweep-dir <postprocessed_sweep_dir> --ref-dir <postprocessed_ref_dir>
+
+    --sweep-dir   Postprocessed results from the ft hyperparameter sweep
+    --ref-dir     Postprocessed results from the main reference run
+                  (used for the no-FT baseline and the default-FT comparison)
 """
 
+import argparse
 import glob
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
-
-# ── Config ───────────────────────────────────────────────────────────────────
-
-BASE_DIR = Path(__file__).resolve().parent
-PP_DIR   = BASE_DIR / "results_ft_hyperparam_pp"
-REF_DIR  = BASE_DIR / "results_2026_03_17"
 
 META_COLS = {"model", "ft", "context", "style", "persona",
              "label_source", "source_type", "auc"}
@@ -73,7 +72,7 @@ def load_series(path: Path) -> pd.Series | None:
     return pd.Series({k: row[k] for k in df.columns if k not in META_COLS})
 
 
-def load_all() -> dict:
+def load_all(pp_dir: Path, ref_dir: Path) -> dict:
     """
     Returns:
         data[model_name][variant] = Series of feature importances
@@ -83,20 +82,20 @@ def load_all() -> dict:
 
     for model_name, (vendor, slug) in MODELS.items():
         # Best noft config
-        noft_path = REF_DIR / "twitter" / vendor / BEST_NOFT[model_name]
+        noft_path = ref_dir / "twitter" / vendor / BEST_NOFT[model_name]
         s = load_series(noft_path)
         if s is not None:
             data[model_name]["noft"] = s
 
         # Default ft config
-        ft_path = REF_DIR / "twitter" / vendor / \
+        ft_path = ref_dir / "twitter" / vendor / \
                   f"{slug}__ft__ctx1__style10___random_validation_data_labelled_from_labels_feature_importance_stats.csv"
         s = load_series(ft_path)
         if s is not None:
             data[model_name]["default"] = s
 
         # Hyperparameter variants
-        pattern = str(PP_DIR / "twitter" / vendor /
+        pattern = str(pp_dir / "twitter" / vendor /
                       f"{slug}__ft__ctx1__style10__ft_*___random_validation_data_labelled_from_labels_feature_importance_stats.csv")
         for f in sorted(glob.glob(pattern)):
             variant = Path(f).name.split("__ft__ctx1__style10__")[1].split("___")[0]
@@ -209,7 +208,19 @@ def plot_feature_importance(data: dict, out_path: Path, top_n: int = 12):
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    data = load_all()
+    parser = argparse.ArgumentParser(description="Plot RF feature importances for ft hyperparameter sweep.")
+    parser.add_argument("--sweep-dir", required=True,
+                        help="Postprocessed results from the ft hyperparameter sweep "
+                             "(contains twitter/<vendor>/ subfolders)")
+    parser.add_argument("--ref-dir", required=True,
+                        help="Postprocessed results from the main reference run "
+                             "(used for no-FT baseline and default-FT comparison)")
+    args = parser.parse_args()
+
+    pp_dir  = Path(args.sweep_dir)
+    ref_dir = Path(args.ref_dir)
+
+    data = load_all(pp_dir, ref_dir)
     print_table(data)
-    out_path = PP_DIR / "ft_hyperparam_feature_importance.png"
+    out_path = pp_dir / "ft_hyperparam_feature_importance.png"
     plot_feature_importance(data, out_path)

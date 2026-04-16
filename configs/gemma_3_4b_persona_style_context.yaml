@@ -1,0 +1,6 @@
+model: google/gemma-3-4b-it
+instruction_tuned: true
+persona: true
+n_style_examples: 10
+retrieve_context: true
+finetuned: false
