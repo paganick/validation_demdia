@@ -351,10 +351,31 @@ python analysis/compute_cosine_baselines.py results_cleaned/
 ```bash
 python analysis/generate_SOTA_plots.py results_cleaned/
 python analysis/generate_config_optimal_plots.py results_cleaned/
-python analysis/analyze_feature_differences.py results_cleaned/
 ```
 
 Creates publication-ready figures for research papers.
+
+### Fine-tuning Hyperparameter Ablation (reviewer response)
+
+A self-contained ablation study comparing LoRA hyperparameter variants for Llama-3.1-8B
+and Mistral-7B-v0.1 on Twitter. Configs for the sweep are in `configs/ft_hyperparam/`.
+
+**To run from scratch:**
+
+1. Run simulations (Steps 1–2 of the main pipeline) using the configs in `configs/ft_hyperparam/`.
+2. Run postprocessing (Steps 3–7) on the sweep results to produce a postprocessed sweep folder.
+3. Run the analysis scripts, pointing them at the sweep results and the main reference results:
+
+```bash
+SWEEP_PP=<postprocessed_sweep_dir>   # output of step 2 above
+REF_PP=<postprocessed_ref_dir>       # main pipeline postprocessed results
+
+python analysis/ft_hyperparam/analyze_ft_hyperparam.py    --sweep-dir $SWEEP_PP --ref-dir $REF_PP
+python analysis/ft_hyperparam/analyze_ft_hyperparam_features.py --sweep-dir $SWEEP_PP --ref-dir $REF_PP
+python analysis/ft_hyperparam/analyze_feature_differences.py    --sweep-dir $SWEEP_PP --ref-dir $REF_PP
+```
+
+Plots are written to `<sweep_dir>/`.
 
 ## Personalization Methods
 
@@ -450,6 +471,7 @@ Trains Random Forest on 20 engineered features to classify text.
 ```
 validation_demdia/
 ├── configs/                           # Model configuration YAMLs (one per model/config)
+│   └── ft_hyperparam/                 # Sweep configs for ft hyperparameter ablation
 ├── data/                              # Input datasets (anonymized)
 │   ├── bluesky/posts.pkl, personas.pkl
 │   ├── twitter/posts.pkl, personas.pkl
@@ -488,11 +510,11 @@ validation_demdia/
 ├── analysis/
 │   ├── generate_SOTA_plots.py          # Main accuracy/comparison figures
 │   ├── generate_config_optimal_plots.py   # Per-config optimality plots
-│   ├── compute_cosine_baselines.py     # Cosine similarity baseline distributions
-│   ├── analyze_feature_differences.py  # Feature-level human vs AI differences
-│   ├── analyze_ft_hyperparam.py        # Fine-tuning hyperparameter sweep analysis
-│   ├── compute_baselines.py            # Baseline metrics
-│   └── compute_cosine_similarities.py  # Cosine similarity calculations
+│   ├── compute_cosine_baselines.py     # Step 8: cosine similarity baseline distributions
+│   └── ft_hyperparam/                  # Fine-tuning hyperparameter ablation study
+│       ├── analyze_ft_hyperparam.py        # BERT accuracy across sweep variants
+│       ├── analyze_ft_hyperparam_features.py  # RF feature importances across variants
+│       └── analyze_feature_differences.py  # Feature-level AI vs human differences
 │
 ├── analyze_pipeline_status.py          # Monitor batch completion and SLURM queue
 ```

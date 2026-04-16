@@ -1,0 +1,6 @@
+model: mistralai/Mistral-7B-v0.1
+instruction_tuned: false
+persona: true
+n_style_examples: 10
+retrieve_context: true
+finetuned: false

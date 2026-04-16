@@ -1,7 +1,6 @@
 results/*
 results_replica/*
 results_ft_hyperparam/
-configs/*
 configs_llama70B/*
 logs/*
 data_backup_*/

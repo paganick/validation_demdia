@@ -1,0 +1,11 @@
+model: meta-llama/Llama-3.1-8B
+instruction_tuned: false
+persona: true
+n_style_examples: 10
+retrieve_context: true
+finetuned: true
+ft_variant: ft_conservative
+lora_r: 8
+lora_alpha: 16
+lora_dropout: 0.15
+ft_learning_rate: 0.00005
