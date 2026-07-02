@@ -346,7 +346,10 @@ def _run_simulation_with_lock(config, dataset, posts_file, personas_file, n_user
                     instruction_tuned=config["instruction_tuned"],
                     conversation_history=[reply_to],
                     n_candidates=20,
-                    seed=sample_seed
+                    seed=sample_seed,
+                    temperature=config.get("temperature", 0.8),
+                    top_p=config.get("top_p", 0.9),
+                    top_k=config.get("top_k", 50),
                 )
                 print(f"📝 [DEBUG] Generated {len(responses) if responses else 0} valid responses, {len(rejected)} rejected")
                 # Clear CUDA cache after generation

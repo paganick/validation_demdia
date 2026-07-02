@@ -98,6 +98,9 @@ def main():
         config.setdefault("n_style_examples", 0)
         config.setdefault("retrieve_context", False)
         config.setdefault("finetuned", False)
+        config.setdefault("temperature", 0.8)
+        config.setdefault("top_p", 0.9)
+        config.setdefault("top_k", 50)
 
         # Generate output filename
         filename_parts = [
@@ -112,6 +115,8 @@ def main():
 
         if config.get("ft_variant"):
             output_filename += f"__{config['ft_variant']}"
+        if config.get("decoding_variant"):
+            output_filename += f"__{config['decoding_variant']}"
 
         # Add batch suffix if batch processing
         if args.user_batch is not None:

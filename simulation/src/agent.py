@@ -133,7 +133,10 @@ class Agent:
         conversation_history: list = [],
         n_candidates: int = 20,
         max_total_attempts: int = 5,
-        seed: int = None
+        seed: int = None,
+        temperature: float = 0.8,
+        top_p: float = 0.9,
+        top_k: int = 50,
     ):
         """Generate up to `n_candidates` valid responses, retrying if needed.
 
@@ -349,13 +352,14 @@ class Agent:
                 "max_new_tokens": 300,
                 "do_sample": True,
                 "num_return_sequences": remaining_needed,
-                "temperature": 0.8,
-                "top_p": 0.9,
-                "top_k": 50,
+                "temperature": temperature,
+                "top_p": top_p,
                 "min_new_tokens": 1,
                 "repetition_penalty": 1.0,
                 "pad_token_id": tokenizer.pad_token_id,
             }
+            if top_k > 0:
+                generate_kwargs["top_k"] = top_k
 
             print(f"🔬 [DEBUG] Calling model.generate(): num_return_sequences={remaining_needed}, max_new_tokens=300", flush=True)
             outputs = model.generate(
