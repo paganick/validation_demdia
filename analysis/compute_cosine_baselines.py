@@ -70,7 +70,7 @@ def sample_pairs(idx_a, idx_b, n, rng):
     return pairs
 
 
-def compute_platform_baselines(platform_folder, posts_pkl, model, rng):
+def compute_platform_baselines(platform_folder, posts_pkl, model, rng, config_filter=None):
     """
     Return a DataFrame with columns [platform, distribution, similarity]
     for the five baseline distributions.
@@ -79,13 +79,16 @@ def compute_platform_baselines(platform_folder, posts_pkl, model, rng):
     print(f"\n  Platform: {platform}")
 
     # ------------------------------------------------------------------ #
-    # 1. Load all SOTA-config optimal_response.json entries               #
+    # 1. Load all matching-config optimal_response.json entries            #
     # ------------------------------------------------------------------ #
     opt_files = glob.glob(
         str(Path(platform_folder) / "**" / "*_optimal_response.json"), recursive=True
     )
-    opt_files = [f for f in opt_files if is_sota_config(f)]
-    print(f"  SOTA optimal_response files: {len(opt_files)}")
+    if config_filter:
+        opt_files = [f for f in opt_files if config_filter in os.path.basename(f)]
+    else:
+        opt_files = [f for f in opt_files if is_sota_config(f)]
+    print(f"  Matching optimal_response files: {len(opt_files)}")
 
     entries = []
     for fpath in opt_files:
@@ -229,6 +232,8 @@ def main():
                              "Platform subfolders are detected automatically.")
     parser.add_argument("--output-dir", default=None,
                         help="Where to save output CSVs (default: <results_folder>/cosine_baselines)")
+    parser.add_argument("--config-filter", default=None,
+                        help="Substring to match in result filenames (default: SOTA config noft/ctx0/style0)")
     args = parser.parse_args()
 
     base = Path(args.results_folder)
@@ -255,7 +260,9 @@ def main():
             print(f"  posts.pkl not found for {platform}, skipping.")
             continue
 
-        df = compute_platform_baselines(str(platform_path), str(posts_pkl), model, rng)
+        df = compute_platform_baselines(
+            str(platform_path), str(posts_pkl), model, rng, args.config_filter
+        )
         if df is not None:
             out_path = output_dir / f"cosine_baselines_{platform}.csv"
             df.to_csv(out_path, index=False)

@@ -71,30 +71,75 @@ Compare the resulting BERT accuracy against the baseline Bluesky result for
 
 ## Experiment B — Same-context similarity: AI-AI vs Human-Human (Concern 1)
 
-Separate standalone analysis. No new simulation needed.
+Separate standalone analysis. No new simulation needed, but requires the
+`LLM_judge.py` postprocessing step to have already run (needs `*_optimal_response.json`,
+not just the raw `*_random_response.json` from `response_cleaning.py`) — the
+`all_valid_responses` field it writes is what makes the intra-AI distribution
+possible.
 
 **Inputs:**
 - `data/{platform}/posts.pkl` — already in repo
-- `results_cleaned/` — simulation results (upload required)
+- `results_cleaned/` (or e.g. `results_PNAS_revision/`) — must contain
+  `*_optimal_response.json` files (i.e. `LLM_judge.py` has already run)
 
-**What it measures:**
+**What it measures**, per platform:
 - `human_human_same_ctx` — cosine similarity between two *different* users' human
   responses to the *same* source post (calibration baseline)
 - `ai_ai_same_ctx` — cosine similarity between two *different* users' AI-generated
-  responses to the *same* source post
+  responses to the *same* source post, from the *same* model
+- `ai_intra_same_user_ctx` — cosine similarity between two *different* candidate
+  responses generated for the *same* (model, user, context) — drawn from
+  `all_valid_responses` — i.e. generation-level noise for one fixed input
+
+`ai_ai_same_ctx` and `ai_intra_same_user_ctx` are always computed *within a single
+model*: all SOTA-config models are evaluated on the same (context, user) pairs, so
+naively deduping by (context, user) alone — ignoring which model produced the
+response — lets whichever model `glob()` happens to return first silently claim
+every pair, leaving zero data for the other 8 models. Keying by `(model, context,
+user)` avoids this and lets every SOTA model contribute its own same-model pairs.
 
 **Script:** `analysis/compute_same_context_similarity.py`
 
 ```bash
-python analysis/compute_same_context_similarity.py results_cleaned/
+python analysis/compute_same_context_similarity.py results_PNAS_revision/
 ```
 
 Output: `same_context_similarity/same_ctx_sims_{platform}.csv` and `same_ctx_sims_all.csv`
+(default location: `same_context_similarity/` next to the results folder passed in).
+Rows have a `model` column (`None` for `human_human_same_ctx`, which is pooled
+across all models since human data has no model dimension).
 
-**Available data (test split, contexts with ≥2 users):**
-- Reddit: 7,932 contexts — excellent
-- Twitter: 313 contexts — feasible
-- Bluesky: 1 context — excluded automatically
+**Observed data (test split, SOTA config, after the same-model fix):**
+- Reddit: 1,371 shared contexts (human) → 12,278 (model, context) AI pairs across 9 models
+- Twitter: 313 shared contexts (human) → 152 (model, context) AI pairs across 9 models
+- Bluesky: excluded automatically (only 1 human context has ≥2 users)
 
-By default the SOTA config (noft, ctx0, style0, with persona) is used.
-To use a different config: `--config-filter <substring>`.
+By default the SOTA config (noft, ctx0, style0, with persona) is used, pooled
+across all base models. To use a different config: `--config-filter <substring>`.
+
+### Plotting
+
+**Script:** `analysis/plot_same_context_similarity.py` — boxplots in the same visual
+style as `generate_SOTA_plots.py`'s `SOTA_cosine_baselines.png` (per-platform panels,
+seaborn-style palette, legend below). Bluesky is always excluded.
+
+```bash
+# 3 columns: human_human_same_ctx, ai_ai_same_ctx, ai_intra_same_user_ctx
+python analysis/plot_same_context_similarity.py same_context_similarity/same_ctx_sims_all.csv
+
+# 7 columns: also pulls in random_human, intra_human, human_vs_ai, random_ai from
+# compute_cosine_baselines.py's output, for full context (unrelated-pair floor,
+# same-user-different-context baseline, and the paper's main human-vs-AI metric)
+python analysis/plot_same_context_similarity.py same_context_similarity/same_ctx_sims_all.csv \
+    --baselines-csv results_PNAS_revision/cosine_baselines/cosine_baselines_all.csv
+```
+
+Output: `same_context_similarity/same_ctx_sims_boxplot.png` and `same_ctx_sims_stats.csv`.
+
+Columns are grouped left to right by comparison type (Random pairs / Human–Human /
+Human–AI / AI–AI); each group's members and order are controlled by the
+`GROUPS_BASE` / `GROUPS_WITH_BASELINES` lists near the top of the script — reorder
+those to reorder the plot. Note `SOTA_cosine_baselines.png`'s `intra_ai` column
+(same prompt, pooled across models without the same-model fix) has no equivalent
+here — the closest analogue is `ai_intra_same_user_ctx`, but it is a different,
+corrected computation, not the same values.
