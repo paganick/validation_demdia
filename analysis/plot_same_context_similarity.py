@@ -100,6 +100,13 @@ def main():
 
     df = df[df["platform"] != "bluesky"]
 
+    # Drop any distribution with no rows at all (e.g. random_human/random_ai when
+    # compute_cosine_baselines.py was run with --skip-random) instead of drawing an
+    # empty box; drop groups that end up with no members left.
+    present = set(df["distribution"].unique())
+    groups = [(gname, [d for d in dists if d in present]) for gname, dists in groups]
+    groups = [(gname, dists) for gname, dists in groups if dists]
+
     dist_order = [d for _, dists in groups for d in dists]
 
     output_dir = Path(args.output_dir) if args.output_dir else Path(args.input_csv).parent

@@ -10,7 +10,11 @@ For each platform and SOTA config (baseline + persona), computes 5 distributions
   5. random_ai       — cosine between RANDOM pairs of AI responses (cross-context)
 
 All distributions are sampled to the same size (n = number of test entries per platform)
-for fair comparison.
+for fair comparison. Pass --skip-random to drop distributions 4-5 (random_human,
+random_ai) — this also avoids encoding the full training-message pool (only needed
+for random_human), which is the main cost driver for configs with high candidate
+diversity (e.g. retrieval/style-conditioned or fine-tuned models can 10x+ the unique
+text count vs the SOTA config, since fewer candidates collapse to duplicates).
 
 Output: cosine_baselines/cosine_baselines_{platform}.csv and cosine_baselines_all.csv
         (default location relative to the results folder; override with --output-dir)
@@ -70,7 +74,7 @@ def sample_pairs(idx_a, idx_b, n, rng):
     return pairs
 
 
-def compute_platform_baselines(platform_folder, posts_pkl, model, rng, config_filter=None):
+def compute_platform_baselines(platform_folder, posts_pkl, model, rng, config_filter=None, skip_random=False):
     """
     Return a DataFrame with columns [platform, distribution, similarity]
     for the five baseline distributions.
@@ -137,9 +141,16 @@ def compute_platform_baselines(platform_folder, posts_pkl, model, rng, config_fi
     # ------------------------------------------------------------------ #
     # Unique texts to encode (deduplicate for efficiency)
     flat_candidates = [c for cands in candidates for c in cands]
-    all_human_pool  = list(posts_df[posts_df["training"] == 1]["message"].dropna().astype(str))
 
-    unique_texts = list(set(human_texts + ai_texts + flat_candidates + all_human_pool))
+    if skip_random:
+        # random_human is the only consumer of the full training-message pool (every
+        # user, not just those with ≥2 messages) — skip it entirely when not needed.
+        all_human_pool = None
+        multi_msg_texts = [m for msgs in multi_msg_users.values() for m in msgs]
+        unique_texts = list(set(human_texts + ai_texts + flat_candidates + multi_msg_texts))
+    else:
+        all_human_pool = list(posts_df[posts_df["training"] == 1]["message"].dropna().astype(str))
+        unique_texts = list(set(human_texts + ai_texts + flat_candidates + all_human_pool))
     print(f"  Encoding {len(unique_texts)} unique texts...")
     all_embs = batch_encode(model, unique_texts)
     text2idx = {t: i for i, t in enumerate(unique_texts)}
@@ -184,42 +195,42 @@ def compute_platform_baselines(platform_folder, posts_pkl, model, rng, config_fi
     intra_human_sims = intra_human_sims[:n]
 
     # ------------------------------------------------------------------ #
-    # 7. Distribution 4: random_human (cross-user random pairs)           #
+    # 7-8. Distributions 4-5: random_human / random_ai (skippable)        #
     # ------------------------------------------------------------------ #
-    pool_human_texts = [t for t in all_human_pool if t in text2idx]
-    random_human_sims = []
-    for _ in range(n):
-        t1, t2 = rng.sample(pool_human_texts, 2)
-        random_human_sims.append(float(emb(t1) @ emb(t2)))
+    labels = {
+        "human_vs_ai":    hva_sims,
+        "intra_ai":       intra_ai_sims,
+        "intra_human":    intra_human_sims,
+    }
 
-    # ------------------------------------------------------------------ #
-    # 8. Distribution 5: random_ai (cross-context random pairs)           #
-    # ------------------------------------------------------------------ #
-    pool_ai_texts = [t for t in ai_texts if t in text2idx]
-    random_ai_sims = []
-    for _ in range(n):
-        t1, t2 = rng.sample(pool_ai_texts, 2)
-        random_ai_sims.append(float(emb(t1) @ emb(t2)))
+    if not skip_random:
+        pool_human_texts = [t for t in all_human_pool if t in text2idx]
+        random_human_sims = []
+        for _ in range(n):
+            t1, t2 = rng.sample(pool_human_texts, 2)
+            random_human_sims.append(float(emb(t1) @ emb(t2)))
+        labels["random_human"] = random_human_sims
+
+        pool_ai_texts = [t for t in ai_texts if t in text2idx]
+        random_ai_sims = []
+        for _ in range(n):
+            t1, t2 = rng.sample(pool_ai_texts, 2)
+            random_ai_sims.append(float(emb(t1) @ emb(t2)))
+        labels["random_ai"] = random_ai_sims
 
     # ------------------------------------------------------------------ #
     # 9. Assemble DataFrame                                                #
     # ------------------------------------------------------------------ #
-    min_n = min(len(hva_sims), len(intra_ai_sims), len(intra_human_sims),
-                len(random_human_sims), len(random_ai_sims))
-    print(f"  Final sample sizes: hva={len(hva_sims)}, intra_ai={len(intra_ai_sims)}, "
-          f"intra_human={len(intra_human_sims)}, rand_human={len(random_human_sims)}, "
-          f"rand_ai={len(random_ai_sims)}  → using {min_n}")
+    min_n = min(len(sims) for sims in labels.values())
+    print(
+        "  Final sample sizes: " +
+        ", ".join(f"{name}={len(sims)}" for name, sims in labels.items()) +
+        f"  → using {min_n}"
+    )
 
     rows = []
-    labels = {
-        "human_vs_ai":    hva_sims[:min_n],
-        "intra_ai":       intra_ai_sims[:min_n],
-        "intra_human":    intra_human_sims[:min_n],
-        "random_human":   random_human_sims[:min_n],
-        "random_ai":      random_ai_sims[:min_n],
-    }
     for dist_name, sims in labels.items():
-        for s in sims:
+        for s in sims[:min_n]:
             rows.append({"platform": platform, "distribution": dist_name, "similarity": s})
 
     return pd.DataFrame(rows)
@@ -234,6 +245,9 @@ def main():
                         help="Where to save output CSVs (default: <results_folder>/cosine_baselines)")
     parser.add_argument("--config-filter", default=None,
                         help="Substring to match in result filenames (default: SOTA config noft/ctx0/style0)")
+    parser.add_argument("--skip-random", action="store_true",
+                        help="Skip random_human/random_ai (and avoid encoding the full training-message "
+                             "pool they require) — much faster for configs with diverse candidates")
     args = parser.parse_args()
 
     base = Path(args.results_folder)
@@ -261,7 +275,7 @@ def main():
             continue
 
         df = compute_platform_baselines(
-            str(platform_path), str(posts_pkl), model, rng, args.config_filter
+            str(platform_path), str(posts_pkl), model, rng, args.config_filter, args.skip_random
         )
         if df is not None:
             out_path = output_dir / f"cosine_baselines_{platform}.csv"
