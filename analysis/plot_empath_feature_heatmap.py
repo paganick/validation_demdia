@@ -3,9 +3,9 @@
 Alternative to the stacked-bar Empath feature frequency plot: a features x models
 binary heatmap, one panel per platform.
 
-The underlying data (empath_stats.csv, produced by generate_SOTA_plots.py's
-generate_aggregated_feature_frequency() or generate_config_optimal_plots.py's
-plot_empath_feature_frequency()) is a presence/absence matrix -- for each
+The underlying data (empath_stats.csv, produced by generate_SOTA_main_figures.py's
+prepare_empath_feature_stats() or generate_config_main_figures.py's
+prepare_config_empath_feature_stats()) is a presence/absence matrix -- for each
 (model, platform), a feature was or was not statistically significant for that
 model's one best/reference configuration. The stacked bar dressed this up as a
 "share of models" percentage, which becomes hard to read once every model is a
@@ -16,8 +16,8 @@ position instead of via reading segment order in a bar, and needs no
 per-model color at all: a single fill vs. empty is enough.
 
 Usage:
-    python analysis/plot_empath_feature_heatmap.py results_PNAS_revision/SOTA_figures/SOTA_empath_stats.csv --top-n 20
-    python analysis/plot_empath_feature_heatmap.py results_PNAS_revision/configuration_optimization_figures/config_empath_stats_random.csv --top-n 20
+    python analysis/plot_empath_feature_heatmap.py results_PNAS_revision/figures/main_figures/SOTA_empath_stats.csv --top-n 20
+    python analysis/plot_empath_feature_heatmap.py results_PNAS_revision/figures/main_figures/config_empath_stats_random.csv --top-n 20
 """
 
 import sys

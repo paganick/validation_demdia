@@ -44,3 +44,6 @@ __pycache__/
 *.slurm
 # Backup files (non-anonymized)
 data/*/posts_backup_nonanon.pkl
+
+# Reviewer-response working notes (not for the tracked repo)
+REVIEWER_EXPERIMENTS.md

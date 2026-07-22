@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Plot same-context cosine similarity distributions (reviewer calibration analysis),
-in the same boxplot style as generate_SOTA_plots.py's Figure 9 (SOTA_cosine_baselines).
+Plot same-context cosine similarity distributions (reviewer calibration analysis):
+one boxplot per platform, colored by distribution, legend below the panels.
 
 Reads same_ctx_sims_all.csv produced by compute_same_context_similarity.py and draws
 one boxplot per platform showing:

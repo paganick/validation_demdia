@@ -352,9 +352,9 @@ python postprocessing/features_analysis.py evaluate results_cleaned/ bert_predic
 
 ### Step 8: Compute Cosine Similarity Baselines
 
-Required prerequisite for Figure 9 in `generate_SOTA_plots.py`. Computes five cosine
-similarity distributions per platform (human-vs-AI, intra-AI, intra-human, random-human,
-random-AI) and writes them to `cosine_baselines/`.
+Required prerequisite for `plot_same_context_similarity.py` and `plot_config_comparison.py`.
+Computes five cosine similarity distributions per platform (human-vs-AI, intra-AI,
+intra-human, random-human, random-AI) and writes them to `cosine_baselines/`.
 
 ```bash
 python analysis/compute_cosine_baselines.py results_cleaned/
@@ -363,8 +363,10 @@ python analysis/compute_cosine_baselines.py results_cleaned/
 ### Step 9: Generate Plots
 
 ```bash
-python analysis/generate_SOTA_plots.py results_cleaned/
-python analysis/generate_config_optimal_plots.py results_cleaned/
+python analysis/generate_SOTA_main_figures.py results_cleaned/
+python analysis/generate_SOTA_SI_figures.py results_cleaned/
+python analysis/generate_config_main_figures.py results_cleaned/
+python analysis/generate_config_SI_figures.py results_cleaned/
 ```
 
 Creates publication-ready figures for research papers.
@@ -390,6 +392,44 @@ python analysis/ft_hyperparam/analyze_feature_differences.py    --sweep-dir $SWE
 ```
 
 Plots are written to `<sweep_dir>/`.
+
+### Decoding Hyperparameter Ablation (reviewer response)
+
+Tests whether looser sampling (higher temperature/top_p, disabled or relaxed
+top_k) changes BERT detectability and human-vs-AI cosine similarity, relative
+to the default decoding hyperparameters (T=0.8, top_p=0.9, top_k=50). Platform:
+Bluesky (single batch, self-contained). The default-decoding numbers are read
+from the existing reference-configuration run; only the looser/medium variants
+need to be generated.
+
+| Config | Model | Decoding variant | Temperature | top_p | top_k | Config file |
+|---|---|---|---|---|---|---|
+| Default (reference) | Llama-3.1-8B | — | 0.8 | 0.9 | 50 | `configs/llama_3_1_8b_persona_style_context.yaml` |
+| Llama looser | Llama-3.1-8B | looser | 1.0 | 0.95 | 0 (disabled) | `configs/llama_3_1_8b_persona_style_context_looser.yaml` |
+| Llama medium | Llama-3.1-8B | medium | 0.9 | 0.925 | 25 | `configs/llama_3_1_8b_persona_style_context_medium.yaml` |
+| Mistral looser | Mistral-7B-Instruct-v0.2 | looser | 1.0 | 0.95 | 0 (disabled) | `configs/mistral_7b_2_instruct_persona_style_context_looser.yaml` |
+
+**To run from scratch:**
+
+1. Run simulations (Steps 1–2 of the main pipeline) for each config above,
+   `--dataset bluesky --user_batch 0 --output_dir results_hyperparameters`.
+2. Run postprocessing (Steps 3–7) on `results_hyperparameters/` to get BERT
+   detection accuracy; compare against the matching model's reference-config
+   result already in your main results folder (e.g. `results_PNAS_revision/bluesky/`).
+3. Compare human-vs-AI cosine similarity across decoding variants (uses the
+   `cosine_similarity` scores already stored in each candidate of
+   `*_optimal_response.json` -- no re-embedding needed):
+
+```bash
+python analysis/compute_hyperparameter_cosine_comparison.py \
+    --baseline-dir results_PNAS_revision --hyperparam-dir results_hyperparameters
+python analysis/plot_hyperparameter_cosine_comparison.py \
+    results_hyperparameters/hyperparameter_cosine_comparison.csv
+```
+
+Output: `hyperparameter_cosine_comparison.csv` and `.png` (median cosine
+similarity to the human ground truth, by model x decoding variant x selection
+method).
 
 ## Personalization Methods
 
@@ -522,8 +562,10 @@ validation_demdia/
 │
 │   — analysis/: final analysis and plots —
 ├── analysis/
-│   ├── generate_SOTA_plots.py          # Main accuracy/comparison figures
-│   ├── generate_config_optimal_plots.py   # Per-config optimality plots
+│   ├── generate_SOTA_main_figures.py    # Reference-config main-text figures
+│   ├── generate_SOTA_SI_figures.py      # Reference-config SI-only figures
+│   ├── generate_config_main_figures.py  # Best-config main-text figures
+│   ├── generate_config_SI_figures.py    # Best-config SI-only figures
 │   ├── compute_cosine_baselines.py     # Step 8: cosine similarity baseline distributions
 │   └── ft_hyperparam/                  # Fine-tuning hyperparameter ablation study
 │       ├── analyze_ft_hyperparam.py        # BERT accuracy across sweep variants

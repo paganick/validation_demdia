@@ -54,66 +54,6 @@ DATASET_PALETTE = {
     'reddit': '#FF4500',
 }
 
-# === Text-safe model color ===
-def _hex_to_lab(hexcode):
-    h = hexcode.lstrip('#')
-    rgb = np.array([int(h[i:i + 2], 16) for i in (0, 2, 4)]) / 255.0
-    lin = np.where(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055) ** 2.4)
-    M = np.array([[0.4124564, 0.3575761, 0.1804375],
-                  [0.2126729, 0.7151522, 0.0721750],
-                  [0.0193339, 0.1191920, 0.9503041]])
-    xyz = M @ lin
-    Xn, Yn, Zn = 0.95047, 1.0, 1.08883
-    x, y, z = xyz[0] / Xn, xyz[1] / Yn, xyz[2] / Zn
-    d = 6 / 29
-    f = lambda t: t ** (1 / 3) if t > d ** 3 else t / (3 * d ** 2) + 4 / 29
-    L = 116 * f(y) - 16
-    a = 500 * (f(x) - f(y))
-    b = 200 * (f(y) - f(z))
-    return np.array([L, a, b])
-
-
-def _lab_to_hex(lab):
-    L, a, b = lab
-    fy = (L + 16) / 116
-    fx = fy + a / 500
-    fz = fy - b / 200
-    d = 6 / 29
-
-    def finv(t):
-        return t ** 3 if t > d else 3 * d ** 2 * (t - 4 / 29)
-
-    Xn, Yn, Zn = 0.95047, 1.0, 1.08883
-    xyz = np.array([finv(fx) * Xn, finv(fy) * Yn, finv(fz) * Zn])
-    M_inv = np.array([[3.2404542, -1.5371385, -0.4985314],
-                       [-0.9692660, 1.8760108, 0.0415560],
-                       [0.0556434, -0.2040259, 1.0572252]])
-    lin = M_inv @ xyz
-    lin = np.clip(lin, 0, 1)
-    srgb = np.where(lin <= 0.0031308, lin * 12.92, 1.055 * lin ** (1 / 2.4) - 0.055)
-    srgb = np.clip(srgb, 0, 1)
-    return '#{:02X}{:02X}{:02X}'.format(*[round(c * 255) for c in srgb])
-
-
-def get_model_text_color(model, max_lightness=68.0):
-    """
-    MODEL_PALETTE color for `model`, capped in CIE L* so it stays legible as
-    text on a white page. Bar/box fills have enough area for a color to read
-    even near the light end of the palette (e.g. Qwen2.5-7B-Instruct at
-    L*=87), but thin text strokes at that lightness are nearly invisible --
-    so for tick labels/legend text specifically, darken (hue preserved) any
-    color above `max_lightness` down to it.
-    """
-    hexcode = MODEL_PALETTE.get(model)
-    if hexcode is None:
-        return '#000000'
-    lab = _hex_to_lab(hexcode)
-    if lab[0] <= max_lightness:
-        return hexcode
-    lab[0] = max_lightness
-    return _lab_to_hex(lab)
-
-
 # === Dataset Name Normalization ===
 def normalize_dataset_name(dataset_path):
     """
