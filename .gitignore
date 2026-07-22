@@ -47,3 +47,6 @@ data/*/posts_backup_nonanon.pkl
 
 # Reviewer-response working notes (not for the tracked repo)
 REVIEWER_EXPERIMENTS.md
+
+# LaTeX source (managed externally, e.g. Overleaf; not part of the tracked repo)
+tex/
