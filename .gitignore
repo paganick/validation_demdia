@@ -6,6 +6,7 @@ results_joined/
 results_cleaned/
 results_PNAS_revision/
 results_PNAS_no_revision/
+results_hyperparameters/
 logs/*
 data_backup_*/
 
@@ -19,6 +20,9 @@ developer_only_files/
 
 # Editor swap files
 *.sw[mnop]
+
+# macOS Finder metadata
+.DS_Store
 
 # Claude Code session files
 .claude/

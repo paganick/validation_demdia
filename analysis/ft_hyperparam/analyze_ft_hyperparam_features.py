@@ -158,20 +158,22 @@ def plot_feature_importance(data: dict, out_path: Path, top_n: int = 12):
     model_short = {"Llama-3.1-8B": "Llama-3.1-8B", "Mistral-7B-v0.1": "Mistral-7B"}
     col_labels = [f"{model_short[m]}\n{VARIANT_LABELS[v]}" for m, v in cols]
 
-    fig, ax = plt.subplots(figsize=(12, 6))
+    fig, ax = plt.subplots(figsize=(13, 7))
     fig.suptitle(
         "Random forest feature importances for fine-tuned model detectability"
         " (Twitter, random reply type)",
-        fontsize=11
+        fontsize=15
     )
 
-    im = ax.imshow(matrix.values, aspect="auto", cmap="YlOrRd")
-    plt.colorbar(im, ax=ax, label="Feature importance", shrink=0.8)
+    im = ax.imshow(matrix.values, aspect="auto", cmap="Blues")
+    cbar = plt.colorbar(im, ax=ax, label="Feature importance", shrink=0.8)
+    cbar.ax.tick_params(labelsize=12)
+    cbar.set_label("Feature importance", fontsize=14)
 
     ax.set_xticks(np.arange(len(cols)))
-    ax.set_xticklabels(col_labels, fontsize=9)
+    ax.set_xticklabels(col_labels, fontsize=13)
     ax.set_yticks(np.arange(top_n))
-    ax.set_yticklabels(row_labels, fontsize=9)
+    ax.set_yticklabels(row_labels, fontsize=13)
 
     # Annotate cells
     for i in range(top_n):
@@ -179,24 +181,24 @@ def plot_feature_importance(data: dict, out_path: Path, top_n: int = 12):
             val = matrix.values[i, j]
             color = "white" if val > matrix.values.max() * 0.6 else "black"
             ax.text(j, i, f"{val:.3f}", ha="center", va="center",
-                    fontsize=7.5, color=color)
+                    fontsize=10, color=color)
 
     # Vertical separators: between models, and between noft and ft within each model
     n_llama = sum(1 for m, _ in cols if m == "Llama-3.1-8B")
-    ax.axvline(n_llama - 0.5, color="white", linewidth=3)
+    ax.axvline(n_llama - 0.5, color="black", linewidth=3)
 
     # Thin separator after noft within each model group
     for offset in [0, n_llama]:
         # noft is the first column in each group
-        ax.axvline(offset + 0.5, color="white", linewidth=1.2, linestyle="--", alpha=0.7)
+        ax.axvline(offset + 0.5, color="#999999", linewidth=1.2, linestyle="--", alpha=0.9)
 
     # Model labels above columns
     for model_name, x_center in [
         ("Llama-3.1-8B",    (n_llama - 1) / 2),
         ("Mistral-7B-v0.1", n_llama + (len(cols) - n_llama - 1) / 2),
     ]:
-        ax.text(x_center, -1.6, model_name, ha="center", va="center",
-                fontsize=10, transform=ax.transData)
+        ax.text(x_center, -1.8, model_name, ha="center", va="center",
+                fontsize=14, transform=ax.transData)
 
     ax.tick_params(top=False, bottom=False, left=False, right=False)
     plt.tight_layout()

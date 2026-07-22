@@ -17,33 +17,102 @@ from typing import List, Dict, Union, Tuple, Optional
 
 # === Color Palettes ===
 MODEL_PALETTE = {
-    "DeepSeek-R1-Distill-Llama-8B": "#ff6f61",     # Bright coral red
-    "Llama-3.1-8B": "#bb86fc",                     # Bright purple
-    "Llama-3.1-8B-Instruct": "#9a4dff",            # Vivid violet
-    "Llama-3.1-70B": "#5a189a",                    # Dark violet
-
-    "Mistral-7B-v0.1": "#4fc3f7",                  # Light cyan-blue
-    "Mistral-7B-Instruct-v0.2": "#0288d1",         # Bright medium blue
-
-    "gemma-3-4b-it": "#81c784",                    # Light green
-    "Qwen2.5-7B-Instruct": "#ffb74d",              # Warm orange (amber)
-
-    "Apertus-8B-2509": "#a1887f",                  # Muted brownish-gray
+    # Nine colors sampled evenly from matplotlib's "cividis" colormap
+    # (positions 0.05-0.95), assigned in alphabetical model order. Cividis is a
+    # published, perceptually-uniform colormap purpose-built to remain
+    # distinguishable under both protanopia and deuteranopia (Nunez, Anderton
+    # & Renslow, 2018), and it also happens to validate better in true
+    # grayscale than the flat achromatic palette it replaced (min pairwise
+    # CIE L* separation 8.0 vs 7.0) -- see analysis/validate_model_palette.py.
+    "Apertus-8B-2509": "#002B62",
+    "DeepSeek-R1-Distill-Llama-8B": "#293F6E",
+    "gemma-3-4b-it": "#49536C",
+    "Llama-3.1-70B": "#646770",
+    "Llama-3.1-8B": "#7C7B78",
+    "Llama-3.1-8B-Instruct": "#979177",
+    "Mistral-7B-Instruct-v0.2": "#B5A86F",
+    "Mistral-7B-v0.1": "#D3C05F",
+    "Qwen2.5-7B-Instruct": "#F3DB42",
 }
 
 DATASET_PALETTE = {
-    'results_bluesky': '#1E88E5',    # Blue
-    'results_twitter': '#000000',   # Black for Twitter/X
-    'results_reddit': '#FF4500',     # Reddit orange
-    'Bluesky': '#1E88E5',           # Blue (alternative names)
+    # Only Bluesky was adjusted (darkened) so the three platforms stay
+    # distinguishable when printed in grayscale (original #1E88E5/#FF4500 had
+    # nearly identical CIE L* -- 55.6 vs 57.6 -- despite looking very different
+    # in color; see analysis/validate_model_palette.py for the same style of
+    # check). Reddit's brand orange (#FF4500) is left untouched.
+    'results_bluesky': '#0B4F8B',    # Darker vivid blue (L*=33)
+    'results_twitter': '#000000',   # Black for Twitter/X (L*=0)
+    'results_reddit': '#FF4500',     # Reddit orange (unchanged, L*=57.6)
+    'Bluesky': '#0B4F8B',           # Blue (alternative names)
     'Twitter/X': '#000000',         # Black for Twitter/X
     'Twitter': '#000000',                 # Black for Twitter/X
     'X': '#000000',                 # Black for Twitter/X
-    'Reddit': '#FF4500',             # Reddit orange
-    'bluesky': '#1E88E5',           # lowercase platform names (e.g. results_cleaned_.../bluesky)
+    'Reddit': '#FF4500',             # Reddit orange (unchanged)
+    'bluesky': '#0B4F8B',           # lowercase platform names (e.g. results_cleaned_.../bluesky)
     'twitter': '#000000',
     'reddit': '#FF4500',
 }
+
+# === Text-safe model color ===
+def _hex_to_lab(hexcode):
+    h = hexcode.lstrip('#')
+    rgb = np.array([int(h[i:i + 2], 16) for i in (0, 2, 4)]) / 255.0
+    lin = np.where(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055) ** 2.4)
+    M = np.array([[0.4124564, 0.3575761, 0.1804375],
+                  [0.2126729, 0.7151522, 0.0721750],
+                  [0.0193339, 0.1191920, 0.9503041]])
+    xyz = M @ lin
+    Xn, Yn, Zn = 0.95047, 1.0, 1.08883
+    x, y, z = xyz[0] / Xn, xyz[1] / Yn, xyz[2] / Zn
+    d = 6 / 29
+    f = lambda t: t ** (1 / 3) if t > d ** 3 else t / (3 * d ** 2) + 4 / 29
+    L = 116 * f(y) - 16
+    a = 500 * (f(x) - f(y))
+    b = 200 * (f(y) - f(z))
+    return np.array([L, a, b])
+
+
+def _lab_to_hex(lab):
+    L, a, b = lab
+    fy = (L + 16) / 116
+    fx = fy + a / 500
+    fz = fy - b / 200
+    d = 6 / 29
+
+    def finv(t):
+        return t ** 3 if t > d else 3 * d ** 2 * (t - 4 / 29)
+
+    Xn, Yn, Zn = 0.95047, 1.0, 1.08883
+    xyz = np.array([finv(fx) * Xn, finv(fy) * Yn, finv(fz) * Zn])
+    M_inv = np.array([[3.2404542, -1.5371385, -0.4985314],
+                       [-0.9692660, 1.8760108, 0.0415560],
+                       [0.0556434, -0.2040259, 1.0572252]])
+    lin = M_inv @ xyz
+    lin = np.clip(lin, 0, 1)
+    srgb = np.where(lin <= 0.0031308, lin * 12.92, 1.055 * lin ** (1 / 2.4) - 0.055)
+    srgb = np.clip(srgb, 0, 1)
+    return '#{:02X}{:02X}{:02X}'.format(*[round(c * 255) for c in srgb])
+
+
+def get_model_text_color(model, max_lightness=68.0):
+    """
+    MODEL_PALETTE color for `model`, capped in CIE L* so it stays legible as
+    text on a white page. Bar/box fills have enough area for a color to read
+    even near the light end of the palette (e.g. Qwen2.5-7B-Instruct at
+    L*=87), but thin text strokes at that lightness are nearly invisible --
+    so for tick labels/legend text specifically, darken (hue preserved) any
+    color above `max_lightness` down to it.
+    """
+    hexcode = MODEL_PALETTE.get(model)
+    if hexcode is None:
+        return '#000000'
+    lab = _hex_to_lab(hexcode)
+    if lab[0] <= max_lightness:
+        return hexcode
+    lab[0] = max_lightness
+    return _lab_to_hex(lab)
+
 
 # === Dataset Name Normalization ===
 def normalize_dataset_name(dataset_path):
@@ -131,25 +200,11 @@ def get_marker(row):
 # === Model Ordering ===
 def get_ordered_models(model_names):
     """
-    Create a custom ordering of models: non-instruct models first (alphabetical), 
-    then instruct models (alphabetical).
+    Order models alphabetically (case-insensitive), regardless of whether they
+    are instruction-tuned, so that models from the same family (e.g. the three
+    Llama variants, the two Mistral variants) end up adjacent.
     """
-    # Separate instruct and non-instruct models
-    non_instruct = []
-    instruct = []
-    
-    for model in model_names:
-        if "Instruct" in model or "-it" in model:
-            instruct.append(model)
-        else:
-            non_instruct.append(model)
-    
-    # Sort each group alphabetically
-    non_instruct.sort(key=str.lower)
-    instruct.sort(key=str.lower)
-    
-    # Combine: non-instruct first, then instruct
-    return non_instruct + instruct
+    return sorted(model_names, key=str.lower)
 
 # === Dataset Name Formatting ===
 def format_dataset_name(dataset_name):

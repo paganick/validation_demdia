@@ -41,7 +41,7 @@ def _save_stats(df, groupby_cols, value_cols, output_path):
 
 # Import custom utilities
 from simulation.src.plotting_utils import (
-    MODEL_PALETTE, DATASET_PALETTE, parse_filename, make_label, 
+    MODEL_PALETTE, DATASET_PALETTE, parse_filename, make_label,
     get_ordered_models, format_dataset_name, with_plot_style,
     filter_for_baseline_persona, normalize_dataset_name, get_dataset_color
 )
@@ -172,20 +172,20 @@ def generate_best_model_performance(response_type="random", metric="accuracy"):
                    yerr=dataset_stds, capsize=3, error_kw={'linewidth': 1.5})
         
         # Customize plot
-        ax.set_ylabel(f'{metric.replace("_", " ").title()}', fontsize=20)
-        ax.tick_params(axis='y', labelsize=16)
-        
+        ax.set_ylabel(f'{metric.replace("_", " ").title()}', fontsize=24)
+        ax.tick_params(axis='y', labelsize=20)
+
         # Set x-axis
         ax.set_xticks(x_positions + bar_width * (n_datasets - 1) / 2)
         ax.set_xticklabels(model_order, rotation=45, ha='right')
-        
-        # Color x-tick labels with model colors
+
+        # Color x-tick labels with model colors (capped lightness for text legibility)
         for tick, model in zip(ax.get_xticklabels(), model_order):
-            tick.set_color(MODEL_PALETTE.get(model, '#000000'))
-            tick.set_fontsize(20)
-        
+            tick.set_color('black')
+            tick.set_fontsize(24)
+
         # Add legend
-        ax.legend(loc='lower left', fontsize=20)
+        ax.legend(loc='lower left', fontsize=24)
         
         # Set y-axis limits
         ax.set_ylim(0.5, 1.0)
@@ -298,15 +298,15 @@ def generate_first_response_similarity():
         dataset_labels = [format_dataset_name(d) for d in datasets]
         ax.set_xticks(range(len(datasets)))
         ax.set_xticklabels(dataset_labels, rotation=0, ha='center')
-        ax.tick_params(axis='y', labelsize=16)
-        
+        ax.tick_params(axis='y', labelsize=20)
+
         # Color x-tick labels
         for tick, dataset in zip(ax.get_xticklabels(), datasets):
             tick.set_color(get_dataset_color(dataset))
-            tick.set_fontsize(20)
-        
+            tick.set_fontsize(24)
+
         ax.set_ylim([-1, 1])
-        ax.set_ylabel("Cosine Similarity", fontsize=20)
+        ax.set_ylabel("Cosine Similarity", fontsize=24)
         ax.grid(True, alpha=0.3, axis='y')
         
         stats_path = os.path.join(OUTPUT_DIR, f'SOTA_cosine_similarity_stats.csv')
@@ -405,7 +405,7 @@ def generate_cosine_similarity_by_model():
 
             for patch, color in zip(bp['boxes'], colors):
                 patch.set_facecolor(color)
-                patch.set_alpha(0.75)
+                patch.set_alpha(1.0)
 
             for i, color in enumerate(colors):
                 for j in [i * 2, i * 2 + 1]:
@@ -428,7 +428,7 @@ def generate_cosine_similarity_by_model():
             if row_idx == len(datasets) - 1:
                 ax.set_xticklabels(model_order, rotation=45, ha='right', fontsize=13)
                 for tick, model in zip(ax.get_xticklabels(), model_order):
-                    tick.set_color(MODEL_PALETTE.get(model, '#000000'))
+                    tick.set_color('black')
             else:
                 ax.set_xticklabels([])
 
@@ -574,20 +574,20 @@ def generate_ml_explainability_heatmap():
             importance_shifted = importance_array + shift if use_shift else importance_array
             
             # Create heatmap
-            im = ax.imshow(importance_shifted, cmap='gray_r', aspect='auto', norm=norm)
+            im = ax.imshow(importance_shifted, cmap='Blues', aspect='auto', norm=norm)
             
             # Format features
             formatted_features = [format_feature_name(f) for f in selected_features]
             
             ax.set_xticks(range(len(formatted_features)))
-            ax.set_xticklabels(formatted_features, rotation=45, ha='right', fontsize=10)
-            
+            ax.set_xticklabels(formatted_features, rotation=45, ha='right', fontsize=14)
+
             # Add y-axis labels only for first subplot
             if idx == 0:
                 ax.set_yticks(range(len(models)))
                 ax.set_yticklabels([])
-                for i, (model, color) in enumerate(zip(models, model_colors)):
-                    ax.text(-0.5, i, model, ha='right', va='center', color=color, fontsize=11)
+                for i, model in enumerate(models):
+                    ax.text(-0.5, i, model, ha='right', va='center', color='black', fontsize=14)
             else:
                 ax.set_yticks([])
             
@@ -603,8 +603,8 @@ def generate_ml_explainability_heatmap():
             
             # Title
             dataset_name = format_dataset_name(dataset)
-            ax.set_title(dataset_name, fontsize=14, pad=10, color=get_dataset_color(dataset))
-        
+            ax.set_title(dataset_name, fontsize=15, pad=10, color=get_dataset_color(dataset))
+
         stats_path = os.path.join(OUTPUT_DIR, f'SOTA_ML_stats.csv')
         ml_stats = combined_df.groupby(['dataset', 'model', 'feature'])['importance'].mean().reset_index()
         ml_stats = ml_stats.rename(columns={'importance': 'mean_importance'})
@@ -614,7 +614,7 @@ def generate_ml_explainability_heatmap():
         fig.subplots_adjust(right=0.92)
         cbar_ax = fig.add_axes([0.93, 0.15, 0.02, 0.7])
         cbar = fig.colorbar(im, cax=cbar_ax)
-        cbar.set_label('Feature Importance', fontsize=12)
+        cbar.set_label('Feature Importance', fontsize=14)
 
         output_path = os.path.join(OUTPUT_DIR, f'SOTA_ML.{SAVE_FORMAT}')
         plt.savefig(output_path, dpi=600, bbox_inches='tight', transparent=PRESENTATION_MODE)
@@ -707,8 +707,8 @@ def generate_aggregated_feature_frequency():
                     model_percentages = [(v / total_models * 100) for v in model_values]
                     color = MODEL_PALETTE.get(model, 'gray')
                     
-                    ax.barh(range(len(features)), model_percentages, left=bottom, 
-                           color=color, alpha=0.7, label=model)
+                    ax.barh(range(len(features)), model_percentages, left=bottom,
+                           color=color, alpha=1.0, edgecolor='white', linewidth=1.2, label=model)
                     bottom += model_percentages
             
             ax.set_yticks(range(len(features)))
@@ -730,7 +730,7 @@ def generate_aggregated_feature_frequency():
         
         # Legend
         legend_elements = [Rectangle((0,0),1,1, facecolor=MODEL_PALETTE.get(m, 'gray'), 
-                                    alpha=0.7, label=m) for m in ordered_models]
+                                    alpha=1.0, label=m) for m in ordered_models]
         fig.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 0.1), 
                   ncol=min(len(ordered_models), 3), fontsize=10)
         
@@ -933,7 +933,7 @@ def generate_feature_bias(top_n: int = 10):
                 bp = ax.boxplot(box_data, positions=x_positions, widths=0.55, patch_artist=True,
                                 showfliers=False, medianprops=dict(color='black', linewidth=1.5))
                 for patch, color in zip(bp['boxes'], box_colors):
-                    patch.set_facecolor(color); patch.set_alpha(0.75)
+                    patch.set_facecolor(color); patch.set_alpha(1.0)
                 for i, color in enumerate(box_colors):
                     bp['whiskers'][i*2].set_color(color);   bp['whiskers'][i*2+1].set_color(color)
                     bp['caps'][i*2].set_color(color);       bp['caps'][i*2+1].set_color(color)
@@ -956,18 +956,20 @@ def generate_feature_bias(top_n: int = 10):
                     ax.set_ylim(lo - pad, hi + pad)
 
                 ax.axhline(human_median, color=HUMAN_COLOR, linestyle='-', linewidth=2.5, alpha=1.0, zorder=4)
-                ax.set_title(feat.replace('_', ' '), fontsize=10, pad=4)
+                ax.set_title(feat.replace('_', ' '), fontsize=16, pad=4)
                 if col_idx == 0:
-                    ax.set_ylabel(format_dataset_name(pname), fontsize=13, color=pcolor, labelpad=6)
+                    ax.set_ylabel(format_dataset_name(pname), fontsize=18, color=pcolor, labelpad=6)
                 ax.tick_params(axis='y', labelsize=9)
                 ax.tick_params(axis='x', bottom=False)
                 ax.set_xticks([])
                 ax.grid(True, alpha=0.3, axis='y')
 
-        legend_handles = [mpatches.Patch(facecolor=MODEL_PALETTE.get(m, '#888888'), alpha=0.75, label=m) for m in model_order]
-        legend_handles.append(mpatches.Patch(facecolor=HUMAN_COLOR, alpha=0.75, label=HUMAN_LABEL))
-        fig.legend(handles=legend_handles, loc='lower center', bbox_to_anchor=(0.5, -0.01),
-                   ncol=min(len(legend_handles), 5), fontsize=11, frameon=True)
+        legend_handles = [mpatches.Patch(facecolor=MODEL_PALETTE.get(m, '#888888'), alpha=1.0, label=m) for m in model_order]
+        legend_handles.append(mpatches.Patch(facecolor=HUMAN_COLOR, alpha=1.0, label=HUMAN_LABEL))
+        legend = fig.legend(handles=legend_handles, loc='lower center', bbox_to_anchor=(0.5, -0.01),
+                   ncol=min(len(legend_handles), 5), fontsize=16, frameon=True)
+        for text, model in zip(legend.get_texts(), model_order):
+            text.set_color('black')
         plt.tight_layout()
         plt.subplots_adjust(bottom=0.12)
         output_path = os.path.join(OUTPUT_DIR, f'SOTA_feature_bias.{SAVE_FORMAT}')
@@ -1046,7 +1048,7 @@ def generate_feature_bias_diff(top_n: int = 10):
                 bp = ax.boxplot(box_data, positions=x_positions, widths=0.55, patch_artist=True,
                                 showfliers=False, medianprops=dict(color='black', linewidth=1.5))
                 for patch, color in zip(bp['boxes'], box_colors):
-                    patch.set_facecolor(color); patch.set_alpha(0.75)
+                    patch.set_facecolor(color); patch.set_alpha(1.0)
                 for i, color in enumerate(box_colors):
                     bp['whiskers'][i*2].set_color(color);   bp['whiskers'][i*2+1].set_color(color)
                     bp['caps'][i*2].set_color(color);       bp['caps'][i*2+1].set_color(color)
@@ -1078,9 +1080,11 @@ def generate_feature_bias_diff(top_n: int = 10):
                 ax.set_xticks([])
                 ax.grid(True, alpha=0.3, axis='y')
 
-        legend_handles = [mpatches.Patch(facecolor=MODEL_PALETTE.get(m, '#888888'), alpha=0.75, label=m) for m in model_order]
-        fig.legend(handles=legend_handles, loc='lower center', bbox_to_anchor=(0.5, -0.01),
+        legend_handles = [mpatches.Patch(facecolor=MODEL_PALETTE.get(m, '#888888'), alpha=1.0, label=m) for m in model_order]
+        legend = fig.legend(handles=legend_handles, loc='lower center', bbox_to_anchor=(0.5, -0.01),
                    ncol=min(len(legend_handles), 5), fontsize=11, frameon=True)
+        for text, model in zip(legend.get_texts(), model_order):
+            text.set_color('black')
         plt.tight_layout()
         plt.subplots_adjust(bottom=0.12)
         output_path = os.path.join(OUTPUT_DIR, f'SOTA_feature_bias_diff.{SAVE_FORMAT}')
@@ -1251,7 +1255,7 @@ def generate_feature_importance_by_model():
     with with_plot_style(PRESENTATION_MODE):
         fig, ax = plt.subplots(figsize=(max(14, len(feat_order) * 0.7), len(model_order) * 0.7 + 1.5))
 
-        im = ax.imshow(pivot.values, aspect='auto', cmap='YlOrRd',
+        im = ax.imshow(pivot.values, aspect='auto', cmap='Blues',
                        vmin=0, vmax=pivot.values.max())
 
         # Axes ticks
@@ -1259,10 +1263,8 @@ def generate_feature_importance_by_model():
         ax.set_xticklabels(feat_labels, rotation=45, ha='right', fontsize=10)
         ax.set_yticks(range(len(model_order)))
         ax.set_yticklabels(model_order, fontsize=11)
-
-        # Colour model labels by MODEL_PALETTE
         for tick, model in zip(ax.get_yticklabels(), model_order):
-            tick.set_color(MODEL_PALETTE.get(model, '#000000'))
+            tick.set_color('black')
 
         # Annotate each cell with the importance value
         for r, model in enumerate(model_order):

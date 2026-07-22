@@ -1,0 +1,10 @@
+model: meta-llama/Llama-3.1-8B
+instruction_tuned: false
+persona: true
+n_style_examples: 10
+retrieve_context: true
+finetuned: false
+temperature: 0.9
+top_p: 0.925
+top_k: 25
+decoding_variant: medium

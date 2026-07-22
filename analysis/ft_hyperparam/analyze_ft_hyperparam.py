@@ -35,11 +35,11 @@ MODELS = {
 }
 
 VARIANTS = {
-    "noft":            {"label": "No FT\n(best config)",          "color": "#9C27B0"},
-    "default":         {"label": "FT default\n(r=16, lr=1e-4)",   "color": "#555555"},
-    "ft_lorank":       {"label": "FT low rank\n(r=4, lr=1e-4)",   "color": "#2196F3"},
-    "ft_conservative": {"label": "FT conserv.\n(r=8, lr=5e-5)",   "color": "#4CAF50"},
-    "ft_highreg":      {"label": "FT high reg.\n(r=8, drop=0.2)", "color": "#FF9800"},
+    "noft":            {"label": "No FT\n(best config)",          "color": "#8C8C8C"},
+    "default":         {"label": "FT default\n(r=16, lr=1e-4)",   "color": "#184F95"},
+    "ft_lorank":       {"label": "FT low rank\n(r=4, lr=1e-4)",   "color": "#2E7D32"},
+    "ft_conservative": {"label": "FT conserv.\n(r=8, lr=5e-5)",   "color": "#B36A00"},
+    "ft_highreg":      {"label": "FT high reg.\n(r=8, drop=0.2)", "color": "#8E44AD"},
 }
 
 # Best noft config trainer_results per model
@@ -132,10 +132,10 @@ def plot_results(results: dict, out_path: Path):
     x = np.arange(n_variants)
     bar_width = 0.55
 
-    fig, axes = plt.subplots(1, 2, figsize=(11, 5), sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(13, 6), sharey=True)
     fig.suptitle(
         "BERT classifier accuracy — fine-tuning hyperparameter sweep (Twitter, random reply type)",
-        fontsize=11
+        fontsize=15
     )
 
     variant_names  = list(VARIANTS.keys())
@@ -163,22 +163,23 @@ def plot_results(results: dict, out_path: Path):
         for bar, mean, std in zip(bars, means, stds):
             if not np.isnan(mean):
                 ax.text(bar.get_x() + bar.get_width() / 2, mean + std + 0.002,
-                        f"{mean:.3f}", ha="center", va="bottom", fontsize=8.5, fontweight="normal")
+                        f"{mean:.3f}", ha="center", va="bottom", fontsize=12, fontweight="normal")
 
         # Reference line at default ft accuracy for this model
         default_mean = results[model_name]["default"]["mean"]
         if not np.isnan(default_mean):
             ax.axhline(default_mean, color="red", linestyle="--", linewidth=1.2,
                        alpha=0.7, label=f"FT default ({default_mean:.3f})")
-            ax.legend(fontsize=8, loc="upper right")
+            ax.legend(fontsize=12, loc="upper right")
 
         # Vertical separator between noft and ft variants
         ax.axvline(0.5, color="gray", linestyle="--", linewidth=0.8, alpha=0.5, zorder=1)
 
-        ax.set_title(model_name, fontsize=11)
+        ax.set_title(model_name, fontsize=16)
         ax.set_xticks(x)
-        ax.set_xticklabels(variant_labels, fontsize=8.5)
-        ax.set_ylabel("BERT accuracy", fontsize=10)
+        ax.set_xticklabels(variant_labels, fontsize=13)
+        ax.set_ylabel("BERT accuracy", fontsize=15)
+        ax.tick_params(axis='y', labelsize=13)
         ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f"{y:.2f}"))
         ax.grid(axis="y", alpha=0.3, zorder=0)
         ax.spines[["top", "right"]].set_visible(False)

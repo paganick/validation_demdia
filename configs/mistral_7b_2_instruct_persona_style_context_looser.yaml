@@ -1,0 +1,10 @@
+model: mistralai/Mistral-7B-Instruct-v0.2
+instruction_tuned: true
+persona: true
+n_style_examples: 10
+retrieve_context: true
+finetuned: false
+temperature: 1.0
+top_p: 0.95
+top_k: 0
+decoding_variant: looser

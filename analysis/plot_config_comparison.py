@@ -92,7 +92,9 @@ def main():
         print("No config data found.", file=sys.stderr)
         sys.exit(1)
 
-    platforms = sorted(set.union(*[set(df["platform"].unique()) for df in dfs.values()]))
+    PLATFORM_ORDER = ["bluesky", "twitter", "reddit"]
+    available = set.union(*[set(df["platform"].unique()) for df in dfs.values()])
+    platforms = [p for p in PLATFORM_ORDER if p in available]
 
     output_dir = REPO_ROOT / "same_context_similarity"
     output_dir.mkdir(parents=True, exist_ok=True)

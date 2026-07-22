@@ -16,10 +16,19 @@ compute_cosine_baselines.py), four more distributions are pulled in for context:
   - random_human — unrelated human pairs, cross-user & cross-context (similarity floor)
   - random_ai    — unrelated AI pairs, cross-context & cross-model (similarity floor)
 
+If --intra-ai-all-entries-csv is given (ai_intra_same_user_ctx_all_entries.csv,
+produced by compute_intra_ai_all_entries.py), it REPLACES ai_intra_same_user_ctx
+for every platform with the version computed over every test-set entry, not just
+the subset of contexts with >=2 human repliers. Unlike ai_ai_same_ctx (which
+genuinely needs >=2 different users replying to the same post), the intra metric
+only needs one user's own >=2 generated candidates, so it's computable everywhere
+-- including Bluesky, and with far more samples on Reddit/Twitter.
+
 Usage:
     python analysis/plot_same_context_similarity.py same_context_similarity/same_ctx_sims_all.csv
     python analysis/plot_same_context_similarity.py same_context_similarity/same_ctx_sims_all.csv \\
-        --baselines-csv results_PNAS_revision/cosine_baselines/cosine_baselines_all.csv
+        --baselines-csv results_PNAS_revision/cosine_baselines/cosine_baselines_all.csv \\
+        --intra-ai-all-entries-csv same_context_similarity/ai_intra_same_user_ctx_all_entries.csv
 """
 
 import sys
@@ -84,6 +93,20 @@ def main():
         "--presentation", action="store_true",
         help="Transparent background, white text (for slides)"
     )
+    parser.add_argument(
+        "--include-bluesky", action="store_true",
+        help="Keep Bluesky as a third panel. human_human_same_ctx and ai_ai_same_ctx "
+             "genuinely need >=2 same-context users, which Bluesky doesn't have, and "
+             "are left as empty boxes there rather than dropped."
+    )
+    parser.add_argument(
+        "--intra-ai-all-entries-csv", default=None,
+        help="Path to ai_intra_same_user_ctx_all_entries.csv (from "
+             "compute_intra_ai_all_entries.py); replaces ai_intra_same_user_ctx for "
+             "every platform with the version computed over all test-set entries, "
+             "not just the same-context-restricted subset -- this is what fills in "
+             "Bluesky, since that metric doesn't actually need multiple repliers."
+    )
     args = parser.parse_args()
 
     df = pd.read_csv(args.input_csv)
@@ -98,11 +121,20 @@ def main():
         df = pd.concat([df, baselines], ignore_index=True)
         groups = GROUPS_WITH_BASELINES
 
-    df = df[df["platform"] != "bluesky"]
+    if args.intra_ai_all_entries_csv:
+        df = df[df["distribution"] != "ai_intra_same_user_ctx"]
+        intra_all = pd.read_csv(args.intra_ai_all_entries_csv)
+        df = pd.concat([df, intra_all], ignore_index=True)
 
-    # Drop any distribution with no rows at all (e.g. random_human/random_ai when
-    # compute_cosine_baselines.py was run with --skip-random) instead of drawing an
-    # empty box; drop groups that end up with no members left.
+    if not args.include_bluesky:
+        df = df[df["platform"] != "bluesky"]
+
+    # Drop any distribution with no rows at all across every platform (e.g.
+    # random_human/random_ai when compute_cosine_baselines.py was run with
+    # --skip-random) instead of drawing an empty box everywhere; drop groups that
+    # end up with no members left. A distribution missing for only SOME platforms
+    # (e.g. the same-context distributions on Bluesky) is kept -- it just renders
+    # as an empty box on the platform(s) lacking data.
     present = set(df["distribution"].unique())
     groups = [(gname, [d for d in dists if d in present]) for gname, dists in groups]
     groups = [(gname, dists) for gname, dists in groups if dists]
@@ -112,7 +144,8 @@ def main():
     output_dir = Path(args.output_dir) if args.output_dir else Path(args.input_csv).parent
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    platforms = sorted(df["platform"].unique())
+    PLATFORM_ORDER = ["bluesky", "twitter", "reddit"]
+    platforms = [p for p in PLATFORM_ORDER if p in df["platform"].unique()]
     x_pos = list(range(len(dist_order)))
 
     # Group boundaries/centers, derived from `groups`, for header labels + separators

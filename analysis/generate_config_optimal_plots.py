@@ -441,27 +441,27 @@ def plot_sota_vs_best_performance(df, response_type="random", metric="accuracy")
             
             bar_offset += 2
         
-        ax.set_ylabel(f'{metric.replace("_", " ").title()}', fontsize=16)
-        ax.tick_params(axis='y', labelsize=15)
-        
+        ax.set_ylabel(f'{metric.replace("_", " ").title()}', fontsize=20)
+        ax.tick_params(axis='y', labelsize=18)
+
         total_bar_width = len(datasets) * 2 * bar_width
         ax.set_xticks(x_positions + (total_bar_width - bar_width) / 2)
         ax.set_xticklabels(model_order, rotation=45, ha='right')
-        
+
         for tick, model in zip(ax.get_xticklabels(), model_order):
-            tick.set_color(MODEL_PALETTE.get(model, '#000000'))
-            tick.set_fontsize(16)
-        
-        legend1 = ax.legend(loc='lower left', fontsize=15, ncol=3)
+            tick.set_color('black')
+            tick.set_fontsize(20)
+
+        legend1 = ax.legend(loc='lower left', fontsize=18, ncol=1)
         ax.add_artist(legend1)
-        
+
         marker_handles = [
             plt.Line2D([0], [0], marker=marker, color='w', markerfacecolor='white',
                       markeredgecolor='black', markersize=8, label=config, linewidth=0)
             for config, marker in config_markers.items()
         ]
-        ax.legend(handles=marker_handles, loc='lower right', fontsize=15, 
-                 title='Best Configuration', ncol=1, title_fontsize=15)
+        ax.legend(handles=marker_handles, loc='lower right', fontsize=18,
+                 title='Best Configuration', ncol=1, title_fontsize=18)
         
         ax.set_ylim(0.5, 1.0)
         ax.grid(True, alpha=0.3, axis='y')
@@ -550,17 +550,20 @@ def plot_intervention_steps_aggregated(df, response_type="random", metric="accur
             
             if any(imp != 0 for imp in model_improvements):
                 ax.bar(x_pos, model_improvements, bar_width,
-                      label=model, color=MODEL_PALETTE.get(model, '#666666'), 
-                      alpha=0.7, edgecolor='black', linewidth=0.5)
-        
+                      label=model, color=MODEL_PALETTE.get(model, '#666666'),
+                      alpha=1.0, edgecolor='black', linewidth=0.5)
+
         ax.axhline(y=0, color='black', linestyle='-', alpha=0.3)
-        ax.set_ylabel(f'Accuracy Change', fontsize=16)
+        ax.set_ylabel(f'Accuracy Change', fontsize=20)
         ax.set_xticks(x_positions)
-        ax.set_xticklabels([s['step_name'] for s in step_improvements], 
-                          rotation=45, ha='right', fontsize=16)
-        ax.tick_params(axis='y', labelsize=15)
-        ax.legend(loc='lower left', fontsize=15)
-        
+        ax.set_xticklabels([s['step_name'] for s in step_improvements],
+                          rotation=45, ha='right', fontsize=20)
+        ax.tick_params(axis='y', labelsize=18)
+        legend = ax.legend(loc='upper left', fontsize=18, ncol=2)
+        for text in legend.get_texts():
+            model_name = text.get_text()
+            text.set_color('black')
+
         if step_improvements:
             step_rows = []
             for s in step_improvements:
@@ -693,7 +696,7 @@ def plot_response_overlap_summary(df_overlap):
         ax.set_xticklabels(model_order, rotation=45, ha='right')
         
         for tick, model in zip(ax.get_xticklabels(), model_order):
-            tick.set_color(MODEL_PALETTE.get(model, '#000000'))
+            tick.set_color('black')
             tick.set_fontsize(15)
         
         ax.legend(loc='upper left', fontsize=11, ncol=3)
@@ -886,7 +889,7 @@ def plot_configuration_consistency_with_baseline(df, metric="accuracy"):
         ax.set_xticklabels(model_order, rotation=45, ha='right')
         
         for tick, model in zip(ax.get_xticklabels(), model_order):
-            tick.set_color(MODEL_PALETTE.get(model, '#000000'))
+            tick.set_color('black')
             tick.set_fontsize(15)
         
         ax.legend(loc='lower right', fontsize=12, ncol=2, 
@@ -1014,11 +1017,11 @@ def plot_cosine_similarity_boxplot(similarity_data, df_best_configs):
         
         for tick, dataset in zip(ax.get_xticklabels(), datasets):
             tick.set_color(get_dataset_color(dataset))
-            tick.set_fontsize(16)
-        
+            tick.set_fontsize(20)
+
         ax.set_ylim([-1, 1])
-        ax.set_ylabel("Cosine Similarity", fontsize=16)
-        ax.tick_params(axis='y', labelsize=15)
+        ax.set_ylabel("Cosine Similarity", fontsize=20)
+        ax.tick_params(axis='y', labelsize=18)
         ax.grid(True, alpha=0.3, axis='y')
         ax.set_axisbelow(True)
         
@@ -1026,11 +1029,11 @@ def plot_cosine_similarity_boxplot(similarity_data, df_best_configs):
             Patch(facecolor='gray', alpha=1.0, edgecolor='black', label='Reference config (BL+PE)'),
             Patch(facecolor='gray', alpha=0.5, edgecolor='black', label='Best Config')
         ]
-        ax.legend(handles=legend_elements, loc='lower right', fontsize=15, 
-                 title='Configuration Type', title_fontsize=15)
+        ax.legend(handles=legend_elements, loc='lower right', fontsize=18,
+                 title='Configuration Type', title_fontsize=18)
         
         plt.tight_layout()
-        output_path = os.path.join(OUTPUT_DIR, 'sota_vs_best_cosine_similarity_boxplot.png')
+        output_path = os.path.join(OUTPUT_DIR, f'sota_vs_best_cosine_similarity_boxplot.{SAVE_FORMAT}')
         fig.savefig(output_path, dpi=300, bbox_inches="tight", transparent=PRESENTATION_MODE)
         plt.close()
         print(f"  Saved to: {output_path}")
@@ -1171,11 +1174,11 @@ def plot_cosine_similarity_boxplot_all_methods(similarity_data, df_best_configs)
         
         for tick, dataset in zip(ax.get_xticklabels(), datasets):
             tick.set_color(get_dataset_color(dataset))
-            tick.set_fontsize(16)
-        
+            tick.set_fontsize(20)
+
         ax.set_ylim([-1, 1])
-        ax.set_ylabel("Cosine Similarity", fontsize=16)
-        ax.tick_params(axis='y', labelsize=15)
+        ax.set_ylabel("Cosine Similarity", fontsize=20)
+        ax.tick_params(axis='y', labelsize=18)
         ax.grid(True, alpha=0.3, axis='y')
         ax.set_axisbelow(True)
         
@@ -1185,11 +1188,11 @@ def plot_cosine_similarity_boxplot_all_methods(similarity_data, df_best_configs)
             Patch(facecolor='gray', alpha=0.5, edgecolor='black', label='Best config + Cosine Optimal'),
             Patch(facecolor='gray', alpha=0.3, edgecolor='black', label='Best config + ML Optimal')
         ]
-        ax.legend(handles=legend_elements, loc='lower right', fontsize=15, 
-                 title='Configuration Type', title_fontsize=15)
+        ax.legend(handles=legend_elements, loc='lower right', fontsize=18,
+                 title='Configuration Type', title_fontsize=18)
         
         plt.tight_layout()
-        output_path = os.path.join(OUTPUT_DIR, 'sota_vs_best_cosine_similarity_boxplot_all_methods.png')
+        output_path = os.path.join(OUTPUT_DIR, f'sota_vs_best_cosine_similarity_boxplot_all_methods.{SAVE_FORMAT}')
         fig.savefig(output_path, dpi=300, bbox_inches="tight", transparent=PRESENTATION_MODE)
         plt.close()
         print(f"  Saved to: {output_path}")
@@ -1347,7 +1350,7 @@ def plot_cosine_similarity_by_model_all_methods(similarity_data, df_best_configs
             if row_idx == len(datasets) - 1:
                 ax.set_xticklabels(model_order, rotation=45, ha='right', fontsize=12)
                 for tick, model in zip(ax.get_xticklabels(), model_order):
-                    tick.set_color(MODEL_PALETTE.get(model, '#000000'))
+                    tick.set_color('black')
             else:
                 ax.set_xticklabels([])
 
@@ -1361,7 +1364,7 @@ def plot_cosine_similarity_by_model_all_methods(similarity_data, df_best_configs
             for ct in config_types
         ]
         fig.legend(handles=legend_handles, loc='lower center',
-                   bbox_to_anchor=(0.5, -0.03), ncol=len(config_types),
+                   bbox_to_anchor=(0.5, -0.12), ncol=len(config_types),
                    fontsize=12, frameon=True, title='Configuration type', title_fontsize=12)
 
         plt.tight_layout()
@@ -1602,8 +1605,8 @@ def plot_empath_feature_frequency(folder_paths, df_best_configs, response_type='
                     model_percentages = [(value / total_models * 100) for value in model_values]
                     color = MODEL_PALETTE.get(model, 'gray')
                     
-                    bars = ax.barh(range(len(features)), model_percentages, left=bottom, 
-                                color=color, alpha=0.7, label=model)
+                    bars = ax.barh(range(len(features)), model_percentages, left=bottom,
+                                color=color, alpha=1.0, edgecolor='white', linewidth=1.2, label=model)
                     bottom += model_percentages
             
             # Format axes
@@ -1623,8 +1626,8 @@ def plot_empath_feature_frequency(folder_paths, df_best_configs, response_type='
             ax.grid(axis='x', alpha=0.3, linestyle='--')
         
         # Create model legend
-        legend_elements = [plt.Rectangle((0,0),1,1, facecolor=MODEL_PALETTE.get(model, 'gray'), 
-                                       alpha=0.7, label=model) for model in ordered_models]
+        legend_elements = [plt.Rectangle((0,0),1,1, facecolor=MODEL_PALETTE.get(model, 'gray'),
+                                       alpha=1.0, label=model) for model in ordered_models]
         fig.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 0.1), 
                   ncol=min(len(ordered_models), 4), fontsize=10)
         
@@ -1800,7 +1803,7 @@ def plot_feature_importance_heatmap(df, max_features=10):
         print(f"  Global importance range: {vmin:.4f} to {vmax:.4f}")
         
         # Use grayscale colormap
-        cmap = 'gray_r'  # white (low) to black (high)
+        cmap = 'Blues'  # white (low) to blue (high)
         
         # Use PowerNorm for better color discrimination
         from matplotlib.colors import PowerNorm
@@ -1885,9 +1888,8 @@ def plot_feature_importance_heatmap(df, max_features=10):
                 ax.set_yticks(range(len(models)))
                 ax.set_yticklabels([])
                 
-                # Add colored model labels
-                for i, (model, color) in enumerate(zip(models, model_colors)):
-                    ax.text(-0.5, i, model, ha='right', va='center', color=color, 
+                for i, model in enumerate(models):
+                    ax.text(-0.5, i, model, ha='right', va='center', color='black',
                            fontsize=14)
             
             # Add values to cells
@@ -1988,16 +1990,15 @@ def generate_feature_importance_by_model_best_config(df_best_configs):
     with with_plot_style(PRESENTATION_MODE):
         fig, ax = plt.subplots(figsize=(max(14, len(feat_order) * 0.7), len(model_order) * 0.7 + 1.5))
 
-        im = ax.imshow(pivot.values, aspect='auto', cmap='YlOrRd',
+        im = ax.imshow(pivot.values, aspect='auto', cmap='Blues',
                        vmin=0, vmax=pivot.values.max())
 
         ax.set_xticks(range(len(feat_order)))
         ax.set_xticklabels(feat_labels, rotation=45, ha='right', fontsize=10)
         ax.set_yticks(range(len(model_order)))
         ax.set_yticklabels(model_order, fontsize=11)
-
         for tick, model in zip(ax.get_yticklabels(), model_order):
-            tick.set_color(MODEL_PALETTE.get(model, '#000000'))
+            tick.set_color('black')
 
         for r, model in enumerate(model_order):
             for c, feat in enumerate(feat_order):
@@ -2193,7 +2194,7 @@ def generate_feature_bias_best_config(df_best_configs, top_n: int = 10, df_impor
                 bp = ax.boxplot(box_data, positions=x_positions, widths=0.55, patch_artist=True,
                                 showfliers=False, medianprops=dict(color='black', linewidth=1.5))
                 for patch, color in zip(bp['boxes'], box_colors):
-                    patch.set_facecolor(color); patch.set_alpha(0.75)
+                    patch.set_facecolor(color); patch.set_alpha(1.0)
                 for i, color in enumerate(box_colors):
                     bp['whiskers'][i*2].set_color(color);   bp['whiskers'][i*2+1].set_color(color)
                     bp['caps'][i*2].set_color(color);       bp['caps'][i*2+1].set_color(color)
@@ -2216,19 +2217,21 @@ def generate_feature_bias_best_config(df_best_configs, top_n: int = 10, df_impor
                     ax.set_ylim(lo - pad, hi + pad)
 
                 ax.axhline(human_median, color=HUMAN_COLOR, linestyle='-', linewidth=2.5, alpha=1.0, zorder=4)
-                ax.set_title(feat.replace('_', ' '), fontsize=10, pad=4)
+                ax.set_title(feat.replace('_', ' '), fontsize=16, pad=4)
                 if col_idx == 0:
-                    ax.set_ylabel(format_dataset_name(pname), fontsize=13, color=pcolor, labelpad=6)
+                    ax.set_ylabel(format_dataset_name(pname), fontsize=18, color=pcolor, labelpad=6)
                 ax.tick_params(axis='y', labelsize=9)
                 ax.tick_params(axis='x', bottom=False)
                 ax.set_xticks([])
                 ax.grid(True, alpha=0.3, axis='y')
 
-        legend_handles = [Patch(facecolor=MODEL_PALETTE.get(m, '#888888'), alpha=0.75, label=m)
+        legend_handles = [Patch(facecolor=MODEL_PALETTE.get(m, '#888888'), alpha=1.0, label=m)
                           for m in model_order]
-        legend_handles.append(Patch(facecolor=HUMAN_COLOR, alpha=0.75, label=HUMAN_LABEL))
-        fig.legend(handles=legend_handles, loc='lower center', bbox_to_anchor=(0.5, -0.01),
-                   ncol=min(len(legend_handles), 5), fontsize=11, frameon=True)
+        legend_handles.append(Patch(facecolor=HUMAN_COLOR, alpha=1.0, label=HUMAN_LABEL))
+        legend = fig.legend(handles=legend_handles, loc='lower center', bbox_to_anchor=(0.5, -0.01),
+                   ncol=min(len(legend_handles), 5), fontsize=16, frameon=True)
+        for text, model in zip(legend.get_texts(), model_order):
+            text.set_color('black')
         plt.tight_layout()
         plt.subplots_adjust(bottom=0.12)
         output_path = os.path.join(OUTPUT_DIR, f'config_feature_bias.{SAVE_FORMAT}')
@@ -2425,7 +2428,7 @@ def generate_feature_bias_diff_best_config(df_best_configs, top_n: int = 10, df_
                 bp = ax.boxplot(box_data, positions=x_positions, widths=0.55, patch_artist=True,
                                 showfliers=False, medianprops=dict(color='black', linewidth=1.5))
                 for patch, color in zip(bp['boxes'], box_colors):
-                    patch.set_facecolor(color); patch.set_alpha(0.75)
+                    patch.set_facecolor(color); patch.set_alpha(1.0)
                 for i, color in enumerate(box_colors):
                     bp['whiskers'][i*2].set_color(color);   bp['whiskers'][i*2+1].set_color(color)
                     bp['caps'][i*2].set_color(color);       bp['caps'][i*2+1].set_color(color)
@@ -2457,10 +2460,12 @@ def generate_feature_bias_diff_best_config(df_best_configs, top_n: int = 10, df_
                 ax.set_xticks([])
                 ax.grid(True, alpha=0.3, axis='y')
 
-        legend_handles = [Patch(facecolor=MODEL_PALETTE.get(m, '#888888'), alpha=0.75, label=m)
+        legend_handles = [Patch(facecolor=MODEL_PALETTE.get(m, '#888888'), alpha=1.0, label=m)
                           for m in model_order]
-        fig.legend(handles=legend_handles, loc='lower center', bbox_to_anchor=(0.5, -0.01),
+        legend = fig.legend(handles=legend_handles, loc='lower center', bbox_to_anchor=(0.5, -0.01),
                    ncol=min(len(legend_handles), 5), fontsize=11, frameon=True)
+        for text, model in zip(legend.get_texts(), model_order):
+            text.set_color('black')
         plt.tight_layout()
         plt.subplots_adjust(bottom=0.12)
         output_path = os.path.join(OUTPUT_DIR, f'config_feature_bias_diff.{SAVE_FORMAT}')
