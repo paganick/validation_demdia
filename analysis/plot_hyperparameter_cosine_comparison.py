@@ -25,10 +25,9 @@ from simulation.src.plotting_utils import with_plot_style
 
 MODEL_ORDER = ["Llama-3.1-8B", "Mistral-7B-Instruct-v0.2"]
 SELECTION_ORDER = ["random", "ML-optimal", "cosine-optimal"]
-VARIANT_ORDER = ["baseline", "medium", "looser"]
+VARIANT_ORDER = ["baseline", "looser"]
 VARIANT_COLORS = {
     "baseline": "#8FC1E8",
-    "medium": "#1B6CB0",
     "looser": "#0B3D6B",
 }
 
